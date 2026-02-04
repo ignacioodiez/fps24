@@ -5,6 +5,8 @@ from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
 from app.database.engine import engine
 from app.database.models import Pase
+from app.utils import es_programacion_especial
+from app.services.tmdb import buscar_datos_tmdb
 
 # Diccionario para traducir meses de Cineteca a números
 MESES = {
@@ -17,48 +19,34 @@ def parsear_fecha_cineteca(texto_fecha):
     Convierte: 'Enero: Mié-28 (20:00)' -> datetime object
     """
     try:
-        # 1. Limpieza básica
         texto = texto_fecha.strip().lower()
-        
-        # 2. Regex para sacar las partes
-        # Busca: (texto mes): (texto dia)-(numero dia) ((hora):(minuto))
         match = re.search(r"([a-z]+):\s*[a-záéíóú\.]+-(\d+)\s*\((\d{2}:\d{2})\)", texto)
         
-        if not match:
-            return None
+        if not match: return None
             
         nombre_mes = match.group(1)
         dia = int(match.group(2))
         hora_str = match.group(3)
         
-        # 3. Convertir mes a número
-        if nombre_mes not in MESES:
-            return None
+        if nombre_mes not in MESES: return None
         mes = MESES[nombre_mes]
         
-        # 4. Calcular año
         hoy = datetime.now()
         anio = hoy.year
         
-        # Si estamos en Diciembre y leemos Enero, es el año que viene
-        if hoy.month == 12 and mes == 1:
-            anio += 1
-        # Si estamos en Enero y leemos Diciembre (raro, pero por si acaso), es año pasado
-        elif hoy.month == 1 and mes == 12:
-            anio -= 1
+        if hoy.month == 12 and mes == 1: anio += 1
+        elif hoy.month == 1 and mes == 12: anio -= 1
             
-        # 5. Juntar todo
         h, m = map(int, hora_str.split(":"))
         return datetime(anio, mes, dia, h, m)
         
     except Exception as e:
-        print(f"      ⚠️ Error parseando fecha '{texto_fecha}': {e}")
+        # print(f"      ⚠️ Error parseando fecha '{texto_fecha}': {e}")
         return None
 
 def scrapear_cineteca():
     with sync_playwright() as p:
         print("🍿 Entrando en Cineteca Madrid...")
-        # headless=True porque esta web es estática y fácil, no necesitamos verla
         browser = p.chromium.launch(headless=True) 
         page = browser.new_page()
         
@@ -71,61 +59,49 @@ def scrapear_cineteca():
                 url = f"{base_url}/programacion?page={pagina_actual}"
                 print(f"   📄 Leyendo página {pagina_actual}...")
                 
-                try:
-                    page.goto(url, timeout=60000)
-                except:
-                    print("      ❌ Timeout cargando página. Paramos.")
-                    break
+                try: page.goto(url, timeout=60000)
+                except: break
 
-                # Buscamos todas las tarjetas de películas
-                # Según tu HTML: .node--type-activity
                 tarjetas = page.locator(".node--type-activity").all()
+                if not tarjetas: break
                 
-                # Si no hay tarjetas, hemos llegado al final de la paginación
-                if not tarjetas:
-                    print("      ⛔ No hay más películas. Fin del recorrido.")
-                    break
-                
-                print(f"      🔎 Encontradas {len(tarjetas)} fichas en esta página.")
+                print(f"      🔎 Encontradas {len(tarjetas)} fichas.")
 
                 for tarjeta in tarjetas:
                     try:
-                        # --- 1. TÍTULO ---
-                        # h2.title > a
+                        # 1. TÍTULO
                         titulo_elem = tarjeta.locator("h2.title a").first
                         if not titulo_elem.count(): continue
                         titulo = titulo_elem.inner_text().strip()
                         
-                        # --- 2. LINK DETALLE (Usaremos esto como link de compra por ahora) ---
+                        # 2. INTELIGENCIA TMDB
+                        datos_tmdb = buscar_datos_tmdb(titulo)
+                        
+                        poster_final = datos_tmdb.get("poster")
+                        nota_tmdb = datos_tmdb.get("nota")
+                        try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
+                        except: anio_tmdb = None
+
+                        # Fallback de póster (Web Cineteca)
+                        if not poster_final:
+                            img_elem = tarjeta.locator(".image-holder img").first
+                            if img_elem.count():
+                                src = img_elem.get_attribute("src")
+                                if src:
+                                    poster_final = f"{base_url}{src}" if src.startswith("/") else src
+
+                        # 3. LINK COMPRA
                         link_relativo = titulo_elem.get_attribute("href")
                         link_compra = f"{base_url}{link_relativo}"
                         
-                        # --- 3. IMAGEN ---
-                        # .image-holder img
-                        img_elem = tarjeta.locator(".image-holder img").first
-                        poster_url = None
-                        if img_elem.count():
-                            src = img_elem.get_attribute("src")
-                            if src:
-                                if src.startswith("/"):
-                                    poster_url = f"{base_url}{src}"
-                                else:
-                                    poster_url = src
+                        # 4. ESPECIAL? (Cineteca casi siempre lo es, pero el año confirma clásicos)
+                        es_especial = es_programacion_especial("Cineteca", titulo, anio_tmdb)
 
-                        # --- 4. FECHAS (Puede haber varias por tarjeta) ---
-                        # .field--name-field-dias-de-proyeccion > div
-                        # Tu HTML muestra que dentro de ese campo hay divs con el texto
+                        # 5. FECHAS
                         bloque_fechas = tarjeta.locator(".field--name-field-dias-de-proyeccion").first
-                        if not bloque_fechas.count():
-                            continue # Peli sin fechas (quizás evento pasado)
-                            
-                        # A veces hay varios divs dentro con distintas fechas
-                        # O a veces está todo el texto junto. Vamos a sacar el texto completo y buscar todas las coincidencias.
-                        texto_fechas_completo = bloque_fechas.inner_text()
+                        if not bloque_fechas.count(): continue
                         
-                        # Truco: Dividimos por líneas o buscamos patrones
-                        # En tu ejemplo: "Enero: Mié-28 (20:00)"
-                        # Vamos a buscar todas las líneas que parezcan fechas
+                        texto_fechas_completo = bloque_fechas.inner_text()
                         lineas = texto_fechas_completo.split('\n')
                         
                         for linea in lineas:
@@ -134,7 +110,7 @@ def scrapear_cineteca():
                             fecha_final = parsear_fecha_cineteca(linea)
                             if not fecha_final: continue
                             
-                            # GUARDAR EN BBDD
+                            # GUARDAR
                             existe = session.exec(select(Pase).where(
                                 Pase.cine == "Cineteca",
                                 Pase.pelicula == titulo,
@@ -146,27 +122,27 @@ def scrapear_cineteca():
                                     cine="Cineteca",
                                     pelicula=titulo,
                                     fecha_hora=fecha_final,
-                                    sala="Cineteca", # Sala única o genérica por ahora
-                                    precio="3.50€",  # Precio estándar Cineteca (o scrapearlo si está)
+                                    sala="Cineteca",
+                                    precio="3.50€",
                                     link_compra=link_compra,
-                                    poster_url=poster_url
+                                    poster_url=poster_final,
+                                    idioma="VOSE", # Cineteca suele ser VOSE por defecto
+                                    es_evento_especial=es_especial,
+                                    nota_tmdb=nota_tmdb,
+                                    anio=anio_tmdb
                                 )
                                 session.add(nuevo)
                                 nuevos_pases += 1
-                                print(f"         ✅ {titulo[:20]}... -> {fecha_final.strftime('%d/%m %H:%M')}")
 
                     except Exception as e:
-                        print(f"      ⚠️ Error procesando una tarjeta: {e}")
+                        continue
 
-                # Pasamos a la siguiente página
                 pagina_actual += 1
-                session.commit() # Guardamos lo de esta página
-                
-                # Pequeña pausa para no saturar
+                session.commit()
                 time.sleep(0.5)
 
-            print(f"🏁 FIN. {nuevos_pases} pases nuevos de Cineteca.")
-            
+            print(f"🏁 FIN CINETECA. {nuevos_pases} pases nuevos.")
+        
         browser.close()
 
 if __name__ == "__main__":
