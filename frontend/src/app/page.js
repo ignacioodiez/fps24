@@ -37,15 +37,28 @@ export default function Cartelera() {
       });
   }, []);
 
-  // 2. EXTRAER CINES DINÁMICAMENTE 🧠✨
-  // Mapeamos todos los pases, sacamos el nombre del cine y usamos Set para quitar repetidos.
-  const uniqueCines = useMemo(() => {
-    const nombres = pases.map(p => p.cine);
-    return [...new Set(nombres)].sort(); // Ordenados alfabéticamente
+  // 🚨 1.5 EL PORTERO: FILTRO "ANTI-AYER" (NUEVO) 🚨
+  // Creamos una lista maestra que solo contiene pases de HOY en adelante.
+  // Usamos esta lista para todo lo demás. Si es de ayer, no existe.
+  const futurePases = useMemo(() => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0); // Ponemos el reloj a las 00:00 de hoy
+
+    return pases.filter(pase => {
+      const fechaPase = new Date(pase.fecha_hora);
+      return fechaPase >= hoy; // Solo pasa si es hoy o futuro
+    });
   }, [pases]);
 
-  // 3. LÓGICA DE FILTRADO Y AGRUPACIÓN
-  const filteredRawPases = pases.filter((pase) => {
+  // 2. EXTRAER CINES DINÁMICAMENTE (Usando futurePases)
+  // Nota: Si un cine solo tenía pelis ayer, ya no saldrá aquí. ¡Limpieza total!
+  const uniqueCines = useMemo(() => {
+    const nombres = futurePases.map(p => p.cine);
+    return [...new Set(nombres)].sort(); 
+  }, [futurePases]);
+
+  // 3. LÓGICA DE FILTRADO Y AGRUPACIÓN (Usando futurePases)
+  const filteredRawPases = futurePases.filter((pase) => {
     // Filtro Cine
     const matchCine = selectedCines.length === 0 || selectedCines.includes(pase.cine);
     // Filtro Hora
@@ -183,7 +196,6 @@ export default function Cartelera() {
                         <span className="text-xs text-gray-500">{selectedCines.length} seleccionados</span>
                     </div>
                     <div className="flex flex-col gap-2">
-                        {/* ⬇️ AQUÍ ESTÁ LA MAGIA: Iteramos sobre uniqueCines ⬇️ */}
                         {uniqueCines.map((cine) => (
                             <button
                                 key={cine}
