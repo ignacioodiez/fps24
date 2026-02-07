@@ -14,7 +14,7 @@ def scrapear_yelmo_ideal():
 
     with sync_playwright() as p:
         # ⚠️ Mantenemos headless=False y channel="chrome" para evitar bloqueos agresivos de Yelmo
-        browser = p.chromium.launch(headless=False, channel="chrome")
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         
         try:
