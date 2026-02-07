@@ -64,6 +64,8 @@ export default function Home() {
       })
       .catch((err) => console.error("Error loading sessions:", err));
   }, []);
+
+  
   // 2. EXTRAER CINES DISPONIBLES
   const availableCinemas = useMemo(() => {
     const pasesDelDia = pases.filter(p => isSameDay(p.fecha_hora, selectedDate));
