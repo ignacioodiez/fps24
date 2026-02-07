@@ -2,15 +2,15 @@ import time
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 def scrapear_mk2_palacio_hielo():
     nombre_cine = "Mk2 Palacio de Hielo"
     url = "https://www.mk2palaciodehielo.es/es/cartelera"
-    print(f"🎹 Entrando en {nombre_cine}...")
+    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -24,7 +24,7 @@ def scrapear_mk2_palacio_hielo():
                 page.get_by_text("ACEPTAR", exact=True).click(timeout=3000)
             except: pass
 
-            # Scroll para cargar imágenes
+            # Scroll para cargar (aunque ya no necesitamos imágenes, ayuda a cargar horarios)
             page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
             time.sleep(1)
 
@@ -56,37 +56,25 @@ def scrapear_mk2_palacio_hielo():
                         if not titulo_elem.count(): continue
                         
                         raw_titulo = titulo_elem.inner_text().strip()
-                        titulo = raw_titulo
+                        titulo_limpio = raw_titulo
                         idioma = "Español"
 
-                        # Detección VOSE
+                        # Detección VOSE y limpieza básica para el gestor
                         if "(VOSE)" in raw_titulo.upper():
                             idioma = "VOSE"
-                            titulo = raw_titulo.replace("(VOSE)", "").replace("(vose)", "").strip()
+                            titulo_limpio = raw_titulo.replace("(VOSE)", "").replace("(vose)", "").strip()
+                        
+                        # Doble chequeo de etiqueta visual
                         if bloque.locator(".etiqueta-vose").count() > 0:
                             idioma = "VOSE"
 
-                        # --- INTELIGENCIA TMDB ---
-                        datos_tmdb = buscar_datos_tmdb(titulo)
-                        
-                        poster_final = datos_tmdb.get("poster")
-                        nota_tmdb = datos_tmdb.get("nota")
-                        try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                        except: anio_tmdb = None
+                        # 2. INTELIGENCIA 1:N
+                        pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
 
-                        # 2. PÓSTER FALLBACK (Si TMDB falla, usamos el de la web)
-                        if not poster_final:
-                            img_elem = bloque.locator("img.img-responsive").first
-                            if img_elem.count():
-                                src = img_elem.get_attribute("src")
-                                if src:
-                                    if not src.startswith("http"):
-                                        poster_final = f"https://www.mk2palaciodehielo.es/{src.lstrip('/')}"
-                                    else:
-                                        poster_final = src
-
-                        # 3. ESPECIAL?
-                        es_especial = es_programacion_especial(nombre_cine, titulo, anio_tmdb)
+                        # 3. ESPECIAL? (Por año)
+                        es_especial = False
+                        if anio_peli and anio_peli < 2023:
+                            es_especial = True
 
                         # 4. HORARIOS
                         botones = bloque.locator(".horas a.btn").all()
@@ -101,27 +89,23 @@ def scrapear_mk2_palacio_hielo():
                                 h, m = map(int, hora_txt.split(":"))
                                 fecha_final = dia_target.replace(hour=h, minute=m)
                                 
-                                # Guardar
+                                # GUARDAR PASE
                                 existe = session.exec(select(Pase).where(
                                     Pase.cine == nombre_cine,
-                                    Pase.pelicula == titulo,
-                                    Pase.fecha_hora == fecha_final,
-                                    Pase.idioma == idioma
+                                    Pase.pelicula_id == pelicula_id,
+                                    Pase.fecha_hora == fecha_final
                                 )).first()
 
                                 if not existe:
                                     nuevo = Pase(
                                         cine=nombre_cine,
-                                        pelicula=titulo,
+                                        pelicula_id=pelicula_id,
                                         fecha_hora=fecha_final,
                                         sala=nombre_cine,
                                         precio="Consultar",
                                         link_compra=link_compra,
-                                        poster_url=poster_final,
                                         idioma=idioma,
-                                        es_evento_especial=es_especial,
-                                        nota_tmdb=nota_tmdb,
-                                        anio=anio_tmdb
+                                        es_evento_especial=es_especial
                                     )
                                     session.add(nuevo)
                                     nuevos_pases += 1

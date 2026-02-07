@@ -6,11 +6,11 @@ from sqlmodel import Session, delete
 # Aseguramos que Python encuentre los módulos de la app
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# --- IMPORTAMOS LA BBDD PARA PODER BORRARLA ---
+# --- IMPORTAMOS LA BBDD Y LOS MODELOS ---
 from app.database.engine import engine
-from app.database.models import Pase
+from app.database.models import Pase, Pelicula # <--- AÑADIDO PELICULA
 
-# --- IMPORTAMOS TUS AGENTES (Todos los cines) ---
+# --- IMPORTAMOS TUS AGENTES ---
 from app.scrapers.cines.dore import scrapear_dore
 from app.scrapers.cines.equis import scrapear_equis
 from app.scrapers.cines.cineteca import scrapear_cineteca
@@ -23,128 +23,104 @@ from app.scrapers.cines.cine_paz import scrapear_cine_paz
 from app.scrapers.cines.mk2_palacio_hielo import scrapear_mk2_palacio_hielo
 from app.scrapers.cines.embajadores import scrapear_embajadores
 from app.scrapers.cines.golem import scrapear_golem
-from app.scrapers.cines.yelmo import scrapear_yelmo_ideal
-
+# CORREGIDO: yelmo_ideal en vez de yelmo
+from app.scrapers.cines.yelmo_ideal import scrapear_yelmo_ideal 
 
 def limpiar_base_datos():
-    print("🧹 LIMPIEZA: Borrando sesiones antiguas...")
+    print("🧹 LIMPIEZA TOTAL: Borrando datos antiguos...")
     try:
         with Session(engine) as session:
-            # Esta sentencia borra TODAS las filas de la tabla Pase
-            statement = delete(Pase)
-            resultado = session.exec(statement)
+            # 1. Borrar PASES primero (porque dependen de las pelis)
+            statement_pases = delete(Pase)
+            res_pases = session.exec(statement_pases)
+            
+            # 2. Borrar PELÍCULAS después (para regenerarlas limpias)
+            statement_pelis = delete(Pelicula)
+            res_pelis = session.exec(statement_pelis)
+            
             session.commit()
-            print(f"🗑️  ¡Hecho! Se han eliminado {resultado.rowcount} pases antiguos.")
+            print(f"🗑️  ¡Hecho! Eliminados {res_pases.rowcount} pases y {res_pelis.rowcount} películas.")
     except Exception as e:
-        print(f"⚠️ Error limpiando base de datos (quizás estaba vacía): {e}")
+        print(f"⚠️ Error limpiando base de datos: {e}")
 
 def lanzar_todo():
+    # INICIO CRONÓMETRO
+    inicio = time.time()
+
     print("\n🚀 INICIANDO PROTOCOLO 'MADRID INDIE' - RECARGA COMPLETA")
     print("===========================================================\n")
 
-    # 1. PRIMERO LIMPIAMOS LA CASA
+    # 1. LIMPIEZA
     limpiar_base_datos()
     print("\n-----------------------------------------------------------")
 
-    # 2. LUEGO LLENAMOS LA DESPENSA
+    # 2. CARGA DE DATOS
     
     # --- GRUPO 1: INSTITUCIONES & ALTERNATIVOS ---
-    try:
-        scrapear_dore()
-    except Exception as e:
-        print(f"❌ Error crítico en Doré: {e}")
-
+    try: scrapear_dore()
+    except Exception as e: print(f"❌ Error crítico en Doré: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_cineteca()
-    except Exception as e:
-        print(f"❌ Error crítico en Cineteca: {e}")
-
+    try: scrapear_cineteca()
+    except Exception as e: print(f"❌ Error crítico en Cineteca: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_cine_estudio() # Círculo de Bellas Artes
-    except Exception as e:
-        print(f"❌ Error crítico en Cine Estudio: {e}")
-
+    try: scrapear_cine_estudio()
+    except Exception as e: print(f"❌ Error crítico en Cine Estudio: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_equis()
-    except Exception as e:
-        print(f"❌ Error crítico en Sala Equis: {e}")
+    try: scrapear_equis()
+    except Exception as e: print(f"❌ Error crítico en Sala Equis: {e}")
 
     # --- GRUPO 2: LOS RENOIR ---
     print("\n-----------------------------------------------------------")
-    
-    try:
-        scrapear_renoir_princesa()
-    except Exception as e:
-        print(f"❌ Error crítico en Renoir Princesa: {e}")
-
+    try: scrapear_renoir_princesa()
+    except Exception as e: print(f"❌ Error crítico en Renoir Princesa: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_renoir_plazaesp()
-    except Exception as e:
-        print(f"❌ Error crítico en Renoir Plaza España: {e}")
-
+    try: scrapear_renoir_plazaesp()
+    except Exception as e: print(f"❌ Error crítico en Renoir Plaza España: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_renoir_retiro()
-    except Exception as e:
-        print(f"❌ Error crítico en Renoir Retiro: {e}")
+    try: scrapear_renoir_retiro()
+    except Exception as e: print(f"❌ Error crítico en Renoir Retiro: {e}")
 
     # --- GRUPO 3: LOS CLÁSICOS VOSE ---
     print("\n-----------------------------------------------------------")
-
-    try:
-        scrapear_verdi()
-    except Exception as e:
-        print(f"❌ Error crítico en Cines Verdi: {e}")
-
+    try: scrapear_verdi()
+    except Exception as e: print(f"❌ Error crítico en Cines Verdi: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_golem()
-    except Exception as e:
-        print(f"❌ Error crítico en Cine Golem: {e}")
-
+    try: scrapear_golem()
+    except Exception as e: print(f"❌ Error crítico en Cine Golem: {e}")
     print("\n-----------------------------------------------------------")
 
-    try:
-        scrapear_embajadores() 
-    except Exception as e:
-        print(f"❌ Error crítico en Cine Embajadores: {e}") 
+    try: scrapear_embajadores() 
+    except Exception as e: print(f"❌ Error crítico en Cine Embajadores: {e}") 
 
     # --- GRUPO 4: LOS GRANDES (MK2 & PAZ) ---
     print("\n-----------------------------------------------------------")
-    
-    try:
-        scrapear_cine_paz()
-    except Exception as e:
-        print(f"❌ Error crítico en Cine Paz: {e}")
-
+    try: scrapear_cine_paz()
+    except Exception as e: print(f"❌ Error crítico en Cine Paz: {e}")
     print("\n-----------------------------------------------------------")
     
-    try:
-        scrapear_mk2_palacio_hielo()
-    except Exception as e:
-        print(f"❌ Error crítico en Palacio de Hielo: {e}")
+    try: scrapear_mk2_palacio_hielo()
+    except Exception as e: print(f"❌ Error crítico en Palacio de Hielo: {e}")
 
     # --- GRUPO 5: MAINSTREAM (YELMO) ---
     print("\n-----------------------------------------------------------")
-    
-    try:
-        scrapear_yelmo_ideal()          
-    except Exception as e:
-        print(f"❌ Error crítico en Yelmo Ideal: {e}")  
+    try: scrapear_yelmo_ideal()          
+    except Exception as e: print(f"❌ Error crítico en Yelmo Ideal: {e}")  
 
+    # FIN CRONÓMETRO
+    fin = time.time()
+    tiempo_total = fin - inicio
+    minutos = int(tiempo_total // 60)
+    segundos = int(tiempo_total % 60)
 
     print("\n===========================================================")
-    print("✅ ¡TODO NUEVO! La base de datos está fresca y actualizada. 🍿")
+    print(f"✅ ¡TODO LISTO! 🍿")
+    print(f"⏱️ Tiempo total de ejecución: {minutos} min {segundos} s")
     print("===========================================================\n")
 
 if __name__ == "__main__":

@@ -1,66 +1,78 @@
+import os
 import requests
-import re
-from functools import lru_cache # <--- ESTO ES LA MAGIA DE LA MEMORIA
+from dotenv import load_dotenv
 
-# PEGA AQUÍ TU API KEY (Mantenla secreta si subes esto a GitHub)
-TMDB_API_KEY = "095a097e556670b8c3822dd355f7b876"
+load_dotenv()
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
-def limpiar_titulo(titulo: str) -> str:
+def buscar_datos_tmdb(titulo: str):
     """
-    Limpia el título del cine para que TMDB lo entienda.
-    Ej: "Matrix (VOSE)" -> "Matrix"
-    Ej: "Avatar: El sentido del agua - 3D" -> "Avatar: El sentido del agua"
+    1. Busca la película por título.
+    2. Si la encuentra, pide los DETALLES (para sacar duración y backdrop).
     """
-    # 1. Quitar todo lo que esté entre paréntesis (VOSE), (2024), etc.
-    titulo = re.sub(r"\(.*?\)", "", titulo)
-    
-    # 2. Quitar guiones raros del final si los hay (típico de algunos cines)
-    if " - " in titulo:
-         titulo = titulo.split(" - ")[0]
-         
-    return titulo.strip()
+    if not TMDB_API_KEY:
+        return None
 
-# --- LA FUNCIÓN CON MEMORIA ---
-# maxsize=None significa que guardará TODAS las pelis que busque en esta ejecución.
-@lru_cache(maxsize=None) 
-def buscar_datos_tmdb(titulo_cine: str) -> dict:
-    """
-    Busca una película en TMDB y devuelve Poster, Nota, Sinopsis y Año.
-    ¡Tiene memoria! Si le pides la misma peli dos veces, la segunda no gasta API.
-    """
-    print(f"      📡 Llamando a TMDB para: {titulo_cine}...") # Para que veas cuándo llama de verdad
-    
-    titulo_limpio = limpiar_titulo(titulo_cine)
-    url = "https://api.themoviedb.org/3/search/movie"
-    
+    # PASO 1: BUSCAR ID 🔎
+    search_url = "https://api.themoviedb.org/3/search/movie"
     params = {
         "api_key": TMDB_API_KEY,
-        "query": titulo_limpio,
-        "language": "es-ES", # Queremos sinopsis y cartel en español
-        "page": 1
+        "query": titulo,
+        "language": "es-ES",
+        "region": "ES"
     }
 
     try:
-        response = requests.get(url, params=params, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("results"):
-                # Cogemos el primer resultado, suele ser el correcto
-                peli = data["results"][0]
-                
-                # Construimos la URL de la imagen (w500 es el tamaño, calidad media-alta)
-                poster_path = peli.get("poster_path")
-                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
-                
-                return {
-                    "poster": poster_url,
-                    "nota": peli.get("vote_average", 0),  # La nota (ej: 7.4)
-                    "sinopsis": peli.get("overview", "Sin sinopsis disponible."),
-                    "anio": peli.get("release_date", "")[:4] # Solo el año "2024"
-                }
-    except Exception as e:
-        print(f"      ⚠️ Fallo conectando con TMDB: {e}")
+        res = requests.get(search_url, params=params, timeout=5)
+        res.raise_for_status()
+        results = res.json().get("results", [])
 
-    # Si falla o no encuentra nada, devolvemos un diccionario vacío o con None
-    return {"poster": None, "nota": None, "sinopsis": None, "anio": None}
+        if not results:
+            return None
+
+        # Lógica de mejor coincidencia (Priorizar recientes)
+        mejor_opcion = results[0]
+        for peli in results:
+            fecha = peli.get("release_date", "")
+            if fecha and ("2024" in fecha or "2025" in fecha or "2026" in fecha):
+                mejor_opcion = peli
+                break
+        
+        movie_id = mejor_opcion.get("id")
+
+        # PASO 2: PEDIR DETALLES COMPLETOS (Runtime + Backdrop) 📝
+        details_url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+        details_params = {"api_key": TMDB_API_KEY, "language": "es-ES"}
+        
+        detalles = requests.get(details_url, params=details_params, timeout=5).json()
+
+        # Procesar imágenes
+        poster_path = detalles.get("poster_path")
+        poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+        
+        backdrop_path = detalles.get("backdrop_path")
+        # Pedimos calidad original o w1280 para que se vea bien de fondo
+        backdrop_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}" if backdrop_path else None
+        
+        fecha_str = detalles.get("release_date", "")
+        anio = int(fecha_str.split("-")[0]) if fecha_str else None
+
+        # Géneros (Ahora vienen como lista de objetos)
+        generos = ", ".join([g["name"] for g in detalles.get("genres", [])])
+
+        return {
+            "tmdb_id": movie_id,
+            "titulo_tmdb": detalles.get("title"),
+            "titulo_original": detalles.get("original_title"),
+            "poster": poster_url,
+            "backdrop": backdrop_url,    # <--- NUEVO
+            "sinopsis": detalles.get("overview"),
+            "nota": detalles.get("vote_average"),
+            "duracion": detalles.get("runtime"), # <--- NUEVO
+            "anio": anio,
+            "generos": generos
+        }
+
+    except Exception as e:
+        print(f"      ⚠️ Error TMDB: {e}")
+        return None

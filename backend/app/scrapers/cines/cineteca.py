@@ -3,10 +3,10 @@ import time
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 # Diccionario para traducir meses de Cineteca a números
 MESES = {
@@ -41,12 +41,11 @@ def parsear_fecha_cineteca(texto_fecha):
         return datetime(anio, mes, dia, h, m)
         
     except Exception as e:
-        # print(f"      ⚠️ Error parseando fecha '{texto_fecha}': {e}")
         return None
 
 def scrapear_cineteca():
     with sync_playwright() as p:
-        print("🍿 Entrando en Cineteca Madrid...")
+        print("🍿 Entrando en Cineteca Madrid (Modo Relacional)...")
         browser = p.chromium.launch(headless=True) 
         page = browser.new_page()
         
@@ -72,31 +71,21 @@ def scrapear_cineteca():
                         # 1. TÍTULO
                         titulo_elem = tarjeta.locator("h2.title a").first
                         if not titulo_elem.count(): continue
-                        titulo = titulo_elem.inner_text().strip()
+                        titulo_raw = titulo_elem.inner_text().strip()
                         
-                        # 2. INTELIGENCIA TMDB
-                        datos_tmdb = buscar_datos_tmdb(titulo)
-                        
-                        poster_final = datos_tmdb.get("poster")
-                        nota_tmdb = datos_tmdb.get("nota")
-                        try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                        except: anio_tmdb = None
+                        # 2. INTELIGENCIA 1:N
+                        pelicula_id, anio_peli = obtener_id_pelicula(titulo_raw, session)
 
-                        # Fallback de póster (Web Cineteca)
-                        if not poster_final:
-                            img_elem = tarjeta.locator(".image-holder img").first
-                            if img_elem.count():
-                                src = img_elem.get_attribute("src")
-                                if src:
-                                    poster_final = f"{base_url}{src}" if src.startswith("/") else src
+                        # 3. Lógica Evento Especial
+                        es_especial = False
+                        if anio_peli and anio_peli < 2023:
+                            es_especial = True
+                        # Cineteca es especial per se, pero filtramos por antiguos o si no tiene año
 
-                        # 3. LINK COMPRA
+                        # 4. LINK COMPRA
                         link_relativo = titulo_elem.get_attribute("href")
                         link_compra = f"{base_url}{link_relativo}"
                         
-                        # 4. ESPECIAL? (Cineteca casi siempre lo es, pero el año confirma clásicos)
-                        es_especial = es_programacion_especial("Cineteca", titulo, anio_tmdb)
-
                         # 5. FECHAS
                         bloque_fechas = tarjeta.locator(".field--name-field-dias-de-proyeccion").first
                         if not bloque_fechas.count(): continue
@@ -110,26 +99,23 @@ def scrapear_cineteca():
                             fecha_final = parsear_fecha_cineteca(linea)
                             if not fecha_final: continue
                             
-                            # GUARDAR
+                            # GUARDAR PASE
                             existe = session.exec(select(Pase).where(
                                 Pase.cine == "Cineteca",
-                                Pase.pelicula == titulo,
+                                Pase.pelicula_id == pelicula_id,
                                 Pase.fecha_hora == fecha_final
                             )).first()
                             
                             if not existe:
                                 nuevo = Pase(
                                     cine="Cineteca",
-                                    pelicula=titulo,
+                                    pelicula_id=pelicula_id,
                                     fecha_hora=fecha_final,
                                     sala="Cineteca",
                                     precio="3.50€",
                                     link_compra=link_compra,
-                                    poster_url=poster_final,
-                                    idioma="VOSE", # Cineteca suele ser VOSE por defecto
-                                    es_evento_especial=es_especial,
-                                    nota_tmdb=nota_tmdb,
-                                    anio=anio_tmdb
+                                    idioma="VOSE", # Cineteca suele ser VOSE
+                                    es_evento_especial=es_especial
                                 )
                                 session.add(nuevo)
                                 nuevos_pases += 1

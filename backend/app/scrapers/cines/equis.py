@@ -3,18 +3,18 @@ import time
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright, expect
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 # --- CONFIGURACIÓN ---
-DIAS_A_ESCANEAR = 7  # Días a leer hacia el futuro
+DIAS_A_ESCANEAR = 7 
 # ---------------------
 
 def scrapear_equis():
     with sync_playwright() as p:
-        print(f"👻 Sala Equis: Escaneando {DIAS_A_ESCANEAR} días...")
+        print(f"👻 Sala Equis: Escaneando {DIAS_A_ESCANEAR} días (Modo Relacional)...")
         browser = p.chromium.launch(headless=True) 
         page = browser.new_page()
         
@@ -34,9 +34,7 @@ def scrapear_equis():
             if page.locator('input[name="ctl07"]').is_visible():
                 page.locator('input[name="ctl07"]').click()
             
-            # Esperamos al panel
             page.wait_for_selector("#UpdatePanelFechas", timeout=15000)
-            # print("✅ Hackeo completado. Panel de fechas localizado.")
             
         except Exception as e:
             print(f"❌ Error al entrar en Sala Equis: {e}")
@@ -62,10 +60,9 @@ def scrapear_equis():
 
             for i in range(DIAS_A_ESCANEAR):
                 fecha_str = fecha_actual.strftime("%d/%m/%Y")
-                # print(f"   👉 Día: {fecha_str}")
 
                 # --- A. SCRAPEO DEL DÍA ---
-                time.sleep(0.5) # Pequeña pausa para asegurar carga del DOM
+                time.sleep(0.5) 
                 
                 tarjetas = page.locator(".panel_peli").all()
                 
@@ -73,22 +70,16 @@ def scrapear_equis():
                     for tarjeta in tarjetas:
                         try:
                             # TÍTULO
-                            titulo = tarjeta.locator(".info_negrita").first.inner_text().strip()
+                            titulo_raw = tarjeta.locator(".info_negrita").first.inner_text().strip()
                             
-                            # --- INTELIGENCIA TMDB ---
-                            datos_tmdb = buscar_datos_tmdb(titulo)
-                            
-                            poster_final = datos_tmdb.get("poster")
-                            nota_tmdb = datos_tmdb.get("nota")
-                            try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                            except: anio_tmdb = None
+                            # INTELIGENCIA 1:N
+                            # Equis suele poner títulos muy limpios, pero el gestor se encarga
+                            pelicula_id, anio_peli = obtener_id_pelicula(titulo_raw, session)
 
-                            # Fallback: Si TMDB falla, usamos el logo de la sala (Kinetike no suele tener fotos buenas)
-                            if not poster_final:
-                                poster_final = "https://salaequis.es/wp-content/themes/salax/images/logo.svg"
-
-                            # ESPECIAL?
-                            es_especial = es_programacion_especial("Sala Equis", titulo, anio_tmdb)
+                            # ESPECIAL? (Por año)
+                            es_especial = False
+                            if anio_peli and anio_peli < 2023:
+                                es_especial = True
 
                             # SESIONES
                             links = tarjeta.locator("a").all()
@@ -110,26 +101,23 @@ def scrapear_equis():
                                 elif final_link and not final_link.startswith("http"):
                                     final_link = f"https://kinetike.com:83/views/{final_link}"
 
-                                # GUARDAR
+                                # GUARDAR PASE
                                 existe = session.exec(select(Pase).where(
                                     Pase.cine == "Sala Equis",
-                                    Pase.pelicula == titulo,
+                                    Pase.pelicula_id == pelicula_id,
                                     Pase.fecha_hora == fecha_final
                                 )).first()
                                 
                                 if not existe:
                                     nuevo = Pase(
                                         cine="Sala Equis",
-                                        pelicula=titulo,
+                                        pelicula_id=pelicula_id,
                                         fecha_hora=fecha_final,
                                         sala="Sala Equis",
                                         precio="6.90€",
                                         link_compra=final_link,
-                                        poster_url=poster_final,
                                         idioma="VOSE", # Sala Equis casi siempre es VOSE
-                                        es_evento_especial=es_especial,
-                                        nota_tmdb=nota_tmdb,
-                                        anio=anio_tmdb
+                                        es_evento_especial=es_especial
                                     )
                                     session.add(nuevo)
                                     pases_totales += 1
@@ -147,11 +135,10 @@ def scrapear_equis():
                 btn_siguiente.click()
 
                 try:
-                    # Esperamos a que el texto cambie (AJAX)
                     expect(lbl_fecha).to_have_text(fecha_siguiente_str, timeout=5000)
                     fecha_actual = fecha_siguiente
                 except:
-                    print(f"⚠️ Calendario atascado en {fecha_str}")
+                    # print(f"⚠️ Calendario atascado en {fecha_str}")
                     break
 
             print(f"🏁 FIN SALA EQUIS. {pases_totales} pases guardados.")

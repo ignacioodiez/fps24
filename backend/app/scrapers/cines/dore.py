@@ -2,10 +2,10 @@ import re
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 MESES = {
     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
@@ -44,7 +44,7 @@ def scrapear_dore():
         page = browser.new_page()
         
         url = "https://entradasfilmoteca.sacatuentrada.es/"
-        print(f"🍿 Entrando al Doré ({url})...")
+        print(f"🍿 Entrando al Doré (Modo Relacional)...")
         
         try:
             page.goto(url, timeout=60000)
@@ -65,22 +65,20 @@ def scrapear_dore():
                     # 1. TÍTULO
                     titulo_elem = info.query_selector("h2.titulo")
                     if not titulo_elem: continue
-                    titulo = titulo_elem.inner_text().strip()
+                    titulo_raw = titulo_elem.inner_text().strip()
 
-                    # 2. INTELIGENCIA TMDB (Nota, Año, Poster HD)
-                    datos_tmdb = buscar_datos_tmdb(titulo)
-                    
-                    poster_final = datos_tmdb.get("poster")
-                    nota_tmdb = datos_tmdb.get("nota")
-                    try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                    except: anio_tmdb = None
+                    # 2. INTELIGENCIA 1:N
+                    pelicula_id, anio_peli = obtener_id_pelicula(titulo_raw, session)
 
-                    # 3. IMAGEN FALLBACK (Si TMDB falla, sacamos la de la web)
-                    if not poster_final:
-                        padre = info.evaluate_handle("el => el.parentElement")
-                        img_elem = padre.query_selector(".imagen img")
-                        if img_elem:
-                            poster_final = img_elem.get_attribute("src")
+                    # 3. LÓGICA DE EVENTO ESPECIAL
+                    # El Doré es casi todo ciclo/clásico. 
+                    # Si tiene año y es antiguo (<2023), es especial.
+                    es_especial = False
+                    if anio_peli and anio_peli < 2023:
+                        es_especial = True
+                    # O si no tenemos año (peli muy rara), asumimos especial en Filmoteca
+                    elif anio_peli is None:
+                        es_especial = True
 
                     # 4. FECHA
                     desc_elem = info.query_selector("div.descripcion")
@@ -96,28 +94,22 @@ def scrapear_dore():
                     if link_relativo and not link_relativo.startswith("http"):
                          link_compra = f"https://entradasfilmoteca.sacatuentrada.es{link_relativo}"
 
-                    # 6. ESPECIAL? (Doré siempre es especial, pero el año ayuda a clasificar)
-                    es_especial = es_programacion_especial("Cine Doré", titulo, anio_tmdb)
-
-                    # 7. GUARDAR
+                    # 6. GUARDAR PASE
                     existe = session.exec(select(Pase).where(
                         Pase.cine == "Cine Doré",
-                        Pase.pelicula == titulo,
+                        Pase.pelicula_id == pelicula_id,
                         Pase.fecha_hora == fecha_hora
                     )).first()
                     
                     if not existe:
                         nuevo_pase = Pase(
                             cine="Cine Doré",
-                            pelicula=titulo,
+                            pelicula_id=pelicula_id,
                             fecha_hora=fecha_hora,
-                            sala="Sala 1", # Doré tiene Sala 1 y 2, pero la web principal suele ser la 1
+                            sala="Sala 1", # Default habitual
                             link_compra=link_compra,
-                            poster_url=poster_final,
                             precio="3.00€",
                             es_evento_especial=es_especial,
-                            nota_tmdb=nota_tmdb,
-                            anio=anio_tmdb,
                             idioma="VOSE" # Filmoteca es VOSE por definición
                         )
                         session.add(nuevo_pase)

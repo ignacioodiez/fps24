@@ -2,14 +2,14 @@ import time
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 def scrapear_embajadores():
     url = "https://cinesembajadores.es/madrid/"
-    print(f"🎹 Entrando en Cines Embajadores...")
+    print(f"🎹 Entrando en Cines Embajadores (Modo Relacional)...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -21,7 +21,7 @@ def scrapear_embajadores():
                 page.locator("#cookies-eu-accept").click(timeout=3000)
             except: pass
             
-            # Scroll para cargar imágenes
+            # Scroll para cargar todo
             page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
             time.sleep(1)
 
@@ -40,35 +40,26 @@ def scrapear_embajadores():
                     # 1. TÍTULO E IDIOMA
                     titulo_elem = peli_card.locator(".info h2 a").first
                     if not titulo_elem.count(): continue
+                    
                     raw_titulo = titulo_elem.inner_text().strip()
-                    titulo = raw_titulo
-                    idioma = "Español"
+                    titulo_limpio = raw_titulo
+                    idioma = "Español" # Por defecto
 
+                    # Detectar idioma en el título antes de limpiar
                     if "(VOSE)" in raw_titulo.upper():
                         idioma = "VOSE"
-                        titulo = raw_titulo.replace("(VOSE)", "").replace("(DOBLADA AL ESPAÑOL)", "").strip()
+                        titulo_limpio = raw_titulo.replace("(VOSE)", "").replace("(DOBLADA AL ESPAÑOL)", "").strip()
                     elif "(DOBLADA" in raw_titulo.upper():
-                        titulo = raw_titulo.split("(")[0].strip()
+                        titulo_limpio = raw_titulo.split("(")[0].strip()
 
-                    # 2. DATOS TMDB (Póster, Nota, Año)
-                    datos_tmdb = buscar_datos_tmdb(titulo)
-                    
-                    poster_final = datos_tmdb.get("poster")
-                    nota_tmdb = datos_tmdb.get("nota")
-                    try:
-                        anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                    except: anio_tmdb = None
+                    # 2. INTELIGENCIA 1:N
+                    # Usamos el título limpio para buscar el ID
+                    pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
 
-                    # Fallback de póster si TMDB falla
-                    if not poster_final:
-                        img_elem = peli_card.locator(".poster img").first
-                        if img_elem.count():
-                            src = img_elem.get_attribute("srcset")
-                            if src: poster_final = src.split(",")[-1].strip().split(" ")[0]
-                            else: poster_final = img_elem.get_attribute("src")
-
-                    # 3. CALCULAR SI ES ESPECIAL (Usando el Año)
-                    es_especial = es_programacion_especial("Cine Embajadores", titulo, anio_tmdb)
+                    # 3. LÓGICA ESPECIAL (Por año)
+                    es_especial = False
+                    if anio_peli and anio_peli < 2023:
+                        es_especial = True
 
                     # 4. HORARIOS
                     items_horarios = peli_card.locator(".showtimelist p[data-dia]").all()
@@ -85,32 +76,37 @@ def scrapear_embajadores():
                             anio_actual = datetime.now().year
                             fecha_final = datetime.strptime(f"{dia_txt}/{anio_actual} {hora_txt}", "%d/%m/%Y %H:%M")
                             
+                            # Ajuste cambio de año
                             if fecha_final.month < datetime.now().month and datetime.now().month == 12:
                                 fecha_final = fecha_final.replace(year=anio_actual + 1)
 
+                            # Distinguir entre las dos sedes
                             nombre_cine_db = "Cine Embajadores Río" if "Río" in recinto or "Rio" in recinto else "Cine Embajadores"
 
-                            # 5. GUARDAR (Sin chequear duplicados porque hemos borrado la DB)
-                            nuevo = Pase(
-                                cine=nombre_cine_db,
-                                pelicula=titulo,
-                                fecha_hora=fecha_final,
-                                sala=nombre_cine_db,
-                                precio="Consultar",
-                                link_compra=link_compra,
-                                poster_url=poster_final,
-                                idioma=idioma,
-                                es_evento_especial=es_especial,
-                                nota_tmdb=nota_tmdb,
-                                anio=anio_tmdb
-                            )
-                            session.add(nuevo)
-                            nuevos_pases += 1
+                            # 5. GUARDAR PASE
+                            existe = session.exec(select(Pase).where(
+                                Pase.cine == nombre_cine_db,
+                                Pase.pelicula_id == pelicula_id,
+                                Pase.fecha_hora == fecha_final
+                            )).first()
+
+                            if not existe:
+                                nuevo = Pase(
+                                    cine=nombre_cine_db,
+                                    pelicula_id=pelicula_id,
+                                    fecha_hora=fecha_final,
+                                    sala=nombre_cine_db, # Usamos el nombre del cine como sala genérica
+                                    precio="Consultar",
+                                    link_compra=link_compra,
+                                    idioma=idioma,
+                                    es_evento_especial=es_especial
+                                )
+                                session.add(nuevo)
+                                nuevos_pases += 1
 
                         except: continue
 
                 except Exception as e:
-                    print(f"   ⚠️ Error peli: {e}")
                     continue
             
             session.commit()

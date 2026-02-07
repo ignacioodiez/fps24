@@ -2,15 +2,15 @@ import time
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 def scrapear_golem():
     nombre_cine = "Golem Madrid"
     base_url = "https://www.golem.es/golem/golem-madrid"
-    print(f"🎹 Entrando en {nombre_cine}...")
+    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -38,47 +38,34 @@ def scrapear_golem():
                 # Truco: Cada peli está en una tabla con background="#AEAEAE"
                 bloques = page.locator('table[background="#AEAEAE"]').all()
                 
-                if not bloques:
-                    # print(f"      ⚠️ No encontré películas para este día.")
-                    continue
+                if not bloques: continue
 
                 with Session(engine) as session:
                     for bloque in bloques:
                         try:
-                            # 1. TÍTULO
+                            # 1. TÍTULO E IDIOMA
                             titulo_elem = bloque.locator(".txtNegXXL").first
                             if not titulo_elem.count(): continue
                             
                             raw_titulo = titulo_elem.inner_text().strip()
-                            titulo = raw_titulo
+                            titulo_limpio = raw_titulo
                             idioma = "Español"
 
-                            # Detectar idioma
+                            # Detectar idioma y limpiar título para el gestor
                             if "(V.O.S.E.)" in raw_titulo:
                                 idioma = "VOSE"
-                                titulo = raw_titulo.replace("(V.O.S.E.)", "").strip()
+                                titulo_limpio = raw_titulo.replace("(V.O.S.E.)", "").strip()
                             elif "(VOSE)" in raw_titulo:
                                 idioma = "VOSE"
-                                titulo = raw_titulo.replace("(VOSE)", "").strip()
+                                titulo_limpio = raw_titulo.replace("(VOSE)", "").strip()
 
-                            # 2. INTELIGENCIA TMDB
-                            datos_tmdb = buscar_datos_tmdb(titulo)
-                            
-                            poster_final = datos_tmdb.get("poster")
-                            nota_tmdb = datos_tmdb.get("nota")
-                            try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                            except: anio_tmdb = None
+                            # 2. INTELIGENCIA 1:N
+                            pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
 
-                            # Fallback de póster (Web Golem)
-                            if not poster_final:
-                                img_elem = bloque.locator("img.bordeCartel").first
-                                if img_elem.count():
-                                    src = img_elem.get_attribute("src")
-                                    if src:
-                                        poster_final = f"https://www.golem.es{src}"
-
-                            # 3. ESPECIAL?
-                            es_especial = es_programacion_especial(nombre_cine, titulo, anio_tmdb)
+                            # 3. ESPECIAL? (Por año)
+                            es_especial = False
+                            if anio_peli and anio_peli < 2023:
+                                es_especial = True
 
                             # 4. HORARIOS
                             celdas_hora = bloque.locator(".CajaVentasSup").all()
@@ -101,38 +88,34 @@ def scrapear_golem():
                                     h, m = map(int, hora_txt.split(":"))
                                     fecha_final = fecha_iter.replace(hour=h, minute=m, second=0, microsecond=0)
                                     
-                                    # GUARDAR
+                                    # GUARDAR PASE
                                     existe = session.exec(select(Pase).where(
                                         Pase.cine == nombre_cine,
-                                        Pase.pelicula == titulo,
+                                        Pase.pelicula_id == pelicula_id,
                                         Pase.fecha_hora == fecha_final
                                     )).first()
 
                                     if not existe:
                                         nuevo = Pase(
                                             cine=nombre_cine,
-                                            pelicula=titulo,
+                                            pelicula_id=pelicula_id,
                                             fecha_hora=fecha_final,
                                             sala=nombre_cine,
                                             precio="Consultar",
                                             link_compra=link_compra,
-                                            poster_url=poster_final,
                                             idioma=idioma,
-                                            es_evento_especial=es_especial,
-                                            nota_tmdb=nota_tmdb,
-                                            anio=anio_tmdb
+                                            es_evento_especial=es_especial
                                         )
                                         session.add(nuevo)
                                         nuevos_pases += 1
 
                                 except: continue
-                                
                         except: continue
                     
                     session.commit()
 
             except Exception as e:
-                print(f"   ❌ Error cargando URL del día: {e}")
+                # print(f"   ❌ Error cargando URL del día: {e}")
                 continue
 
         print(f"🏁 FIN GOLEM. {nuevos_pases} pases guardados.")

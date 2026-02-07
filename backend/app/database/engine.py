@@ -1,28 +1,37 @@
-from sqlmodel import SQLModel, create_engine
 import os
+from sqlmodel import SQLModel, create_engine, Session
+from dotenv import load_dotenv
 
-# Nombre del archivo de la base de datos
-sqlite_file_name = "database.db"
-# Ruta completa (para que no se pierda si ejecutas el script desde otro sitio)
-base_dir = os.path.dirname(os.path.abspath(__file__))
-database_path = os.path.join(base_dir, "..", "..", sqlite_file_name)
-sqlite_url = f"sqlite:///{database_path}"
+load_dotenv()
 
-# Creamos el motor. 
-# echo=True hará que veas en la terminal los comandos SQL (útil para depurar, luego lo quitamos)
-engine = create_engine(sqlite_url, echo=True)
+# 1. RECUPERAR URL
+# Buscamos la variable DATABASE_URL. Si no existe, usamos SQLite local.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database.db")
+
+# 2. CORRECCIÓN AUTOMÁTICA DE URL (Vital para Render/Supabase)
+# SQLAlchemy necesita que empiece por "postgresql://", pero a veces viene como "postgres://"
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# 3. ARGUMENTOS DE CONEXIÓN
+connect_args = {}
+# SQLite necesita esto para no quejarse de los hilos, Postgres NO lo necesita.
+if "sqlite" in DATABASE_URL:
+    connect_args = {"check_same_thread": False}
+
+# 4. CREAR MOTOR
+# pool_pre_ping=True ayuda a recuperar conexiones perdidas en la nube
+engine = create_engine(
+    DATABASE_URL, 
+    echo=False, 
+    connect_args=connect_args,
+    pool_pre_ping=True 
+)
 
 def create_db_and_tables():
-    """Esta función mira tus modelos (models.py) y crea las tablas si no existen."""
-    # Importante: Importar los modelos aquí para que SQLModel los reconozca antes de crear la tabla
-    from app.database.models import Pase
-    
-    print("🏗️ Creando tablas en la base de datos...")
+    """Crea las tablas automáticamente si no existen en la BD destino."""
     SQLModel.metadata.create_all(engine)
-    print("✅ Tablas listas.")
 
 def get_session():
-    """Esta función nos dará una 'sesión' para usar en los scrapers."""
-    from sqlmodel import Session
     with Session(engine) as session:
         yield session

@@ -1,47 +1,47 @@
 import time
+import re  # <--- IMPORTANTE: Necesitamos RE para quitar los minutos
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula
 
 def scrapear_verdi():
-    # URL de Cines Verdi Madrid en FilmAffinity
     url = "https://www.filmaffinity.com/es/theater-showtimes.php?id=313"
-    print(f"🎹 Entrando en Verdi (Vía FilmAffinity)...")
+    print(f"🎹 Entrando en Verdi (Modo Corrección Minutos)...")
 
     with sync_playwright() as p:
-        # headless=False ayuda a veces con Cloudflare en FilmAffinity
-        # Si te da problemas en el servidor, prueba a ponerlo en True
-        browser = p.chromium.launch(headless=True, channel="chrome") 
-        page = browser.new_page()
+        browser = p.chromium.launch(headless=False, channel="chrome")
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
         
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
             
-            # --- COOKIES ---
+            # Cookies
             try:
-                boton_cookie = page.get_by_text("ACEPTAR", exact=True).or_(page.get_by_text("AGREE"))
-                if boton_cookie.is_visible(timeout=4000):
+                boton_cookie = page.get_by_role("button", name="ACEPTAR").or_(page.get_by_text("AGREE"))
+                if boton_cookie.is_visible(timeout=3000):
                     boton_cookie.click()
             except: pass
             
-            # --- ESPERAR CONTENIDO ---
-            print("   ⏳ Esperando lista de películas...")
+            # Esperar contenido
             try:
-                page.wait_for_selector(".fa-content-card.movie", timeout=15000)
+                page.wait_for_selector(".fa-content-card.movie", timeout=10000)
             except:
-                print("   ⚠️ Timeout o bloqueo de Cloudflare.")
-                # print(f"   📄 Título: {page.title()}")
+                print("   ⚠️ No encuentro películas. Revisa el navegador.")
+                browser.close()
+                return
             
-            # Scroll para cargar imágenes (Lazy load)
-            page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-            time.sleep(2)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(1)
 
         except Exception as e:
-            print(f"❌ Error cargando FilmAffinity: {e}")
+            print(f"❌ Error cargando web: {e}")
             browser.close()
             return
 
@@ -54,54 +54,36 @@ def scrapear_verdi():
         with Session(engine) as session:
             for peli_card in peliculas:
                 try:
-                    # 1. TÍTULO
-                    titulo_elem = peli_card.locator(".mv-title span.fs-5").first
+                    titulo_elem = peli_card.locator(".mv-title").first
                     if not titulo_elem.count(): continue
                     
-                    raw_titulo = titulo_elem.inner_text().strip()
+                    raw_titulo = titulo_elem.inner_text().strip() # Ej: "TRES ADIOSES 120 MINUTOS"
+                    
+                    # --- ✂️ CORRECCIÓN: QUITAR MINUTOS ---
+                    # Buscamos cualquier número seguido de "MINUTOS" al final y lo borramos
+                    titulo_limpio = re.sub(r'\s\d+\s*MINUTOS$', '', raw_titulo, flags=re.IGNORECASE).strip()
+                    
+                    # Idioma
                     idioma = "Español"
-                    titulo = raw_titulo
-
-                    # Limpieza de título
-                    if "(VOSE)" in raw_titulo.upper():
+                    if "(VOSE)" in titulo_limpio.upper() or "V.O.S.E." in titulo_limpio.upper():
                         idioma = "VOSE"
-                        titulo = raw_titulo.replace("(VOSE)", "").replace("(V.O. SUB. CASTELLANO)", "").strip()
-                    elif "(CASTELLANO)" in raw_titulo.upper():
-                        titulo = raw_titulo.replace("(CASTELLANO)", "").strip()
                     
-                    # Quitar paréntesis residuales
-                    titulo = titulo.split("(")[0].strip()
+                    # Llamamos al gestor con el título YA LIMPIO de minutos
+                    pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
 
-                    # 2. INTELIGENCIA TMDB
-                    datos_tmdb = buscar_datos_tmdb(titulo)
-                    
-                    poster_final = datos_tmdb.get("poster")
-                    nota_tmdb = datos_tmdb.get("nota")
-                    try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                    except: anio_tmdb = None
+                    # Especial?
+                    es_especial = False
+                    if anio_peli and anio_peli < 2023:
+                        es_especial = True
 
-                    # Fallback Poster (FilmAffinity)
-                    if not poster_final:
-                        img_elem = peli_card.locator(".mc-poster img").first
-                        if img_elem.count():
-                            srcset = img_elem.get_attribute("data-srcset") or img_elem.get_attribute("srcset")
-                            if srcset:
-                                poster_final = srcset.split(",")[-1].strip().split(" ")[0]
-                            else:
-                                poster_final = img_elem.get_attribute("src")
-
-                    # 3. ESPECIAL?
-                    es_especial = es_programacion_especial("Cines Verdi", titulo, anio_tmdb)
-
-                    # 4. HORARIOS
+                    # Horarios
                     filas_dias = peli_card.locator(".sessions .row[data-sess-date]").all()
                     
                     for fila in filas_dias:
-                        fecha_str = fila.get_attribute("data-sess-date") # "2026-02-04"
+                        fecha_str = fila.get_attribute("data-sess-date")
                         if not fecha_str: continue
                         
                         botones = fila.locator(".times-wrap a.btn").all()
-                        
                         for boton in botones:
                             hora_txt = boton.inner_text().strip()
                             link_compra = boton.get_attribute("href")
@@ -110,10 +92,9 @@ def scrapear_verdi():
                                 fecha_completa_str = f"{fecha_str} {hora_txt}"
                                 fecha_final = datetime.strptime(fecha_completa_str, "%Y-%m-%d %H:%M")
                                 
-                                # GUARDAR
                                 existe = session.exec(select(Pase).where(
                                     Pase.cine == "Cines Verdi",
-                                    Pase.pelicula == titulo,
+                                    Pase.pelicula_id == pelicula_id,
                                     Pase.fecha_hora == fecha_final,
                                     Pase.idioma == idioma
                                 )).first()
@@ -121,16 +102,13 @@ def scrapear_verdi():
                                 if not existe:
                                     nuevo = Pase(
                                         cine="Cines Verdi",
-                                        pelicula=titulo,
+                                        pelicula_id=pelicula_id,
                                         fecha_hora=fecha_final,
                                         sala="Cines Verdi",
                                         precio="Consultar",
                                         link_compra=link_compra,
-                                        poster_url=poster_final,
                                         idioma=idioma,
-                                        es_evento_especial=es_especial,
-                                        nota_tmdb=nota_tmdb,
-                                        anio=anio_tmdb
+                                        es_evento_especial=es_especial
                                     )
                                     session.add(nuevo)
                                     nuevos_pases += 1

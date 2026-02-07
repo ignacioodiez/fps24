@@ -2,18 +2,18 @@ import time
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 def scrapear_yelmo_ideal():
     nombre_cine = "Yelmo Cines Ideal"
     url = "https://www.yelmocines.es/cartelera/madrid"
-    print(f"🎹 Entrando en {nombre_cine}...")
+    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
 
     with sync_playwright() as p:
-        # ⚠️ Mantenemos headless=False y channel="chrome" para evitar bloqueos
+        # ⚠️ Mantenemos headless=False y channel="chrome" para evitar bloqueos agresivos de Yelmo
         browser = p.chromium.launch(headless=False, channel="chrome")
         page = browser.new_page()
         
@@ -38,7 +38,7 @@ def scrapear_yelmo_ideal():
                     return Array.from(options).map(o => o.value).filter(v => v != '0');
                 }
             """)
-            valores_fechas = valores_fechas[:7]
+            valores_fechas = valores_fechas[:7] # Próximos 7 días
             print(f"   📅 Fechas detectadas: {len(valores_fechas)}")
 
         except Exception as e:
@@ -73,41 +73,31 @@ def scrapear_yelmo_ideal():
                     
                     for peli in peliculas:
                         try:
-                            # TÍTULO
+                            # TÍTULO BASE
                             titulo_elem = peli.locator("header h3 a").first
                             if not titulo_elem.count(): continue
                             raw_titulo = titulo_elem.inner_text().strip()
-                            titulo = raw_titulo
                             
-                            # --- INTELIGENCIA TMDB ---
-                            datos_tmdb = buscar_datos_tmdb(titulo)
-                            
-                            poster_final = datos_tmdb.get("poster")
-                            nota_tmdb = datos_tmdb.get("nota")
-                            try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                            except: anio_tmdb = None
+                            # --- INTELIGENCIA 1:N ---
+                            # Obtenemos el ID usando el título base (limpio de etiquetas raras si las hubiera)
+                            pelicula_id, anio_peli = obtener_id_pelicula(raw_titulo, session)
 
-                            # Fallback Poster (Si TMDB falla, usamos el de Yelmo)
-                            if not poster_final:
-                                img_elem = peli.locator("figure img").first
-                                if img_elem.count():
-                                    poster_final = img_elem.get_attribute("src")
+                            # --- ESPECIAL? ---
+                            es_especial = False
+                            if anio_peli and anio_peli < 2023:
+                                es_especial = True
 
-                            # ESPECIAL?
-                            es_especial = es_programacion_especial(nombre_cine, titulo, anio_tmdb)
-
-                            # 4. HORARIOS
+                            # 4. HORARIOS Y FORMATOS
                             bloques_formato = peli.locator(".horarioExp").all()
                             
                             for bloque in bloques_formato:
                                 texto_formato = bloque.locator(".col3").inner_text().upper()
                                 idioma = "Español"
-                                titulo_db = titulo
                                 
+                                # Yelmo suele poner el idioma en el bloque del formato
                                 if "VOSE" in texto_formato or "SUBTITULADO" in texto_formato:
                                     idioma = "VOSE"
-                                    titulo_db = titulo.replace("(VOSE)", "").strip()
-
+                                
                                 botones = bloque.locator("time.btn a").all()
                                 
                                 for btn in botones:
@@ -115,7 +105,7 @@ def scrapear_yelmo_ideal():
                                     link_compra = btn.get_attribute("href")
                                     if ":" not in hora_txt: continue
                                     
-                                    # PARSEO FECHA
+                                    # PARSEO FECHA (Yelmo usa formato "04-febrero")
                                     anio_actual = datetime.now().year
                                     meses = {"enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6, "julio": 7, "agosto": 8, "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12}
                                     
@@ -130,10 +120,10 @@ def scrapear_yelmo_ideal():
                                     h, m = map(int, hora_txt.split(":"))
                                     fecha_final = datetime(anio_pase, mes, int(dia_str), h, m)
 
-                                    # GUARDAR
+                                    # GUARDAR PASE
                                     existe = session.exec(select(Pase).where(
                                         Pase.cine == nombre_cine,
-                                        Pase.pelicula == titulo_db,
+                                        Pase.pelicula_id == pelicula_id,
                                         Pase.fecha_hora == fecha_final,
                                         Pase.idioma == idioma
                                     )).first()
@@ -141,16 +131,13 @@ def scrapear_yelmo_ideal():
                                     if not existe:
                                         nuevo = Pase(
                                             cine=nombre_cine,
-                                            pelicula=titulo_db,
+                                            pelicula_id=pelicula_id,
                                             fecha_hora=fecha_final,
                                             sala="Yelmo Ideal",
                                             precio="Consultar",
                                             link_compra=link_compra,
-                                            poster_url=poster_final,
                                             idioma=idioma,
-                                            es_evento_especial=es_especial,
-                                            nota_tmdb=nota_tmdb,
-                                            anio=anio_tmdb
+                                            es_evento_especial=es_especial
                                         )
                                         session.add(nuevo)
                                         nuevos_pases += 1

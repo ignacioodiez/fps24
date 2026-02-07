@@ -3,15 +3,15 @@ import re
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
+
 from app.database.engine import engine
 from app.database.models import Pase
-from app.utils import es_programacion_especial
-from app.services.tmdb import buscar_datos_tmdb
+from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
 
 def scrapear_cine_estudio():
     nombre_cine = "Cine Estudio (CBA)"
     url_base = "https://www.circulobellasartes.com/ciclos-cine/"
-    print(f"🎹 Entrando en {nombre_cine}...")
+    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -28,7 +28,7 @@ def scrapear_cine_estudio():
             
             # 2. RECOPILAR LINKS
             elementos = page.locator(".fl-post-grid-post").all()
-            print(f"   🔎 Detectados {len(elementos)} eventos.")
+            print(f"   🔎 Detectados {len(elementos)} eventos preliminares.")
             
             lista_para_visitar = []
             for el in elementos:
@@ -39,15 +39,10 @@ def scrapear_cine_estudio():
                     titulo = titulo_el.inner_text().strip()
                     link_ficha = titulo_el.get_attribute("href")
                     
-                    # Imagen fallback (la de la web)
-                    img_el = el.locator(".fl-post-image img").first
-                    poster_web = img_el.get_attribute("src") if img_el.count() else None
-                    
                     if link_ficha:
                         lista_para_visitar.append({
                             "titulo": titulo,
-                            "link": link_ficha,
-                            "poster_web": poster_web
+                            "link": link_ficha
                         })
                 except: continue
 
@@ -57,28 +52,23 @@ def scrapear_cine_estudio():
             with Session(engine) as session:
                 for item in lista_para_visitar:
                     try:
-                        titulo = item['titulo']
+                        titulo_raw = item['titulo']
                         
-                        # --- INTELIGENCIA TMDB ---
-                        # Buscamos datos (Poster HD, Nota, Año)
-                        datos_tmdb = buscar_datos_tmdb(titulo)
+                        # --- INTELIGENCIA 1:N ---
+                        # Obtenemos ID y AÑO del gestor central
+                        pelicula_id, anio_peli = obtener_id_pelicula(titulo_raw, session)
                         
-                        poster_final = datos_tmdb.get("poster")
-                        if not poster_final: # Si TMDB falla, usamos el de la web
-                            poster_final = item['poster_web']
-                            
-                        nota_tmdb = datos_tmdb.get("nota")
-                        try: anio_tmdb = int(datos_tmdb.get("anio")) if datos_tmdb.get("anio") else None
-                        except: anio_tmdb = None
-                        
-                        # Calculamos si es especial (CBA suele serlo siempre, pero añadimos lógica de año)
-                        es_especial = es_programacion_especial(nombre_cine, titulo, anio_tmdb)
+                        # Lógica Evento Especial (Cine Estudio suele ser clásico, así que < 2023)
+                        es_especial = False
+                        if anio_peli and anio_peli < 2023:
+                            es_especial = True
+                        if "COLOQUIO" in titulo_raw.upper() or "PRESENTACIÓN" in titulo_raw.upper():
+                            es_especial = True
 
-
-                        # Entramos a la ficha
+                        # Entramos a la ficha para ver horarios
                         page.goto(item['link'], timeout=45000, wait_until="domcontentloaded")
                         
-                        # Link compra
+                        # Link compra fallback
                         link_compra = item['link']
                         boton_compra = page.locator("a.fl-button[href*='reservaentradas'], a.fl-button[href*='tickets']").first
                         if boton_compra.count():
@@ -104,32 +94,29 @@ def scrapear_cine_estudio():
                                 fecha_final = datetime(anio, mes, dia, hora, minuto)
                                 if fecha_final < now.replace(hour=0, minute=0, second=0): continue
 
-                                # GUARDAR
+                                # GUARDAR PASE
                                 existe = session.exec(select(Pase).where(
                                     Pase.cine == nombre_cine,
-                                    Pase.pelicula == titulo,
+                                    Pase.pelicula_id == pelicula_id, # Buscamos por ID
                                     Pase.fecha_hora == fecha_final
                                 )).first()
 
                                 if not existe:
                                     nuevo = Pase(
                                         cine=nombre_cine,
-                                        pelicula=titulo,
+                                        pelicula_id=pelicula_id, # Enlace al padre
                                         fecha_hora=fecha_final,
                                         sala="Sala Cine Estudio",
                                         precio="5.50€",
                                         link_compra=link_compra,
-                                        poster_url=poster_final,
                                         idioma="VOSE",
-                                        es_evento_especial=es_especial,
-                                        nota_tmdb=nota_tmdb,
-                                        anio=anio_tmdb
+                                        es_evento_especial=es_especial
                                     )
                                     session.add(nuevo)
                                     nuevos_pases += 1
 
                     except Exception as e:
-                        # print(f"⚠️ Error en ficha: {e}")
+                        print(f"⚠️ Error procesando ficha '{item.get('titulo')}': {e}")
                         continue
             
                 session.commit()
