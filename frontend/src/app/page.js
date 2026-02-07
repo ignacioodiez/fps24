@@ -47,11 +47,16 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [selectedCinema, setSelectedCinema] = useState("Todos");
 
-  // 1. DATA LOADING
+ // 1. DATA LOADING
   useEffect(() => {
-    fetch("http://localhost:8000/pases")
+    // Definimos la URL: Si hay variable de entorno (Vercel) úsala, si no (tu casa), usa localhost.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    // Usamos comillas invertidas ` ` para meter la variable en la cadena
+    fetch(`${apiUrl}/pases`)
       .then((res) => res.json())
       .then((data) => {
+        // AQUÍ ESTABA EL ERROR: Quitamos ": any"
         const sortedData = data.sort(
           (a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)
         );
@@ -59,7 +64,6 @@ export default function Home() {
       })
       .catch((err) => console.error("Error loading sessions:", err));
   }, []);
-
   // 2. EXTRAER CINES DISPONIBLES
   const availableCinemas = useMemo(() => {
     const pasesDelDia = pases.filter(p => isSameDay(p.fecha_hora, selectedDate));
