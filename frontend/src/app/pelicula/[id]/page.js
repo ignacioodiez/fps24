@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation"; // <--- 1. IMPORTAR ROUTER
+import { useRouter } from "next/navigation";
 
 // --- AYUDANTES ---
 const formatDate = (dateString) => {
@@ -19,14 +19,19 @@ const formatTime = (dateString) => {
 };
 
 export default function MovieDetail({ params }) {
+  // Desempaquetamos los params (Next.js 15+)
   const { id } = use(params);
-  const router = useRouter(); // <--- 2. INICIALIZAR ROUTER
+  const router = useRouter();
   
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/pelicula/${id}`)
+    // ⬇️ AQUÍ ESTÁ EL CAMBIO IMPORTANTE ⬇️
+    // Si estamos en Vercel, usa la variable de entorno. Si no, usa localhost.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    fetch(`${apiUrl}/pelicula/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error("Error fetching movie");
         return res.json();
@@ -36,7 +41,7 @@ export default function MovieDetail({ params }) {
         setLoading(false);
       })
       .catch((err) => {
-        console.error(err);
+        console.error("Error cargando la peli:", err);
         setLoading(false);
       });
   }, [id]);
@@ -72,11 +77,6 @@ export default function MovieDetail({ params }) {
         {/* Degradado para texto */}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
 
-        {/* --- BOTÓN VOLVER ARREGLADO 🛠️ --- 
-            1. Usamos <button> en vez de <Link> para usar router.back()
-            2. Añadimos 'z-50' para asegurar que está encima del degradado
-            3. 'cursor-pointer' para que se note que es clickeable
-        */}
         <button 
             onClick={() => router.back()} 
             className="absolute top-6 left-6 z-50 bg-black/50 backdrop-blur-md p-2 rounded-full hover:bg-white/20 transition cursor-pointer group border border-white/10"
