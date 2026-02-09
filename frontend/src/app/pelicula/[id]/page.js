@@ -19,16 +19,16 @@ const formatTime = (dateString) => {
 };
 
 export default function MovieDetail({ params }) {
-  // Desempaquetamos los params (Next.js 15+)
   const { id } = use(params);
   const router = useRouter();
   
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // NUEVO ESTADO: ¿Agrupar por cine?
+  const [groupByCinema, setGroupByCinema] = useState(false);
 
   useEffect(() => {
-    // ⬇️ AQUÍ ESTÁ EL CAMBIO IMPORTANTE ⬇️
-    // Si estamos en Vercel, usa la variable de entorno. Si no, usa localhost.
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
     fetch(`${apiUrl}/pelicula/${id}`)
@@ -41,7 +41,7 @@ export default function MovieDetail({ params }) {
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Error cargando la peli:", err);
+        console.error(err);
         setLoading(false);
       });
   }, [id]);
@@ -49,24 +49,42 @@ export default function MovieDetail({ params }) {
   if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Cargando...</div>;
   if (!movie) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Película no encontrada</div>;
 
-  // AGRUPAR PASES POR DÍA
-  const passesByDate = movie.pases.reduce((acc, pase) => {
+  // 1. FILTRO ANTI-AYER (EL PORTERO 🛡️)
+  const futurePases = movie.pases.filter((pase) => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0); 
+    const fechaPase = new Date(pase.fecha_hora);
+    return fechaPase >= hoy;
+  });
+
+  // 2. AGRUPAR POR DÍA (Lógica Base)
+  const passesByDate = futurePases.reduce((acc, pase) => {
     const dateKey = new Date(pase.fecha_hora).toDateString(); 
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(pase);
     return acc;
   }, {});
 
+  // Ordenar los días
   const sortedDates = Object.entries(passesByDate).sort(
     (a, b) => new Date(a[1][0].fecha_hora) - new Date(b[1][0].fecha_hora)
   );
 
+  // 3. AYUDANTE PARA AGRUPAR POR CINE (DENTRO DE UN DÍA)
+  const groupSessionsByCinema = (sessions) => {
+    return sessions.reduce((acc, session) => {
+      const cineName = session.cine;
+      if (!acc[cineName]) acc[cineName] = [];
+      acc[cineName].push(session);
+      return acc;
+    }, {});
+  };
+
   return (
     <main className="min-h-screen bg-gray-900 text-white font-sans pb-20">
       
-      {/* 1. HERO SECTION (BACKDROP) */}
+      {/* --- HERO SECTION --- */}
       <div className="relative h-[50vh] w-full overflow-hidden">
-        {/* Imagen de Fondo */}
         <div 
             className="absolute inset-0 bg-cover bg-center"
             style={{ 
@@ -74,7 +92,6 @@ export default function MovieDetail({ params }) {
                 filter: movie.backdrop_url ? "brightness(0.6)" : "blur(20px) brightness(0.4)" 
             }}
         />
-        {/* Degradado para texto */}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
 
         <button 
@@ -86,9 +103,7 @@ export default function MovieDetail({ params }) {
             </svg>
         </button>
 
-        {/* INFO PRINCIPAL */}
         <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 flex flex-col md:flex-row gap-8 items-end z-10">
-            {/* Póster Flotante */}
             <img 
                 src={movie.poster_url} 
                 alt={movie.titulo} 
@@ -101,32 +116,12 @@ export default function MovieDetail({ params }) {
                 </h1>
                 <h2 className="text-xl text-gray-300 mt-2 font-raleway">{movie.titulo_original}</h2>
                 
-                {/* Metadatos */}
                 <div className="flex flex-wrap items-center gap-4 mt-4 text-sm font-semibold tracking-wide">
-                    {movie.anio && (
-                        <span className="bg-white/10 px-3 py-1 rounded backdrop-blur-sm border border-white/10">
-                            {movie.anio}
-                        </span>
-                    )}
-                    {movie.duracion > 0 && (
-                        <span className="bg-white/10 px-3 py-1 rounded backdrop-blur-sm border border-white/10 flex items-center gap-1">
-                            ⏱️ {movie.duracion} min
-                        </span>
-                    )}
-                    {movie.nota_tmdb > 0 && (
-                        <span className="text-yellow-400 flex items-center gap-1">
-                            ⭐ {movie.nota_tmdb.toFixed(1)}
-                        </span>
-                    )}
-                    {/* Letterboxd Link */}
+                    {movie.anio && <span className="bg-white/10 px-3 py-1 rounded border border-white/10">{movie.anio}</span>}
+                    {movie.duracion > 0 && <span className="bg-white/10 px-3 py-1 rounded border border-white/10 flex items-center gap-1">⏱️ {movie.duracion} min</span>}
+                    {movie.nota_tmdb > 0 && <span className="text-yellow-400 flex items-center gap-1">⭐ {movie.nota_tmdb.toFixed(1)}</span>}
                     {movie.tmdb_id && (
-                        <a 
-                            href={`https://letterboxd.com/tmdb/${movie.tmdb_id}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors"
-                        >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 4.364c1.76 0 3.273 1.513 3.273 3.273S13.76 10.91 12 10.91s-3.273-1.514-3.273-3.273S10.24 4.364 12 4.364zM6.545 13.818c0-1.76 1.514-3.273 3.273-3.273s3.273 1.514 3.273 3.273-1.513 3.273-3.273 3.273-3.273-1.513-3.273-3.273zm10.91 3.273c-1.76 0-3.273-1.513-3.273-3.273s1.513-3.273 3.273-3.273 3.273 1.513 3.273 3.273-1.513 3.273-3.273 3.273z"/></svg>
+                        <a href={`https://letterboxd.com/tmdb/${movie.tmdb_id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors">
                             Letterboxd
                         </a>
                     )}
@@ -135,10 +130,10 @@ export default function MovieDetail({ params }) {
         </div>
       </div>
 
-      {/* 2. CONTENIDO (SINOPSIS Y HORARIOS) */}
+      {/* --- CONTENIDO --- */}
       <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-3 gap-12">
         
-        {/* Columna Izquierda: Sinopsis y Géneros */}
+        {/* IZQUIERDA: SINOPSIS */}
         <div className="lg:col-span-1 space-y-6">
             <div>
                 <h3 className="text-xl font-bold text-yellow-500 mb-2 uppercase">Sinopsis</h3>
@@ -151,63 +146,111 @@ export default function MovieDetail({ params }) {
                     <h3 className="text-sm font-bold text-gray-500 mb-2 uppercase">Géneros</h3>
                     <div className="flex flex-wrap gap-2">
                         {movie.generos.split(",").map((g, i) => (
-                            <span key={i} className="text-xs border border-gray-600 px-2 py-1 rounded-full text-gray-400">
-                                {g.trim()}
-                            </span>
+                            <span key={i} className="text-xs border border-gray-600 px-2 py-1 rounded-full text-gray-400">{g.trim()}</span>
                         ))}
                     </div>
                 </div>
             )}
         </div>
 
-        {/* Columna Derecha: HORARIOS POR DÍA (Calendario) */}
+        {/* DERECHA: SESIONES */}
         <div className="lg:col-span-2">
-            <h3 className="text-2xl font-bold text-white mb-6 border-b border-gray-700 pb-2 flex items-center gap-2">
-                🎟️ Próximas Sesiones
-            </h3>
+            
+            {/* CABECERA CON BOTÓN TOGGLE */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-gray-700 pb-4 gap-4">
+                <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                    🎟️ Próximas Sesiones
+                </h3>
+                
+                {/* BOTÓN TOGGLE: AGRUPAR POR CINE */}
+                <button
+                    onClick={() => setGroupByCinema(!groupByCinema)}
+                    className={`
+                        px-4 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 border
+                        ${groupByCinema 
+                            ? "bg-yellow-500 text-black border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.4)]" 
+                            : "bg-gray-800 text-gray-300 border-gray-600 hover:bg-gray-700"
+                        }
+                    `}
+                >
+                    {groupByCinema ? (
+                        <>🎬 Agrupado por Cine</>
+                    ) : (
+                        <>Agrupar por Cine</>
+                    )}
+                </button>
+            </div>
 
-            <div className="space-y-8">
+            <div className="space-y-10">
                 {sortedDates.map(([dateKey, sessions]) => (
                     <div key={dateKey} className="animate-fade-in-up">
                         {/* Fecha Cabecera */}
-                        <div className="flex items-center gap-3 mb-3">
-                            <div className="w-2 h-8 bg-yellow-500 rounded-full"></div>
+                        <div className="flex items-center gap-3 mb-4 sticky top-0 bg-gray-900/95 backdrop-blur py-2 z-10">
+                            <div className="w-1.5 h-8 bg-yellow-500 rounded-full"></div>
                             <h4 className="text-xl font-semibold capitalize text-gray-200">
                                 {formatDate(sessions[0].fecha_hora)}
                             </h4>
                         </div>
 
-                        {/* Grid de Sesiones */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-5 border-l border-gray-800 ml-1">
-                            {sessions.map((sesion) => (
-                                <a 
-                                    key={sesion.id}
-                                    href={sesion.link_compra}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 hover:border-yellow-500/50 transition-all group flex justify-between items-center"
-                                >
-                                    <div>
-                                        <div className="text-yellow-400 font-bold text-sm uppercase tracking-wider mb-1">
-                                            {sesion.cine}
+                        <div className="pl-5 border-l border-gray-800 ml-1">
+                            
+                            {/* --- MODO A: AGRUPADO POR CINE --- */}
+                            {groupByCinema ? (
+                                <div className="space-y-6">
+                                    {Object.entries(groupSessionsByCinema(sessions))
+                                        .sort((a, b) => a[0].localeCompare(b[0])) // Ordenar cines A-Z
+                                        .map(([cineName, cineSessions]) => (
+                                        <div key={cineName} className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+                                            <h5 className="text-yellow-400 font-bold uppercase text-sm mb-3 flex items-center gap-2">
+                                                📍 {cineName}
+                                            </h5>
+                                            <div className="flex flex-wrap gap-3">
+                                                {cineSessions.map((sesion) => (
+                                                    <a 
+                                                        key={sesion.id}
+                                                        href={sesion.link_compra}
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg border border-gray-600 hover:border-white/30 transition-all flex items-center gap-2 group"
+                                                    >
+                                                        <span className="text-lg font-bold text-white group-hover:text-yellow-400">
+                                                            {formatTime(sesion.fecha_hora)}
+                                                        </span>
+                                                        {sesion.idioma === 'VOSE' && <span className="text-[10px] font-bold bg-black/40 px-1.5 py-0.5 rounded text-gray-400 border border-white/5">VO</span>}
+                                                    </a>
+                                                ))}
+                                            </div>
                                         </div>
-                                        <div className="text-xs text-gray-400">
-                                            {sesion.sala || "Sala estándar"}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-3">
-                                        {sesion.idioma === 'VOSE' && (
-                                            <span className="text-[10px] font-bold bg-black/40 px-1.5 py-0.5 rounded text-gray-400 border border-gray-600">
-                                                VO
-                                            </span>
-                                        )}
-                                        <div className="bg-gray-900 px-3 py-1 rounded-lg text-lg font-bold text-white group-hover:text-yellow-400 transition-colors">
-                                            {formatTime(sesion.fecha_hora)}
-                                        </div>
-                                    </div>
-                                </a>
-                            ))}
+                                    ))}
+                                </div>
+                            ) : (
+                                /* --- MODO B: LISTA NORMAL (POR HORA) --- */
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {sessions.map((sesion) => (
+                                        <a 
+                                            key={sesion.id}
+                                            href={sesion.link_compra}
+                                            target="_blank" rel="noopener noreferrer"
+                                            className="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 hover:border-yellow-500/50 transition-all group flex justify-between items-center"
+                                        >
+                                            <div>
+                                                <div className="text-yellow-400 font-bold text-sm uppercase tracking-wider mb-1">
+                                                    {sesion.cine}
+                                                </div>
+                                                <div className="text-xs text-gray-400">
+                                                    {sesion.sala || "Sala estándar"}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                {sesion.idioma === 'VOSE' && <span className="text-[10px] font-bold bg-black/40 px-1.5 py-0.5 rounded text-gray-400 border border-gray-600">VO</span>}
+                                                <div className="bg-gray-900 px-3 py-1 rounded-lg text-lg font-bold text-white group-hover:text-yellow-400 transition-colors">
+                                                    {formatTime(sesion.fecha_hora)}
+                                                </div>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 ))}
