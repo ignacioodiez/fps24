@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
+from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial # <--- EL CEREBRO
 
 MESES = {
     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
@@ -73,12 +73,7 @@ def scrapear_dore():
                     # 3. LÓGICA DE EVENTO ESPECIAL
                     # El Doré es casi todo ciclo/clásico. 
                     # Si tiene año y es antiguo (<2023), es especial.
-                    es_especial = False
-                    if anio_peli and anio_peli < 2023:
-                        es_especial = True
-                    # O si no tenemos año (peli muy rara), asumimos especial en Filmoteca
-                    elif anio_peli is None:
-                        es_especial = True
+                    es_especial= determinar_si_es_especial(titulo_raw, anio_peli)
 
                     # 4. FECHA
                     desc_elem = info.query_selector("div.descripcion")

@@ -25,6 +25,8 @@ from app.scrapers.cines.embajadores import scrapear_embajadores
 from app.scrapers.cines.golem import scrapear_golem
 # CORREGIDO: yelmo_ideal en vez de yelmo
 from app.scrapers.cines.yelmo_ideal import scrapear_yelmo_ideal 
+from app.scrapers.cines.cinesa import scrapear_cinesa
+from app.scrapers.cines.palacio_prensa import scrapear_palacio_prensa
 
 def limpiar_base_datos():
     print("🧹 LIMPIEZA TOTAL: Borrando datos antiguos...")
@@ -47,7 +49,7 @@ def lanzar_todo():
     # INICIO CRONÓMETRO
     inicio = time.time()
 
-    print("\n🚀 INICIANDO PROTOCOLO 'MADRID INDIE' - RECARGA COMPLETA")
+    print("\n🚀 INICIANDO PROTOCOLO 'MADRID FPS24' - RECARGA COMPLETA")
     print("===========================================================\n")
 
     # 1. LIMPIEZA
@@ -112,6 +114,11 @@ def lanzar_todo():
     try: scrapear_yelmo_ideal()          
     except Exception as e: print(f"❌ Error crítico en Yelmo Ideal: {e}")  
 
+    print("\n-----------------------------------------------------------")  
+    try: scrapear_cinesa()          
+    except Exception as e: print(f"❌ Error crítico en Cinesa: {e}")
+
+   
     # FIN CRONÓMETRO
     fin = time.time()
     tiempo_total = fin - inicio

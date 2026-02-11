@@ -6,10 +6,10 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula
+from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
 
 def scrapear_cine_paz():
-    nombre_cine = "Cine Paz"
+    nombre_cine = "Cine  MK2 Paz"
     BASE_URL = "https://www.cinepazmadrid.es/es/cartelera"
     MAX_DIAS_A_ESCANEAR = 7 
 
@@ -73,9 +73,7 @@ def scrapear_cine_paz():
 
                             # 4. LÓGICA DE EVENTO ESPECIAL
                             # Si es anterior a 2023, asumimos que es reposición/clásico/especial
-                            es_especial = False
-                            if anio_peli and anio_peli < 2023:
-                                es_especial = True
+                            es_especial = determinar_si_es_especial(raw_titulo, anio_peli)
                             
                             # También si el propio cine lo marca (a veces ponen etiquetas)
                             if "EVENTO" in raw_titulo or "OPERA" in raw_titulo:

@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
+from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial # <--- EL CEREBRO
 
 def scrapear_renoir_princesa():
     nombre_cine = "Renoir Princesa"
@@ -54,9 +54,7 @@ def scrapear_renoir_princesa():
                         pelicula_id, anio_peli = obtener_id_pelicula(raw_titulo, session)
 
                         # --- ESPECIAL? ---
-                        es_especial = False
-                        if anio_peli and anio_peli < 2023:
-                            es_especial = True
+                        es_especial = determinar_si_es_especial(raw_titulo, anio_peli)
 
                         # --- IDIOMA ---
                         textos_small = fila.locator(".col-4 small").all_inner_texts()

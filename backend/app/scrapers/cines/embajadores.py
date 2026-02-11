@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
+from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial # <--- EL CEREBRO
 
 def scrapear_embajadores():
     url = "https://cinesembajadores.es/madrid/"
@@ -57,9 +57,7 @@ def scrapear_embajadores():
                     pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
 
                     # 3. LÓGICA ESPECIAL (Por año)
-                    es_especial = False
-                    if anio_peli and anio_peli < 2023:
-                        es_especial = True
+                    es_especial = determinar_si_es_especial(titulo_limpio, anio_peli)
 
                     # 4. HORARIOS
                     items_horarios = peli_card.locator(".showtimelist p[data-dia]").all()

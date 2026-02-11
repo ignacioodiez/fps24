@@ -1,16 +1,17 @@
 import time
-import re  # <--- IMPORTANTE: Necesitamos RE para quitar los minutos
+import re
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula
+# 👇 IMPORTAMOS LAS HERRAMIENTAS DEL GESTOR
+from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
 
 def scrapear_verdi():
     url = "https://www.filmaffinity.com/es/theater-showtimes.php?id=313"
-    print(f"🎹 Entrando en Verdi (Modo Corrección Minutos)...")
+    print(f"🎹 Entrando en Verdi (Modo Gestor Inteligente)...")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -57,22 +58,27 @@ def scrapear_verdi():
                     titulo_elem = peli_card.locator(".mv-title").first
                     if not titulo_elem.count(): continue
                     
-                    raw_titulo = titulo_elem.inner_text().strip() # Ej: "TRES ADIOSES 120 MINUTOS"
+                    raw_titulo = titulo_elem.inner_text().strip() 
                     
-                    # --- ✂️ CORRECCIÓN: QUITAR MINUTOS ---
-                    # Buscamos cualquier número seguido de "MINUTOS" al final y lo borramos
-                    titulo_limpio = re.sub(r'\s\d+\s*MINUTOS$', '', raw_titulo, flags=re.IGNORECASE).strip()
+                    # 1. Limpieza específica de Verdi (quitar "120 MINUTOS")
+                    titulo_pre_limpio = re.sub(r'\s\d+\s*MINUTOS$', '', raw_titulo, flags=re.IGNORECASE).strip()
                     
                     # Idioma
                     idioma = "Español"
-                    if "(VOSE)" in titulo_limpio.upper() or "V.O.S.E." in titulo_limpio.upper():
+                    if "(VOSE)" in titulo_pre_limpio.upper() or "V.O.S.E." in titulo_pre_limpio.upper():
                         idioma = "VOSE"
                     
-                    # Llamamos al gestor con el título YA LIMPIO de minutos
-                    pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
+                    # 2. Detectar si es especial (Usando la lista negra del gestor)
+                    # Esto detectará "JUEVES DE CLÁSICOS", etc.
+                    es_especial = determinar_si_es_especial(titulo_pre_limpio, None)
 
-                    # Especial?
-                    es_especial = False
+                    # 3. Llamamos al gestor con el título
+                    # El gestor se encargará de borrar "JUEVES DE..." para buscar en TMDB
+                    pelicula_id, anio_peli = obtener_id_pelicula(titulo_pre_limpio, session)
+
+                    if not pelicula_id: continue
+
+                    # (Opcional) Si la peli es muy antigua (<2023) y no lo habíamos marcado, lo marcamos
                     if anio_peli and anio_peli < 2023:
                         es_especial = True
 
@@ -108,7 +114,7 @@ def scrapear_verdi():
                                         precio="Consultar",
                                         link_compra=link_compra,
                                         idioma=idioma,
-                                        es_evento_especial=es_especial
+                                        es_evento_especial=es_especial # Usamos la detección
                                     )
                                     session.add(nuevo)
                                     nuevos_pases += 1
@@ -116,6 +122,7 @@ def scrapear_verdi():
                             except ValueError: continue
 
                 except Exception as e:
+                    # print(f"Error procesando peli: {e}")
                     continue
 
             session.commit()

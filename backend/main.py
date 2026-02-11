@@ -12,8 +12,6 @@ from app.scrapers.cines.cine_paz import scrapear_cine_paz
 from app.scrapers.cines.verdi import scrapear_verdi
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
-# Nota: He quitado el lifespan automático para que no borre BD si no quieres, 
-# pero añade create_db_and_tables() al inicio si borras el archivo .db
 
 @app.on_event("startup")
 def on_startup():
@@ -29,19 +27,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- ⚡ CAMBIO AQUÍ: DEFINIMOS QUE LA PELI TIENE QUE LLEVAR ID ---
+# --- ⚡ MODELOS DE RESPUESTA (AQUÍ ESTABA EL TAPÓN) ---
 
 class PeliculaConId(PeliculaBase):
-    id: int  # <--- ¡ESTO ES LO QUE FALTABA!
+    id: int  
 
 class PaseConPelicula(PaseBase):
     id: int
-    pelicula: Optional[PeliculaConId] = None # <--- Usamos la clase nueva
+    pelicula: Optional[PeliculaConId] = None 
 
+# 👇 AQUÍ ES DONDE AÑADIMOS LOS CAMPOS NUEVOS PARA QUE PASEN EL FILTRO
 class PeliculaDetalle(PeliculaBase):
     id: int
+    # Aseguramos que estos campos pasen al frontend:
+    youtube_id: Optional[str] = None 
+    imagenes_galeria: Optional[List[str]] = [] # <--- ¡ESTO FALTABA! 📸
     pases: List[PaseBase] = []
-# ENDPOINTS
+
+# --- ENDPOINTS ---
 
 @app.get("/pases", response_model=List[PaseConPelicula])
 def leer_pases(session: Session = Depends(get_session)):
@@ -52,17 +55,20 @@ def leer_pases(session: Session = Depends(get_session)):
     ).all()
     return pases
 
-# --- NUEVO ENDPOINT: DETALLE DE PELÍCULA 🎬 ---
+# --- ENDPOINT DETALLE PELÍCULA 🎬 ---
 @app.get("/pelicula/{pelicula_id}", response_model=PeliculaDetalle)
 def leer_detalle_pelicula(pelicula_id: int, session: Session = Depends(get_session)):
     peli = session.get(Pelicula, pelicula_id)
     if not peli:
         raise HTTPException(status_code=404, detail="Película no encontrada")
     
-    # Ordenamos los pases por fecha (requisito Opción B)
+    # Ordenamos pases
     peli.pases.sort(key=lambda x: x.fecha_hora)
     
+    # FastAPI ahora verá que 'imagenes_galeria' está en PeliculaDetalle
+    # y dejará pasar los datos que vienen de la BD.
     return peli
+
 # ---------------------------------------------
 
 @app.post("/actualizar")
@@ -81,4 +87,6 @@ def test_cine_verdi(background_tasks: BackgroundTasks):
     return {"mensaje": "🎹 Test Cine Verdi lanzado."}
 
 if __name__ == "__main__":
+    # Ojo: aquí he puesto el nombre correcto del archivo si lo ejecutas directo
+    # Si tu archivo se llama main.py, esto está bien:
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

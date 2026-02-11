@@ -1,6 +1,8 @@
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, JSON  # <--- IMPORTANTE: Desde SQLAlchemy
 from typing import Optional, List
 from datetime import datetime
+
 
 # 1. ESQUELETO DE LA PELÍCULA
 class PeliculaBase(SQLModel):
@@ -14,11 +16,13 @@ class PeliculaBase(SQLModel):
     anio: Optional[int] = None
     duracion: Optional[int] = None     # <--- NUEVO (minutos) ⏱️
     generos: Optional[str] = None
+    youtube_id: Optional[str] = Field(default=None, description="ID del video de YouTube")
     created_at: datetime = Field(default_factory=datetime.now)
 
 # 2. TABLA PELÍCULA
 class Pelicula(PeliculaBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    imagenes_galeria: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     pases: List["Pase"] = Relationship(back_populates="pelicula")
 
 # 3. ESQUELETO DEL PASE

@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula # <--- EL CEREBRO
+from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
 
 def scrapear_cine_estudio():
     nombre_cine = "Cine Estudio (CBA)"
@@ -59,11 +59,7 @@ def scrapear_cine_estudio():
                         pelicula_id, anio_peli = obtener_id_pelicula(titulo_raw, session)
                         
                         # Lógica Evento Especial (Cine Estudio suele ser clásico, así que < 2023)
-                        es_especial = False
-                        if anio_peli and anio_peli < 2023:
-                            es_especial = True
-                        if "COLOQUIO" in titulo_raw.upper() or "PRESENTACIÓN" in titulo_raw.upper():
-                            es_especial = True
+                        es_especial = determinar_si_es_especial(item["titulo"], anio_peli)
 
                         # Entramos a la ficha para ver horarios
                         page.goto(item['link'], timeout=45000, wait_until="domcontentloaded")
