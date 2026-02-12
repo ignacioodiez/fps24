@@ -11,6 +11,7 @@ module.exports = {
         // Aquí definimos las fuentes para poder usar 'font-kanit' y 'font-raleway'
         kanit: ["var(--font-kanit)", "sans-serif"],
         raleway: ["var(--font-raleway)", "sans-serif"],
+        antos: ["var(--font-antos)", "sans-serif"],
       },
       // Si quieres añadir tus colores personalizados también (opcional)
       colors: {

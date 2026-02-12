@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { cleanCinemaName } from "@/utils/helpers";
+import * as gtag from "@/lib/gtag"; // 👈 AÑADE ESTO AL INICIO
 
 export default function FilterMenu({
   availableCinemas,
@@ -11,7 +12,9 @@ export default function FilterMenu({
   setSpectatorOnly,
   onlySpecials,
   setOnlySpecials,
-  resetFilters
+  resetFilters,
+  sortBy,
+  setSortBy
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
@@ -112,6 +115,49 @@ export default function FilterMenu({
 
           {/* 2. CUERPO SCROLLABLE (Solo se mueve esto) */}
           <div className="overflow-y-auto custom-scrollbar p-6 pt-4 space-y-8">
+
+            {/* ORDEN */}
+<div>
+  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">
+    Ordenar películas
+  </label>
+
+  <div className="flex gap-2">
+    <button
+      onClick={() => setSortBy("sesiones")}
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+        ${sortBy === "sesiones"
+          ? "bg-yellow-500 border-yellow-500 text-black"
+          : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+        }`}
+    >
+      Más sesiones
+    </button>
+
+    <button
+      onClick={() => setSortBy("nota")}
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+        ${sortBy === "nota"
+          ? "bg-yellow-500 border-yellow-500 text-black"
+          : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+        }`}
+    >
+      Nota TMDB
+    </button>
+
+    <button
+      onClick={() => setSortBy("titulo")}
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+        ${sortBy === "titulo"
+          ? "bg-yellow-500 border-yellow-500 text-black"
+          : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+        }`}
+    >
+      A–Z
+    </button>
+  </div>
+</div>
+            
             
             {/* SELECCIÓN DE CINE */}
             <div>
@@ -211,4 +257,6 @@ export default function FilterMenu({
       )}
     </div>
   );
+
+  
 }

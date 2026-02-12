@@ -7,7 +7,10 @@ import { isSameDay, normalizeTitle, cleanForSearch, isDiaEspectador } from "@/ut
 import Header from "@/components/Header";
 import DateSelector from "@/components/DateSelector";
 import MovieGrid from "@/components/MovieGrid";
-import FilterMenu from "@/components/FilterMenu"; // 🆕 Nuevo Componente
+import FilterMenu from "@/components/FilterMenu"; 
+import { usePathname, useSearchParams } from "next/navigation"; // 👈 NUEVO
+import * as gtag from "@/lib/gtag"; // 👈 NUEVO
+
 
 export default function Home() {
   const [pases, setPases] = useState([]);
@@ -21,8 +24,22 @@ export default function Home() {
   const [onlySpecials, setOnlySpecials] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState(""); 
+  const [sortBy, setSortBy] = useState("sesiones"); 
+
+   const pathname = usePathname(); // 👈 NUEVO
+   const searchParams = useSearchParams(); // 👈 NUEVO
 
   // 1. DATA LOADING
+   // 👇 TRACKING DE NAVEGACIÓN
+  useEffect(() => {
+    if (pathname) {
+      const url = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '');
+      gtag.pageview(url);
+    }
+  }, [pathname, searchParams]);
+
+
+
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     fetch(`${apiUrl}/pases`)
@@ -99,49 +116,69 @@ export default function Home() {
 
   // 4. AGRUPACIÓN (Esto sigue igual, pero usa 'filteredPases' que ya viene limpito)
   const groupedMovies = useMemo(() => {
-    const movies = Object.values(
-      filteredPases.reduce((acc, pase) => {
-        const rawTitle = pase.pelicula?.titulo || "Título Desconocido";
-        const titleKey = normalizeTitle(rawTitle);
+  const movies = Object.values(
+    filteredPases.reduce((acc, pase) => {
+      const rawTitle = pase.pelicula?.titulo || "Título Desconocido";
+      const titleKey = normalizeTitle(rawTitle);
 
-        if (!acc[titleKey]) {
-          acc[titleKey] = {
-            id: pase.pelicula?.id,
-            titulo: rawTitle.toUpperCase(),
-            poster: pase.pelicula?.poster_url, 
-            nota: pase.pelicula?.nota_tmdb || 0,
-            anio: pase.pelicula?.anio || null,
-            es_especial: false,
-            cines: {},
-            total_sesiones: 0 
-          };
-        }
-        
-        if (pase.es_evento_especial) acc[titleKey].es_especial = true;
+      if (!acc[titleKey]) {
+        acc[titleKey] = {
+          id: pase.pelicula?.id,
+          titulo: rawTitle.toUpperCase(),
+          poster: pase.pelicula?.poster_url,
+          nota: pase.pelicula?.nota_tmdb || 0,
+          anio: pase.pelicula?.anio || null,
+          es_especial: false,
+          cines: {},
+          total_sesiones: 0
+        };
+      }
 
-        const cinemaKey = pase.cine;
-        if (!acc[titleKey].cines[cinemaKey]) {
-          acc[titleKey].cines[cinemaKey] = [];
-        }
+      if (pase.es_evento_especial) acc[titleKey].es_especial = true;
 
-        acc[titleKey].cines[cinemaKey].push(pase);
-        acc[titleKey].total_sesiones += 1;
+      const cinemaKey = pase.cine;
+      if (!acc[titleKey].cines[cinemaKey]) {
+        acc[titleKey].cines[cinemaKey] = [];
+      }
 
-        return acc;
-      }, {})
-    )
+      acc[titleKey].cines[cinemaKey].push(pase);
+      acc[titleKey].total_sesiones += 1;
+
+      return acc;
+    }, {}) // ✅ IMPORTANTE: objeto vacío
+  )
     .filter((movie) => {
-        if (!searchTerm) return true;
-        return cleanForSearch(movie.titulo).includes(cleanForSearch(searchTerm));
+      if (!searchTerm) return true;
+      return cleanForSearch(movie.titulo || "").includes(cleanForSearch(searchTerm));
     })
     .sort((a, b) => {
-        if (b.total_sesiones !== a.total_sesiones) {
-            return b.total_sesiones - a.total_sesiones;
-        }
-        return a.titulo.localeCompare(b.titulo);
+      const at = a.titulo || "";
+      const bt = b.titulo || "";
+
+      if (sortBy === "nota") {
+        const diffNota = (b.nota ?? 0) - (a.nota ?? 0);
+        if (diffNota !== 0) return diffNota;
+
+        const diffSesiones = (b.total_sesiones ?? 0) - (a.total_sesiones ?? 0);
+        if (diffSesiones !== 0) return diffSesiones;
+
+        return at.localeCompare(bt);
+      }
+
+      if (sortBy === "titulo") {
+        return at.localeCompare(bt);
+      }
+
+      // default: "sesiones"
+      const diffSesiones = (b.total_sesiones ?? 0) - (a.total_sesiones ?? 0);
+      if (diffSesiones !== 0) return diffSesiones;
+
+      return at.localeCompare(bt);
     });
-    return movies;
-  }, [filteredPases, searchTerm]);
+
+  return movies;
+}, [filteredPases, searchTerm, sortBy]); // ✅ sortBy aquí
+
 
   // 5. LÓGICA DE DÍAS
   const allDays = useMemo(() => {
@@ -224,6 +261,7 @@ export default function Home() {
                 onlySpecials={onlySpecials}
                 setOnlySpecials={setOnlySpecials}
                 resetFilters={resetFilters}
+                setSortBy={setSortBy}
             />
 
         </div>
