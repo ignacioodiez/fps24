@@ -8,8 +8,7 @@ import Header from "@/components/Header";
 import DateSelector from "@/components/DateSelector";
 import MovieGrid from "@/components/MovieGrid";
 import FilterMenu from "@/components/FilterMenu"; 
-import { usePathname, useSearchParams } from "next/navigation"; // 👈 NUEVO
-import * as gtag from "@/lib/gtag"; // 👈 NUEVO
+
 
 
 export default function Home() {
@@ -26,17 +25,11 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [sortBy, setSortBy] = useState("sesiones"); 
 
-   const pathname = usePathname(); // 👈 NUEVO
-   const searchParams = useSearchParams(); // 👈 NUEVO
+   
 
   // 1. DATA LOADING
    // 👇 TRACKING DE NAVEGACIÓN
-  useEffect(() => {
-    if (pathname) {
-      const url = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '');
-      gtag.pageview(url);
-    }
-  }, [pathname, searchParams]);
+ 
 
 
 
