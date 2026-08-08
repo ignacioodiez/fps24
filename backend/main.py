@@ -1,5 +1,6 @@
+import os
 import uvicorn
-from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from typing import List, Optional
@@ -44,6 +45,14 @@ class PeliculaDetalle(PeliculaBase):
     imagenes_galeria: Optional[List[str]] = [] # <--- ¡ESTO FALTABA! 📸
     pases: List[PaseBase] = []
 
+# --- SEGURIDAD ---
+
+ACTUALIZAR_SECRET = os.getenv("ACTUALIZAR_SECRET")
+
+def verificar_secreto(x_actualizar_secret: Optional[str] = Header(None)):
+    if not ACTUALIZAR_SECRET or x_actualizar_secret != ACTUALIZAR_SECRET:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
 # --- ENDPOINTS ---
 
 @app.get("/pases", response_model=List[PaseConPelicula])
@@ -72,7 +81,7 @@ def leer_detalle_pelicula(pelicula_id: int, session: Session = Depends(get_sessi
 # ---------------------------------------------
 
 @app.post("/actualizar")
-def actualizar_todo(background_tasks: BackgroundTasks):
+def actualizar_todo(background_tasks: BackgroundTasks, _: None = Depends(verificar_secreto)):
     background_tasks.add_task(lanzar_todo)
     return {"mensaje": "🚀 Actualizando todo..."}
 
