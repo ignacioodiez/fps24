@@ -1,4 +1,4 @@
-# 🎬 FPS24 — Independent Cinema Listings for Madrid
+# FPS24 — Independent Cinema Listings for Madrid
 
 FPS24 aggregates showtimes from Madrid's independent, arthouse, and original-language (VOSE) cinemas — Doré, Cineteca, Sala Equis, the Renoir chain, Verdi, Golem, Embajadores, MK2 Palacio de Hielo, Cine Paz, Yelmo Ideal, Cinesa, Palacio de la Prensa, and more — into a single, searchable listing, with movie data automatically enriched via TMDB.
 
@@ -6,7 +6,7 @@ FPS24 aggregates showtimes from Madrid's independent, arthouse, and original-lan
 
 ---
 
-## 🧱 Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
