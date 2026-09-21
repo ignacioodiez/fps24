@@ -1,103 +1,125 @@
 import time
-import re
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase
-# 👇 IMPORTAMOS LAS HERRAMIENTAS DEL GESTOR
 from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
 
 def scrapear_verdi():
-    url = "https://www.filmaffinity.com/es/theater-showtimes.php?id=313"
-    print(f"🎹 Entrando en Verdi (Modo Gestor Inteligente)...")
+    # Target official Verdi website instead of FilmAffinity
+    url = "https://madrid.cines-verdi.com/cartelera"
+    print(f"🎹 Entering Verdi (Official Web Mode)...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Launch browser with bot evasion
+        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
         )
         page = context.new_page()
         
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
             
-            # Cookies
+            # Wait for the main collection of movies to load
             try:
-                boton_cookie = page.get_by_role("button", name="ACEPTAR").or_(page.get_by_text("AGREE"))
-                if boton_cookie.is_visible(timeout=3000):
-                    boton_cookie.click()
-            except: pass
-            
-            # Esperar contenido
-            try:
-                page.wait_for_selector(".fa-content-card.movie", timeout=10000)
-            except:
-                print("   ⚠️ No encuentro películas. Revisa el navegador.")
+                page.wait_for_selector(".collection article", timeout=15000)
+            except Exception as e:
+                print(f"  ⚠️ Cannot find movies. Saving debug screenshot to 'debug_verdi.png'...")
+                page.screenshot(path="debug_verdi.png") 
+                print(f"  ❌ Playwright Error: {e}")
                 browser.close()
                 return
             
+            # Scroll down to ensure lazy-loaded items appear
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(1)
 
         except Exception as e:
-            print(f"❌ Error cargando web: {e}")
+            print(f"❌ Error loading web: {e}")
             browser.close()
             return
 
-        # --- EXTRACCIÓN ---
-        peliculas = page.locator(".fa-content-card.movie").all()
-        print(f"   🔎 Encontradas {len(peliculas)} películas.")
+        # --- EXTRACTION ---
+        # Select all movie blocks
+        articles = page.locator(".collection article").all()
+        print(f"  🔎 Found {len(articles)} movies.")
         
         nuevos_pases = 0
 
         with Session(engine) as session:
-            for peli_card in peliculas:
+            for idx, article in enumerate(articles):
                 try:
-                    titulo_elem = peli_card.locator(".mv-title").first
-                    if not titulo_elem.count(): continue
+                    # Find movie title (it can be inside .syn header or figcaption)
+                    titulo_elem = article.locator(".syn header h2").first
+                    if not titulo_elem.count():
+                        titulo_elem = article.locator("figcaption h2").first
+                    
+                    if not titulo_elem.count(): 
+                        continue
                     
                     raw_titulo = titulo_elem.inner_text().strip() 
                     
-                    # 1. Limpieza específica de Verdi (quitar "120 MINUTOS")
-                    titulo_pre_limpio = re.sub(r'\s\d+\s*MINUTOS$', '', raw_titulo, flags=re.IGNORECASE).strip()
-                    
-                    # Idioma
-                    idioma = "Español"
-                    if "(VOSE)" in titulo_pre_limpio.upper() or "V.O.S.E." in titulo_pre_limpio.upper():
-                        idioma = "VOSE"
-                    
-                    # 2. Detectar si es especial (Usando la lista negra del gestor)
-                    # Esto detectará "JUEVES DE CLÁSICOS", etc.
-                    es_especial = determinar_si_es_especial(titulo_pre_limpio, None)
+                    # 1. Detect if it's a special event
+                    es_especial = determinar_si_es_especial(raw_titulo, None)
 
-                    # 3. Llamamos al gestor con el título
-                    # El gestor se encargará de borrar "JUEVES DE..." para buscar en TMDB
-                    pelicula_id, anio_peli = obtener_id_pelicula(titulo_pre_limpio, session)
+                    # 2. Call the manager to get TMDB ID
+                    pelicula_id, anio_peli = obtener_id_pelicula(raw_titulo, session)
 
-                    if not pelicula_id: continue
+                    if not pelicula_id: 
+                        print(f"  ⚠️ Could not resolve TMDB ID for: {raw_titulo}")
+                        continue
 
-                    # (Opcional) Si la peli es muy antigua (<2023) y no lo habíamos marcado, lo marcamos
+                    # Mark as special if older than 2023
                     if anio_peli and anio_peli < 2023:
                         es_especial = True
 
-                    # Horarios
-                    filas_dias = peli_card.locator(".sessions .row[data-sess-date]").all()
-                    
-                    for fila in filas_dias:
-                        fecha_str = fila.get_attribute("data-sess-date")
-                        if not fecha_str: continue
+                    # 3. Find all available dates for this specific movie in its hidden select
+                    opciones = article.locator("select.dates-select option").all()
+                    fechas_disponibles = []
+                    for op in opciones:
+                        val = op.get_attribute("value")
+                        if val and val not in fechas_disponibles:
+                            fechas_disponibles.append(val)
+
+                    if not fechas_disponibles:
+                        print(f"  ⚠️ No showtimes/dates found for: {raw_titulo}")
+                        continue
+
+                    # 4. Loop through each date to update the DOM and read showtimes
+                    for fecha_str in fechas_disponibles:
+                        # Select the date to trigger Alpine.js visibility update
+                        article.locator("select.dates-select").select_option(value=fecha_str, force=True)
+                        page.wait_for_timeout(200) # Give Alpine.js time to update the UI
                         
-                        botones = fila.locator(".times-wrap a.btn").all()
-                        for boton in botones:
-                            hora_txt = boton.inner_text().strip()
-                            link_compra = boton.get_attribute("href")
+                        # Grab all showtime buttons
+                        pases_nodos = article.locator(".info-performances .button-buy").all()
+                        
+                        for pase in pases_nodos:
+                            # Skip if this showtime is for a different date (hidden by Alpine)
+                            if not pase.is_visible():
+                                continue
                             
+                            hora_txt = pase.locator("time").inner_text().strip()
+                            link_compra = pase.get_attribute("href")
+                            
+                            # Skip sold out tickets or unclickable links
+                            if not link_compra or link_compra == "#":
+                                continue
+
+                            # Detect language from the data-attr string
+                            version_attr = pase.get_attribute("data-attr") or ""
+                            idioma = "VOSE" if "V.O." in version_attr.upper() or "SUB" in version_attr.upper() else "Español"
+
                             try:
+                                # Parse full datetime (fecha_str is formatted as YYYY-MM-DD)
                                 fecha_completa_str = f"{fecha_str} {hora_txt}"
                                 fecha_final = datetime.strptime(fecha_completa_str, "%Y-%m-%d %H:%M")
                                 
+                                # Check if showing already exists in DB
                                 existe = session.exec(select(Pase).where(
                                     Pase.cine == "Cines Verdi",
                                     Pase.pelicula_id == pelicula_id,
@@ -114,19 +136,22 @@ def scrapear_verdi():
                                         precio="Consultar",
                                         link_compra=link_compra,
                                         idioma=idioma,
-                                        es_evento_especial=es_especial # Usamos la detección
+                                        es_evento_especial=es_especial 
                                     )
                                     session.add(nuevo)
                                     nuevos_pases += 1
 
-                            except ValueError: continue
+                            except ValueError as ve:
+                                print(f"  ⚠️ Date parsing error for {fecha_completa_str}: {ve}")
+                                continue
 
                 except Exception as e:
-                    # print(f"Error procesando peli: {e}")
+                    titulo_error = raw_titulo if 'raw_titulo' in locals() else f"Index {idx}"
+                    print(f"  ❌ Error processing movie '{titulo_error}': {e}")
                     continue
 
             session.commit()
-            print(f"🏁 FIN VERDI. {nuevos_pases} pases guardados.")
+            print(f"🏁 FINISH VERDI. {nuevos_pases} showings saved.")
         
         browser.close()
 
