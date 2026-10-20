@@ -1,0 +1,54 @@
+# Entorno de desarrollo local de fps24.
+# Uso:  docker compose up --build
+# Nunca apunta a Supabase de producción: la base de datos es el contenedor "db".
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fps24
+      POSTGRES_PASSWORD: fps24dev
+      POSTGRES_DB: fps24
+    ports:
+      - "5433:5432"   # 5433 en tu PC para no chocar con un Postgres local
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fps24 -d fps24"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    env_file: .env.dev
+    environment:
+      # Se fija aquí (y pisa lo que haya en .env.dev) para que sea imposible
+      # conectar por error con la base de datos de producción.
+      DATABASE_URL: postgresql://fps24:fps24dev@db:5432/fps24
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    environment:
+      # El navegador (tu PC) llama a la API, por eso es localhost y no "api".
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      # Necesario para que el hot-reload funcione con volúmenes en Windows.
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules   # usa los node_modules del contenedor, no los de Windows
+      - /app/.next
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
