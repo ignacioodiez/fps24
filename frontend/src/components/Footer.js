@@ -2,15 +2,15 @@ import Link from "next/link";
 
 export default function Footer() {
   return (
-    <footer className="bg-black border-t border-white/5 py-12 mt-auto">
+    <footer className="bg-background border-t border-line py-12 mt-auto">
       <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between gap-10">
         
         {/* 1. LA MARCA */}
         <div className="max-w-sm">
-            <h3 className="text-3xl font-black font-kanit tracking-tighter text-yellow-500 mb-4">
+            <h3 className="text-3xl font-black font-display tracking-tighter text-primary mb-4">
                 FPS24
             </h3>
-            <p className="text-white text-sm leading-relaxed">
+            <p className="text-muted text-sm leading-relaxed">
                 La cartelera actualizada de Madrid. Recopilamos las sesiones de los cines, 
                 filmotecas y salas VOSE en una única plataforma.
             </p>
@@ -18,15 +18,15 @@ export default function Footer() {
 
         {/* 2. ENLACES RÁPIDOS */}
         <div>
-            <h4 className="font-bold text-white mb-4 uppercase tracking-wider text-xs">Navegación</h4>
+            <h4 className="font-bold text-foreground mb-4 uppercase tracking-wider text-xs">Navegación</h4>
             <ul className="space-y-2 text-sm">
                 <li>
-                    <Link href="/" className="text-white hover:text-yellow-400 transition-colors">
+                    <Link href="/" className="text-muted hover:text-primary transition-colors">
                         Inicio
                     </Link>
                 </li>
                 <li>
-                    <a href="mailto:ignacio.diez.vergara@gmail.com" className="text-white hover:text-yellow-400 transition-colors">
+                    <a href="mailto:ignacio.diez.vergara@gmail.com" className="text-muted hover:text-primary transition-colors">
                         Contacto
                     </a>
                 </li>
@@ -36,12 +36,12 @@ export default function Footer() {
 
         {/* 3. CRÉDITOS */}
         <div>
-            <h4 className="font-bold text-white mb-4 uppercase tracking-wider text-xs">El Autor</h4>
-            <p className="text-white text-sm mb-2">
-                 Ignacio Díez Vergara 🎬 <br/>
+            <h4 className="font-bold text-foreground mb-4 uppercase tracking-wider text-xs">El Autor</h4>
+            <p className="text-muted text-sm mb-2">
+                 Ignacio Díez Vergara <br/>
             </p>
             <li>
-                    <a href="https://www.linkedin.com/in/ignacio-d%C3%ADez-vergara/" className="text-white hover:text-yellow-400 transition-colors">
+                    <a href="https://www.linkedin.com/in/ignacio-d%C3%ADez-vergara/" className="text-muted hover:text-primary transition-colors">
                         Linkedin
                     </a>
                 </li>
@@ -51,7 +51,7 @@ export default function Footer() {
       </div>
       
       {/* COPYRIGHT */}
-      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center text-xs text-white">
+      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-line flex flex-col md:flex-row justify-between items-center text-xs text-muted">
         <p>© {new Date().getFullYear()} FPS24. Todos los derechos reservados.</p>
         <p>Los pósters e imágenes son propiedad de sus distribuidoras.</p>
         <p>Las notas de las películas son asignadas por TMDB.</p>

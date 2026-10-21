@@ -13,10 +13,10 @@ export default function CinemaSelector({
             key={index}
             onClick={() => setSelectedCinema(cine)}
             className={`
-              whitespace-nowrap px-6 py-3 rounded-xl font-bold text-sm md:text-base transition-all duration-300 border
+              whitespace-nowrap px-6 py-3 rounded-xl font-bold text-sm md:text-base transition-colors border
               ${selectedCinema === cine
-                ? "bg-yellow-400 text-black border-yellow-300 shadow-lg shadow-yellow-400/20 scale-105"
-                : "bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700 hover:text-white hover:border-gray-500"
+                ? "bg-primary text-white border-primary"
+                : "bg-background text-foreground border-line hover:bg-surface"
               }
             `}
           >

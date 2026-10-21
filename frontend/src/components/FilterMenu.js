@@ -49,22 +49,20 @@ export default function FilterMenu({
           appearance: none;
           width: 20px;
           height: 20px;
-          background: #a5a5a5;
+          background: var(--primary);
           border: 2px solid white;
           border-radius: 50%;
           cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
           margin-top: -8px;
         }
         .range-slider-input::-moz-range-thumb {
           pointer-events: auto;
           width: 20px;
           height: 20px;
-          background: #14b8a6;
+          background: var(--primary);
           border: 2px solid white;
           border-radius: 50%;
           cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
       `}</style>
 
@@ -72,10 +70,10 @@ export default function FilterMenu({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          flex items-center gap-2 px-5 py-3 rounded-full font-bold transition-all shadow-lg border
+          flex items-center gap-2 px-5 py-3 rounded-full font-bold transition-colors border
           ${isOpen || activeFiltersCount > 0
-            ? "bg-gradient-to-br from-gray-100 to-gray-500 text-black shadow-lg shadow-black-500/40 ring-2 ring-black-300 transform -translate-y-1 scale-105" 
-            : "bg-gray-800 text-gray-300 border-gray-600 hover:border-gray-400 hover:text-white"
+            ? "bg-primary text-white border-primary"
+            : "bg-background text-foreground border-line hover:bg-surface"
           }
         `}
       >
@@ -85,7 +83,7 @@ export default function FilterMenu({
         <span>Filtros</span>
         
         {activeFiltersCount > 0 && (
-          <span className="bg-white text-teal-700 text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-black">
+          <span className="bg-white text-primary text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-black">
             {activeFiltersCount}
           </span>
         )}
@@ -95,18 +93,18 @@ export default function FilterMenu({
       {isOpen && (
         <div className={`
           absolute top-14 right-0 w-80 md:w-96 
-          bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl 
+          bg-background border border-line rounded-2xl 
           animate-in fade-in slide-in-from-top-2 z-50
           max-h-[80vh] flex flex-col overflow-hidden /* 👈 Clave: flex-col y overflow-hidden aquí */
         `}>
           
           {/* 1. CABECERA FIJA (No se mueve) */}
-          <div className="flex justify-between items-center p-6 pb-4 border-b border-gray-800 bg-gray-900 shrink-0">
-            <h3 className="text-lg font-bold text-white">Configurar Búsqueda</h3>
+          <div className="flex justify-between items-center p-6 pb-4 border-b border-line bg-background shrink-0">
+            <h3 className="text-lg font-bold text-foreground">Configurar Búsqueda</h3>
             {activeFiltersCount > 0 && (
               <button 
                 onClick={resetFilters}
-                className="text-xs text-red-400 hover:text-red-300 underline"
+                className="text-xs text-red-600 hover:text-red-700 underline"
               >
                 Borrar todo
               </button>
@@ -118,17 +116,17 @@ export default function FilterMenu({
 
             {/* ORDEN */}
 <div>
-  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">
+  <label className="text-xs font-bold text-muted uppercase tracking-wider mb-3 block">
     Ordenar películas
   </label>
 
   <div className="flex gap-2">
     <button
       onClick={() => setSortBy("sesiones")}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
         ${sortBy === "sesiones"
-          ? "bg-yellow-500 border-yellow-500 text-black"
-          : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+          ? "bg-primary border-primary text-white"
+          : "bg-background border-line text-foreground hover:bg-surface"
         }`}
     >
       Más sesiones
@@ -136,10 +134,10 @@ export default function FilterMenu({
 
     <button
       onClick={() => setSortBy("nota")}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
         ${sortBy === "nota"
-          ? "bg-yellow-500 border-yellow-500 text-black"
-          : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+          ? "bg-primary border-primary text-white"
+          : "bg-background border-line text-foreground hover:bg-surface"
         }`}
     >
       Nota TMDB
@@ -147,10 +145,10 @@ export default function FilterMenu({
 
     <button
       onClick={() => setSortBy("titulo")}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
         ${sortBy === "titulo"
-          ? "bg-yellow-500 border-yellow-500 text-black"
-          : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+          ? "bg-primary border-primary text-white"
+          : "bg-background border-line text-foreground hover:bg-surface"
         }`}
     >
       A–Z
@@ -161,7 +159,7 @@ export default function FilterMenu({
             
             {/* SELECCIÓN DE CINE */}
             <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">
+              <label className="text-xs font-bold text-muted uppercase tracking-wider mb-3 block">
                 Elige tu Cine
               </label>
               <div className="flex flex-wrap gap-2">
@@ -170,10 +168,10 @@ export default function FilterMenu({
                     key={cine}
                     onClick={() => setSelectedCinema(cine)}
                     className={`
-                      px-3 py-1.5 rounded-lg text-xs font-bold border transition-all
+                      px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
                       ${selectedCinema === cine
-                        ? "bg-yellow-500 border-yellow-500 text-black shadow-lg shadow-yellow-500/20"
-                        : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white"
+                        ? "bg-primary border-primary text-white"
+                        : "bg-background border-line text-foreground hover:bg-surface"
                       }
                     `}
                   >
@@ -186,16 +184,16 @@ export default function FilterMenu({
             {/* RANGO DE HORAS */}
             <div>
               <div className="flex justify-between mb-2">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Hora de la sesión</label>
-                <span className="text-xs font-mono text-gray-200 font-bold bg-gray-900/30 px-2 py-0.5 rounded border border-yellow-500/30">
+                <label className="text-xs font-bold text-muted uppercase tracking-wider">Hora de la sesión</label>
+                <span className="text-xs text-foreground font-bold bg-surface px-2 py-0.5 rounded border border-line">
                   {timeRange[0]}:00 - {timeRange[1]}:00
                 </span>
               </div>
               
               <div className="relative h-12 flex items-center justify-center select-none">
-                <div className="absolute w-full h-1 bg-gray-700 rounded-full"></div>
+                <div className="absolute w-full h-1 bg-line rounded-full"></div>
                 <div 
-                  className="absolute h-1 bg-yellow-500 rounded-full"
+                  className="absolute h-1 bg-primary rounded-full"
                   style={{
                     left: `${((timeRange[0] - 6) / 18) * 100}%`,
                     right: `${100 - ((timeRange[1] - 6) / 18) * 100}%`
@@ -220,7 +218,7 @@ export default function FilterMenu({
                   className="range-slider-input absolute w-full h-1 z-20"
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+              <div className="flex justify-between text-[10px] text-muted mt-1">
                 <span>06:00</span>
                 <span>Mediodía</span>
                 <span>00:00</span>
@@ -228,25 +226,25 @@ export default function FilterMenu({
             </div>
 
             {/* TOGGLES */}
-            <div className="space-y-3 pt-4 border-t border-gray-800">
+            <div className="space-y-3 pt-4 border-t border-line">
               <label className="flex items-center justify-between cursor-pointer group">
                 <span className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">Solo Día del Espectador</span>
-                  <span className="bg-teal-900 text-teal-300 text-[9px] px-1.5 rounded border border-teal-700 font-bold">%</span>
+                  <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">Solo Día del Espectador</span>
+                  <span className="bg-accent-soft text-foreground text-[9px] px-1.5 rounded border border-accent font-bold">%</span>
                 </span>
-                <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${spectatorOnly ? "bg-teal-600" : "bg-gray-700"}`}>
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${spectatorOnly ? "translate-x-5" : "translate-x-0"}`}></div>
+                <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${spectatorOnly ? "bg-accent" : "bg-line"}`}>
+                  <div className={`bg-white w-4 h-4 rounded-full transform transition-transform ${spectatorOnly ? "translate-x-5" : "translate-x-0"}`}></div>
                 </div>
                 <input type="checkbox" className="hidden" checked={spectatorOnly} onChange={(e) => setSpectatorOnly(e.target.checked)} />
               </label>
 
               <label className="flex items-center justify-between cursor-pointer group">
                   <span className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">Solo Eventos Especiales</span>
-                  <span className="bg-purple-900 text-purple-300 text-[9px] px-1.5 rounded border border-purple-700">★</span>
+                  <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">Solo Eventos Especiales</span>
+                  <span className="bg-primary-soft text-primary text-[9px] px-1.5 rounded border border-primary">★</span>
                 </span>
-                <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${onlySpecials ? "bg-purple-600" : "bg-gray-700"}`}>
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${onlySpecials ? "translate-x-5" : "translate-x-0"}`}></div>
+                <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${onlySpecials ? "bg-primary" : "bg-line"}`}>
+                  <div className={`bg-white w-4 h-4 rounded-full transform transition-transform ${onlySpecials ? "translate-x-5" : "translate-x-0"}`}></div>
                 </div>
                 <input type="checkbox" className="hidden" checked={onlySpecials} onChange={(e) => setOnlySpecials(e.target.checked)} />
               </label>
