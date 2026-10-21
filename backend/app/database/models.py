@@ -40,3 +40,9 @@ class PaseBase(SQLModel):
 class Pase(PaseBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     pelicula: Optional[Pelicula] = Relationship(back_populates="pases")
+# 5. TABLA CINE
+class Cine(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    slug: str = Field(unique=True, index=True)
+    nombre: str
+    ultima_ejecucion_ok: Optional[datetime] = None

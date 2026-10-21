@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from typing import List, Optional
 from sqlalchemy.orm import selectinload
 
-from app.database.engine import get_session, create_db_and_tables
+from app.database.engine import get_session
 from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
 from app.scrapers.cines.cine_paz import scrapear_cine_paz
@@ -14,9 +14,7 @@ from app.scrapers.cines.verdi import scrapear_verdi
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
+# El esquema lo gestiona Alembic (alembic upgrade head), no el arranque de la API.
 
 # CORS
 origins = ["*"]
