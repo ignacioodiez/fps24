@@ -15,7 +15,7 @@ export default function DateSelector({
       {weekOffset > 0 && (
         <button 
           onClick={() => changeWeek(-1)} 
-          className="flex-shrink-0 h-16 w-12 md:h-20 md:w-14 rounded-2xl bg-gray-800/50 border border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-yellow-400 hover:border-yellow-400/50 transition-all flex items-center justify-center backdrop-blur-sm"
+          className="flex-shrink-0 h-16 w-12 md:h-20 md:w-14 rounded-2xl bg-background border border-line text-muted hover:text-primary hover:border-primary transition-colors flex items-center justify-center"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -31,11 +31,11 @@ export default function DateSelector({
             onClick={() => setSelectedDate(new Date(dateStr))}
             // ✅ MANTENEMOS EL ARREGLO: 'flex-shrink-0' para que no se aplasten
             className={`
-              flex flex-col items-center justify-center w-16 md:w-20 py-3 rounded-2xl transition-all duration-300 flex-shrink-0
+              flex flex-col items-center justify-center w-16 md:w-20 py-3 rounded-2xl transition-colors flex-shrink-0 border
               ${active
                 // 🔙 VOLVEMOS AL ESTILO ORIGINAL (Gradiente gris/blanco)
-                ? "bg-gradient-to-br from-gray-100 to-gray-500 text-black shadow-lg shadow-black-500/40 ring-2 ring-black-300 transform -translate-y-1 scale-105"
-                : "bg-gray-800/50 text-gray-200 hover:bg-gray-800 hover:text-white backdrop-blur-sm border border-gray-700 hover:border-gray-500"
+                ? "bg-primary text-white border-primary"
+                : "bg-background text-foreground border-line hover:bg-surface"
               }
             `}
           >
@@ -47,7 +47,7 @@ export default function DateSelector({
             </span>
             
             {active && (
-              <div className="w-1.5 h-1.5 bg-black rounded-full mt-1"></div>
+              <div className="w-1.5 h-1.5 bg-white rounded-full mt-1"></div>
             )}
           </button>
         );
@@ -56,7 +56,7 @@ export default function DateSelector({
       {hasMoreDays && (
         <button 
           onClick={() => changeWeek(1)} 
-          className="flex-shrink-0 h-16 w-12 md:h-20 md:w-14 rounded-2xl bg-gray-800/50 border border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-yellow-400 hover:border-yellow-400/50 transition-all flex items-center justify-center backdrop-blur-sm"
+          className="flex-shrink-0 h-16 w-12 md:h-20 md:w-14 rounded-2xl bg-background border border-line text-muted hover:text-primary hover:border-primary transition-colors flex items-center justify-center"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />

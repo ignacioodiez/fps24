@@ -10,11 +10,11 @@ export default function MovieGrid({
 }) {
   if (groupedMovies.length === 0) {
     return (
-      <div className="col-span-full text-center py-24 bg-gray-800/30 rounded-3xl border border-gray-700/50 border-dashed max-w-9xl mx-auto">
-        <p className="text-3xl text-gray-500 font-medium">
+      <div className="col-span-full text-center py-24 bg-surface rounded-3xl border border-line border-dashed max-w-9xl mx-auto">
+        <p className="text-3xl text-muted font-medium">
           {searchTerm 
-            ? "🔍 No encuentro esa peli..." 
-            : (selectedCinema !== "Todos" ? `😴 No hay sesiones en ${cleanCinemaName(selectedCinema)} hoy.` : "😴 No hay sesiones para este día.")
+            ? "No encuentro esa peli..." 
+            : (selectedCinema !== "Todos" ? `No hay sesiones en ${cleanCinemaName(selectedCinema)} hoy.` : "No hay sesiones para este día.")
           }
         </p>
       </div>
@@ -27,51 +27,51 @@ export default function MovieGrid({
         <div
           key={index}
           className={`
-            bg-gray-800 rounded-3xl overflow-hidden shadow-2xl border flex flex-col sm:flex-row 
+            bg-background rounded-3xl overflow-hidden border flex flex-col sm:flex-row 
             h-auto sm:h-64 
-            transition-all hover:bg-gray-750 group
-            ${movie.es_especial ? "border-purple-500/60 shadow-purple-900/30" : "border-gray-700 hover:border-gray-500"}
+            transition-colors group
+            ${movie.es_especial ? "border-primary" : "border-line hover:border-muted"}
           `}
         >
           {/* POSTER */}
-          <Link href={`/pelicula/${movie.id}`} className="w-full sm:w-40 flex-shrink-0 relative h-64 sm:h-auto overflow-hidden bg-gray-900 flex items-center justify-center cursor-pointer">
+          <Link href={`/pelicula/${movie.id}`} className="w-full sm:w-40 flex-shrink-0 relative h-64 sm:h-auto overflow-hidden bg-surface flex items-center justify-center cursor-pointer">
             {movie.poster ? (
               <img
                 src={movie.poster}
                 alt={movie.titulo}
-                className="w-full h-full object-cover opacity-95 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="flex flex-col items-center justify-center text-gray-600 p-4 text-center">
+              <div className="flex flex-col items-center justify-center text-muted p-4 text-center">
                 <span className="text-xs font-bold uppercase tracking-wider opacity-70">Sin Imagen</span>
               </div>
             )}
             
             {movie.nota > 0 && (
-              <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-md text-yellow-400 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg border border-white/10">
-                ⭐ {movie.nota.toFixed(1)}
+              <div className="absolute top-2 left-2 bg-background text-foreground text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 border border-line">
+                {movie.nota.toFixed(1)}
               </div>
             )}
           </Link>
 
           {/* INFO SECTION */}
-          <div className="flex-1 p-4 flex flex-col min-w-0 overflow-y-auto custom-scrollbar bg-gray-800">
+          <div className="flex-1 p-4 flex flex-col min-w-0 overflow-y-auto custom-scrollbar bg-background">
             
-            <div className="mb-3 border-b border-gray-700 pb-2">
+            <div className="mb-3 border-b border-line pb-2">
               <Link href={`/pelicula/${movie.id}`}>
-                <h2 className="text-xl md:text-2xl font-kanit font-bold leading-tight text-yellow-400 mb-1 truncate hover:text-yellow-400 transition-colors cursor-pointer" title={movie.titulo}>
+                <h2 className="text-xl md:text-2xl font-display font-bold leading-tight text-foreground mb-1 truncate hover:text-primary transition-colors cursor-pointer" title={movie.titulo}>
                   {movie.titulo}
                 </h2>
               </Link>
               
               <div className="flex flex-wrap items-center gap-2">
                 {movie.es_especial && (
-                  <span className="bg-purple-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold tracking-wider shadow-lg shadow-purple-900/50">
+                  <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-semibold tracking-wider">
                     Especial
                   </span>
                 )}
                 {movie.anio && (
-                  <span className="text-gray-300 text-xs font-mono bg-gray-700 px-2 py-0.5 rounded-md border border-gray-600">
+                  <span className="text-muted text-xs bg-surface px-2 py-0.5 rounded-md border border-line">
                     {movie.anio}
                   </span>
                 )}
@@ -92,15 +92,15 @@ export default function MovieGrid({
                     
                     {/* CINEMA HEADER CARD */}
                     <div className={`
-                      flex items-center justify-between px-2.5 py-1.5 rounded-lg border transition-all w-fit
+                      flex items-center justify-between px-2.5 py-1.5 rounded-lg border w-fit
                       ${isPromoDay 
-                        ? "bg-gradient-to-r from-teal-400 to-teal-700 text-white border-gray-500/50 hover:border-gray-400" // ✨ TEAL STYLE
-                        : "bg-gradient-to-r from-gray-300 to-gray-400 text-white border-gray-500/50 hover:border-gray-400" // NORMAL STYLE
+                        ? "bg-accent text-foreground border-accent" // ✨ TEAL STYLE
+                        : "bg-surface text-foreground border-line" // NORMAL STYLE
                       }
                     `}>
                       <h3 className={`
                         text-xs font-bold uppercase tracking-wide flex items-center gap-2
-                        ${isPromoDay ? "text-black" : "text-black"}
+                        ${isPromoDay ? "text-foreground" : "text-foreground"}
                       `}>
                         {cleanCinemaName(cinemaName)}
                       </h3>
@@ -118,10 +118,10 @@ export default function MovieGrid({
                           target="_blank"
                           rel="noopener noreferrer"
                           className={`
-                            px-3 py-1 rounded-lg text-xs font-semibold transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2 shadow-md border
+                            px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-2 border
                             ${session.es_evento_especial 
-                              ? 'bg-gradient-to-r from-purple-900 to-indigo-900 text-white border-purple-500/50 hover:border-purple-400' 
-                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border-gray-600 hover:text-white' // Standard gray style
+                              ? 'bg-primary-soft text-primary border-primary hover:bg-primary hover:text-white' 
+                              : 'bg-background text-foreground border-line hover:border-primary hover:text-primary' // Standard gray style
                             }
                           `}
                         >
@@ -129,7 +129,7 @@ export default function MovieGrid({
                           
                           {/* We only keep the VO tag, price tag removed as header implies discount */}
                           {session.idioma === 'VOSE' && (
-                            <span className="text-[9px] bg-black/30 px-1 rounded font-medium text-gray-400 border border-white/5">VO</span>
+                            <span className="text-[9px] bg-surface px-1 rounded font-medium text-muted border border-line">VO</span>
                           )}
                         </a>
                       ))}

@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useMemo } from "react";
 // Importamos Helpers
-import { isSameDay, normalizeTitle, cleanForSearch, isDiaEspectador } from "@/utils/helpers"; // 🆕 Importamos isDiaEspectador
+import { isSameDay, cleanForSearch, isDiaEspectador } from "@/utils/helpers"; // 🆕 Importamos isDiaEspectador
 // Importamos Componentes
 import Header from "@/components/Header";
 import DateSelector from "@/components/DateSelector";
 import MovieGrid from "@/components/MovieGrid";
 import FilterMenu from "@/components/FilterMenu"; 
-
+import { groupMovies, backdropDeHoy } from "@/lib/peliculas";
 
 
 export default function Home() {
@@ -109,68 +109,14 @@ export default function Home() {
 
   // 4. AGRUPACIÓN (Esto sigue igual, pero usa 'filteredPases' que ya viene limpito)
   const groupedMovies = useMemo(() => {
-  const movies = Object.values(
-    filteredPases.reduce((acc, pase) => {
-      const rawTitle = pase.pelicula?.titulo || "Título Desconocido";
-      const titleKey = normalizeTitle(rawTitle);
-
-      if (!acc[titleKey]) {
-        acc[titleKey] = {
-          id: pase.pelicula?.id,
-          titulo: rawTitle.toUpperCase(),
-          poster: pase.pelicula?.poster_url,
-          nota: pase.pelicula?.nota_tmdb || 0,
-          anio: pase.pelicula?.anio || null,
-          es_especial: false,
-          cines: {},
-          total_sesiones: 0
-        };
-      }
-
-      if (pase.es_evento_especial) acc[titleKey].es_especial = true;
-
-      const cinemaKey = pase.cine;
-      if (!acc[titleKey].cines[cinemaKey]) {
-        acc[titleKey].cines[cinemaKey] = [];
-      }
-
-      acc[titleKey].cines[cinemaKey].push(pase);
-      acc[titleKey].total_sesiones += 1;
-
-      return acc;
-    }, {}) // ✅ IMPORTANTE: objeto vacío
-  )
-    .filter((movie) => {
+    return groupMovies(filteredPases, sortBy).filter((movie) => {
       if (!searchTerm) return true;
       return cleanForSearch(movie.titulo || "").includes(cleanForSearch(searchTerm));
-    })
-    .sort((a, b) => {
-      const at = a.titulo || "";
-      const bt = b.titulo || "";
-
-      if (sortBy === "nota") {
-        const diffNota = (b.nota ?? 0) - (a.nota ?? 0);
-        if (diffNota !== 0) return diffNota;
-
-        const diffSesiones = (b.total_sesiones ?? 0) - (a.total_sesiones ?? 0);
-        if (diffSesiones !== 0) return diffSesiones;
-
-        return at.localeCompare(bt);
-      }
-
-      if (sortBy === "titulo") {
-        return at.localeCompare(bt);
-      }
-
-      // default: "sesiones"
-      const diffSesiones = (b.total_sesiones ?? 0) - (a.total_sesiones ?? 0);
-      if (diffSesiones !== 0) return diffSesiones;
-
-      return at.localeCompare(bt);
     });
+  }, [filteredPases, searchTerm, sortBy]);
 
-  return movies;
-}, [filteredPases, searchTerm, sortBy]); // ✅ sortBy aquí
+  // 4.5 FONDO DEL HEADER: fijo en la película de hoy, no depende de filtros ni del día elegido
+  const headerBackdrop = useMemo(() => backdropDeHoy(pases), [pases]);
 
 
   // 5. LÓGICA DE DÍAS
@@ -206,12 +152,15 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-4 md:p-8 font-sans pb-24">
+    <main className="min-h-screen bg-background text-foreground pb-24">
       
-      <Header />
+      {/* Header a ancho completo, fuera del contenedor con padding */}
+      <Header backdrop={headerBackdrop} />
+
+      <div className="px-4 md:px-8">
 
       {/* --- NUEVA BARRA DE CONTROLES --- */}
-      <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mt-8 md:mt-10 max-w-9xl mx-auto w-full sticky top-0 z-40 py-4 bg-gray-900/95 backdrop-blur-sm border-b border-white/5">
+      <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mt-8 md:mt-10 max-w-9xl mx-auto w-full sticky top-0 z-40 py-4 bg-background border-b border-line">
         
         {/* SELECTOR DE FECHA (IZQUIERDA) */}
         <div className="w-full xl:w-auto overflow-x-auto no-scrollbar">
@@ -235,9 +184,9 @@ export default function Home() {
                     placeholder="Buscar película..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-full px-4 py-3 pl-10 text-sm focus:outline-none focus:border-yellow-500 transition-colors"
+                    className="w-full bg-background border border-line text-foreground placeholder-muted rounded-full px-4 py-3 pl-10 text-sm focus:outline-none focus:border-primary transition-colors"
                 />
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 absolute left-3.5 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-muted absolute left-3.5 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
             </div>
@@ -263,20 +212,20 @@ export default function Home() {
       {/* YA NO NECESITAMOS FilterBar NI CinemaSelector SUELTOS */}
 
       {/* --- LEYENDA DE COLORES --- */}
-<div className="flex justify-center items-center gap-6 mt-6 mb-2 text-xs font-medium text-gray-400 uppercase tracking-wider">
+<div className="flex justify-center items-center gap-6 mt-6 mb-2 text-xs font-medium text-muted uppercase tracking-wider">
   
   {/* Leyenda Día Espectador */}
   <div className="flex items-center gap-2">
-    <span className="w-3 h-3 rounded-full bg-[#42E2B8] shadow-[0_0_8px_rgba(66,226,184,0.6)]"></span>
+    <span className="w-3 h-3 rounded-full bg-accent"></span>
     <span>Día del Espectador</span>
   </div>
 
   {/* Separador sutil */}
-  <div className="w-px h-3 bg-gray-700"></div>
+  <div className="w-px h-3 bg-line"></div>
 
   {/* Leyenda Especial */}
   <div className="flex items-center gap-2">
-    <span className="w-3 h-3 rounded-full bg-purple-600 shadow-[0_0_8px_rgba(147,51,234,0.6)]"></span>
+    <span className="w-3 h-3 rounded-full bg-primary"></span>
     <span>Sesión Especial</span>
   </div>
 
@@ -288,6 +237,7 @@ export default function Home() {
             searchTerm={searchTerm}
             selectedCinema={selectedCinema}
         />
+      </div>
       </div>
 
     </main>
