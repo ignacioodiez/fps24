@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, JSON  # <--- IMPORTANTE: Desde SQLAlchemy
+from sqlalchemy import Column, JSON, true  # <--- IMPORTANTE: Desde SQLAlchemy
 from typing import Optional, List
 from datetime import datetime
 
@@ -39,6 +39,10 @@ class PaseBase(SQLModel):
 # 4. TABLA PASE
 class Pase(PaseBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    # Solo en la tabla, no en PaseBase: las respuestas de la API no cambian.
+    cine_id: Optional[int] = Field(default=None, foreign_key="cine.id", index=True)
+    activo: bool = Field(default=True, sa_column_kwargs={"server_default": true()})
+    visto_ultima_vez: Optional[datetime] = None  # UTC
     pelicula: Optional[Pelicula] = Relationship(back_populates="pases")
 # 5. TABLA CINE
 class Cine(SQLModel, table=True):
