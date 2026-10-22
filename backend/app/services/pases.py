@@ -56,7 +56,7 @@ def registrar_pase(session: Session, *, cine, pelicula_id, fecha_hora, sala, idi
         try:
             with session.begin_nested():  # otra ejecución puede crear el mismo pase a la vez
                 pase = Pase(cine_id=cine_id, pelicula_id=pelicula_id,
-                            fecha_hora=fecha_hora, sala=sala, idioma=idioma)
+                            fecha_hora=fecha_hora, sala=sala, idioma=idioma, creado_en=ahora)
                 session.add(pase)
             resultado = "creado"
         except IntegrityError:
