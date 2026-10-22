@@ -15,8 +15,9 @@ class TmdbNoDisponible(Exception):
 
 
 # Cortacircuito: tras el primer fallo no se llama más a TMDB hasta reiniciar_cortacircuito()
-# (al final de cada ejecución), para no esperar el timeout en cada película.
+# (al empezar y al acabar cada ejecución), para no esperar el timeout en cada película.
 _fallo = None
+peticiones = 0  # peticiones reales hechas por este proceso (para el resumen de lanzar_todo)
 
 
 def reiniciar_cortacircuito():
@@ -25,11 +26,12 @@ def reiniciar_cortacircuito():
 
 
 def _get(ruta: str, **params) -> dict:
-    global _fallo
+    global _fallo, peticiones
     if _fallo:
         raise TmdbNoDisponible(f"cortacircuito abierto: {_fallo}")
     if not TMDB_API_KEY:
         raise TmdbNoDisponible("Falta TMDB_API_KEY")
+    peticiones += 1
     try:
         res = requests.get(f"{API}{ruta}", params={"api_key": TMDB_API_KEY, **params}, timeout=5)
         res.raise_for_status()

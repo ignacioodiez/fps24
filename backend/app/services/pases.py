@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Cine, Pase
-from app.services.cines import normalizar, obtener_o_crear_cine
+from app.services.cines import CINES_CONOCIDOS, normalizar, obtener_o_crear_cine
 from app.services.tiempo import ahora_madrid
 
 logger = logging.getLogger(__name__)
@@ -110,14 +110,26 @@ def cerrar_ejecucion(session: Session, inicio: datetime, activos_futuros_previos
     return resumen
 
 
-def ejecutar_scraper(funcion_scraper) -> dict:
-    """Ejecuta el scraper y cierra la ejecución. Si el scraper falla, no se cierra nada."""
+def ejecutar_scraper(funcion_scraper, cines=()) -> dict:
+    """Ejecuta el scraper y cierra la ejecución. Si el scraper falla, no se cierra nada.
+    Devuelve el resumen de cerrar_ejecucion por slug, con creados y actualizados. Avisa de los
+    `cines` (nombres canónicos) que tenían pases activos futuros y esta vez no se han visto."""
     inicio = _ahora_utc()
     with Session(engine) as session:
         previos = contar_activos_futuros(session)
+        ultimo_id = session.exec(select(func.max(Pase.id))).one() or 0
     funcion_scraper()
     with Session(engine) as session:
         resumen = cerrar_ejecucion(session, inicio, previos)
         session.commit()
+        # Con el candado de lanzar_todo nadie más crea pases: los de id nuevo son de esta ejecución
+        for cine in session.exec(select(Cine).where(Cine.slug.in_(resumen))):
+            creados = session.exec(select(func.count()).where(Pase.cine_id == cine.id, Pase.id > ultimo_id)).one()
+            resumen[cine.slug].update(creados=creados, actualizados=resumen[cine.slug]["vistos"] - creados)
+        slugs = [CINES_CONOCIDOS.get(nombre) for nombre in cines]
+        for cine in session.exec(select(Cine).where(Cine.slug.in_(slugs))):
+            if previos.get(cine.id) and cine.slug not in resumen:
+                logger.warning("%s: tenía %d pases futuros activos y esta ejecución no ha visto ninguno; "
+                               "no se desactivan (¿ha cambiado la web?)", cine.nombre, previos[cine.id])
     print(f"Cierre de {funcion_scraper.__name__}: {resumen}")
     return resumen
