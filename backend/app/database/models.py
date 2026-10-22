@@ -31,7 +31,6 @@ class Pelicula(PeliculaBase, table=True):
 
 # 3. ESQUELETO DEL PASE
 class PaseBase(SQLModel):
-    cine: str
     sala: Optional[str] = None
     fecha_hora: datetime
     precio: Optional[str] = None
@@ -42,12 +41,22 @@ class PaseBase(SQLModel):
 
 # 4. TABLA PASE
 class Pase(PaseBase, table=True):
+    # Identidad del pase (migración 0006); registrar_pase busca por ella.
+    __table_args__ = (Index("ux_pase_identidad", "cine_id", "pelicula_id", "fecha_hora",
+                            text("coalesce(idioma, '')"), text("coalesce(sala, '')"), unique=True),)
     id: Optional[int] = Field(default=None, primary_key=True)
     # Solo en la tabla, no en PaseBase: las respuestas de la API no cambian.
-    cine_id: Optional[int] = Field(default=None, foreign_key="cine.id", index=True)
+    cine_id: int = Field(foreign_key="cine.id", index=True)
     activo: bool = Field(default=True, sa_column_kwargs={"server_default": true()})
     visto_ultima_vez: Optional[datetime] = None  # UTC
     pelicula: Optional[Pelicula] = Relationship(back_populates="pases")
+    cine_rel: "Cine" = Relationship()
+
+    @property
+    def cine(self) -> str:
+        """Nombre del cine, como el antiguo campo de texto: la API lo sigue devolviendo."""
+        return self.cine_rel.nombre
+
 # 5. TABLA CINE
 class Cine(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

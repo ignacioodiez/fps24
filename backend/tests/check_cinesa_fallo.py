@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlmodel import Session, select
 
 from app.database.engine import engine
-from app.database.models import Pase
+from app.database.models import Cine, Pase
 from app.scrapers.cines import cinesa
 from app.services.pases import _ahora_utc, ejecutar_scraper
 
@@ -22,7 +22,7 @@ ROTA = "Cinesa Proyecciones"  # la primera: así se ve que sigue con la siguient
 
 def activos():
     with Session(engine) as session:
-        return set(session.exec(select(Pase.id).where(Pase.cine.in_(cinesa.CINES), Pase.activo)).all())
+        return set(session.exec(select(Pase.id).where(Pase.cine_rel.has(Cine.nombre.in_(cinesa.CINES)), Pase.activo)).all())
 
 
 activos_antes = activos()
@@ -36,7 +36,7 @@ except cinesa.FuenteNoDisponible as e:
 
 with Session(engine) as session:
     for cine in cinesa.CINES:
-        vistos = len(session.exec(select(Pase.id).where(Pase.cine == cine, Pase.visto_ultima_vez >= inicio)).all())
+        vistos = len(session.exec(select(Pase.id).where(Pase.cine_rel.has(nombre=cine), Pase.visto_ultima_vez >= inicio)).all())
         print(f"   {cine}: {vistos} pases vistos")
         assert (vistos == 0) if cine == ROTA else (vistos > 0), cine
 print("(a) OK: la otra sede se guarda")

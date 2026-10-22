@@ -1,5 +1,5 @@
 import os
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import create_engine, Session
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,10 +27,6 @@ engine = create_engine(
     connect_args=connect_args,
     pool_pre_ping=True 
 )
-
-def create_db_and_tables():
-    """Crea las tablas automáticamente si no existen en la BD destino."""
-    SQLModel.metadata.create_all(engine)
 
 def get_session():
     with Session(engine) as session:

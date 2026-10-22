@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.database.engine import engine
@@ -40,19 +41,26 @@ def registrar_pase(session: Session, *, cine, pelicula_id, fecha_hora, sala, idi
     cine_id = obtener_o_crear_cine(session, cine).id
     ahora = _ahora_utc()
 
-    pase = session.exec(select(Pase).where(
+    # La misma identidad que el índice único ux_pase_identidad
+    buscar = select(Pase).where(
         Pase.cine_id == cine_id,
         Pase.pelicula_id == pelicula_id,
         Pase.fecha_hora == fecha_hora,
-        Pase.idioma == idioma,
+        func.coalesce(Pase.idioma, "") == (idioma or ""),
         func.coalesce(Pase.sala, "") == (sala or ""),
-    )).first()
+    )
+    pase = session.exec(buscar).first()
 
     resultado = "actualizado"
     if pase is None:
-        pase = Pase(cine=cine, cine_id=cine_id, pelicula_id=pelicula_id,
-                    fecha_hora=fecha_hora, sala=sala, idioma=idioma)
-        resultado = "creado"
+        try:
+            with session.begin_nested():  # otra ejecución puede crear el mismo pase a la vez
+                pase = Pase(cine_id=cine_id, pelicula_id=pelicula_id,
+                            fecha_hora=fecha_hora, sala=sala, idioma=idioma)
+                session.add(pase)
+            resultado = "creado"
+        except IntegrityError:
+            pase = session.exec(buscar).one()
 
     pase.precio = precio
     pase.link_compra = link_compra

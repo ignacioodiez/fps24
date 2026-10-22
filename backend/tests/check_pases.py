@@ -25,7 +25,7 @@ with Session(engine) as session:
                     precio="7€", link_compra="https://a", es_evento_especial=False)
 
         def pases():
-            return session.exec(select(Pase).where(Pase.cine == CINE)).all()
+            return session.exec(select(Pase).where(Pase.cine_rel.has(nombre=CINE))).all()
 
         # Crear
         assert registrar_pase(session, sala="Sala 1", **base) == "creado"
@@ -61,7 +61,7 @@ with Session(engine) as session:
         registrar_pase(session, sala="Sala 1", **{**base, "fecha_hora": datetime(2000, 1, 1)})  # pasado
         registrar_pase(session, sala="Sala 1", **{**base, "cine": OTRO_CINE})
         cine = session.get(Cine, pases()[0].cine_id)
-        otro = session.exec(select(Pase).where(Pase.cine == OTRO_CINE)).one()
+        otro = session.exec(select(Pase).where(Pase.cine_rel.has(nombre=OTRO_CINE))).one()
 
         def nueva_ejecucion(salas_vistas):
             """Simula una ejecución que solo ve `salas_vistas` de los pases futuros de CINE."""

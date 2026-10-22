@@ -343,7 +343,7 @@ def fusionar_peliculas(session: Session, origen: Pelicula, destino: Pelicula):
     otro = aliased(Pase)
     choca = select(otro.id).where(
         otro.pelicula_id == destino.id, otro.cine_id == Pase.cine_id, otro.fecha_hora == Pase.fecha_hora,
-        otro.idioma.is_not_distinct_from(Pase.idioma),
+        func.coalesce(otro.idioma, "") == func.coalesce(Pase.idioma, ""),
         func.coalesce(otro.sala, "") == func.coalesce(Pase.sala, "")).exists()
     session.exec(delete(Pase).where(Pase.pelicula_id == origen.id, choca))
     session.exec(update(Pase).where(Pase.pelicula_id == origen.id).values(pelicula_id=destino.id))

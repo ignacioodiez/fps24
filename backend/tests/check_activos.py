@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Pase, Pelicula
+from app.services.cines import obtener_o_crear_cine
 from main import PeliculaDetalle, leer_detalle_pelicula, leer_pases
 
 CINE = "Cine de Prueba Check Activos"
@@ -20,11 +21,12 @@ with Session(engine) as session:
     try:
         pelicula_id = session.exec(select(Pelicula.id)).first()
         assert pelicula_id, "hace falta al menos una película en la BD"
+        cine_id = obtener_o_crear_cine(session, CINE).id
         # Misma fecha_hora en los tres: el desempate tiene que ser por id
         for sala, activo in [("Sala A", True), ("Sala B", False), ("Sala C", True)]:
-            session.add(Pase(cine=CINE, sala=sala, fecha_hora=FECHA, pelicula_id=pelicula_id, activo=activo))
+            session.add(Pase(cine_id=cine_id, sala=sala, fecha_hora=FECHA, pelicula_id=pelicula_id, activo=activo))
         session.flush()
-        ids_activos = sorted(p.id for p in session.exec(select(Pase).where(Pase.cine == CINE, Pase.activo)).all())
+        ids_activos = sorted(p.id for p in session.exec(select(Pase).where(Pase.cine_id == cine_id, Pase.activo)).all())
 
         pases = leer_pases(session)
         assert all(p.activo for p in pases)
@@ -40,7 +42,7 @@ with Session(engine) as session:
         assert [p.fecha_hora for p in detalle.pases] == sorted(p.fecha_hora for p in detalle.pases)
         # leer_detalle_pelicula no debe desvincular los pases inactivos de la película
         session.flush()
-        assert len(session.exec(select(Pase).where(Pase.cine == CINE, Pase.pelicula_id == pelicula_id)).all()) == 3
+        assert len(session.exec(select(Pase).where(Pase.cine_id == cine_id, Pase.pelicula_id == pelicula_id)).all()) == 3
         print("OK: /pelicula/{id} solo devuelve activos, ordenados")
     finally:
         session.rollback()

@@ -9,8 +9,6 @@ from sqlalchemy.orm import selectinload
 from app.database.engine import get_session
 from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
-from app.scrapers.cines.cine_paz import scrapear_cine_paz
-from app.scrapers.cines.verdi import scrapear_verdi
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -31,7 +29,11 @@ app.add_middleware(
 class PeliculaConId(PeliculaBase):
     id: int  
 
-class PaseConPelicula(PaseBase):
+# "cine" ya no es columna: sale de cine.nombre (propiedad Pase.cine)
+class PaseSalida(PaseBase):
+    cine: str
+
+class PaseConPelicula(PaseSalida):
     id: int
     pelicula: Optional[PeliculaConId] = None 
 
@@ -41,7 +43,7 @@ class PeliculaDetalle(PeliculaBase):
     # Aseguramos que estos campos pasen al frontend:
     youtube_id: Optional[str] = None 
     imagenes_galeria: Optional[List[str]] = [] # <--- ¡ESTO FALTABA! 📸
-    pases: List[PaseBase] = []
+    pases: List[PaseSalida] = []
 
 # --- SEGURIDAD ---
 
@@ -57,7 +59,7 @@ def verificar_secreto(x_actualizar_secret: Optional[str] = Header(None)):
 def leer_pases(session: Session = Depends(get_session)):
     pases = session.exec(
         select(Pase)
-        .options(selectinload(Pase.pelicula)) 
+        .options(selectinload(Pase.pelicula), selectinload(Pase.cine_rel))
         .where(Pase.activo == True)
         .order_by(Pase.fecha_hora, Pase.id)
     ).all()
@@ -80,16 +82,6 @@ def leer_detalle_pelicula(pelicula_id: int, session: Session = Depends(get_sessi
 def actualizar_todo(background_tasks: BackgroundTasks, _: None = Depends(verificar_secreto)):
     background_tasks.add_task(lanzar_todo)
     return {"mensaje": "🚀 Actualizando todo..."}
-
-@app.post("/test/paz")
-def test_cine_paz(background_tasks: BackgroundTasks):
-    background_tasks.add_task(scrapear_cine_paz)
-    return {"mensaje": "🎹 Test Cine Paz lanzado."}
-
-@app.post("/test/verdi")
-def test_cine_verdi(background_tasks: BackgroundTasks):
-    background_tasks.add_task(scrapear_verdi)
-    return {"mensaje": "🎹 Test Cine Verdi lanzado."}
 
 if __name__ == "__main__":
     # Ojo: aquí he puesto el nombre correcto del archivo si lo ejecutas directo
