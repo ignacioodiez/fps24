@@ -15,9 +15,7 @@ from app.scrapers.cines.dore import scrapear_dore
 from app.scrapers.cines.equis import scrapear_equis
 from app.scrapers.cines.cineteca import scrapear_cineteca
 from app.scrapers.cines.cine_estudio import scrapear_cine_estudio
-from app.scrapers.cines.renoir_princesa import scrapear_renoir_princesa
-from app.scrapers.cines.renoir_plazaesp import scrapear_renoir_plazaesp
-from app.scrapers.cines.renoir_retiro import scrapear_renoir_retiro
+from app.scrapers.cines.renoir import scrapear_renoir
 from app.scrapers.cines.verdi import scrapear_verdi
 from app.scrapers.cines.cine_paz import scrapear_cine_paz
 from app.scrapers.cines.mk2_palacio_hielo import scrapear_mk2_palacio_hielo
@@ -76,16 +74,8 @@ def lanzar_todo():
 
     # --- GRUPO 2: LOS RENOIR ---
     print("\n-----------------------------------------------------------")
-    try: scrapear_renoir_princesa()
-    except Exception as e: print(f"❌ Error crítico en Renoir Princesa: {e}")
-    print("\n-----------------------------------------------------------")
-
-    try: scrapear_renoir_plazaesp()
-    except Exception as e: print(f"❌ Error crítico en Renoir Plaza España: {e}")
-    print("\n-----------------------------------------------------------")
-
-    try: scrapear_renoir_retiro()
-    except Exception as e: print(f"❌ Error crítico en Renoir Retiro: {e}")
+    try: scrapear_renoir()
+    except Exception as e: print(f"❌ Error crítico en Renoir: {e}")
 
     # --- GRUPO 3: LOS CLÁSICOS VOSE ---
     print("\n-----------------------------------------------------------")
