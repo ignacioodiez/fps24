@@ -30,6 +30,7 @@ app.add_middleware(
 
 class PeliculaConId(PeliculaBase):
     id: int  
+    fecha_estreno: Optional[date] = None  # estreno en cines en España; solo en la tabla, por eso se añade aquí
 
 # "cine" ya no es columna: sale de cine.nombre (propiedad Pase.cine)
 class PaseSalida(PaseBase):
@@ -45,6 +46,9 @@ class PeliculaDetalle(PeliculaBase):
     # Aseguramos que estos campos pasen al frontend:
     youtube_id: Optional[str] = None 
     imagenes_galeria: Optional[List[str]] = [] # <--- ¡ESTO FALTABA! 📸
+    fecha_estreno: Optional[date] = None
+    votos: Optional[int] = None  # para la vista rápida: nota apagada si hay pocos votos
+    director: Optional[str] = None
     pases: List[PaseSalida] = []
 
 class PaseConId(PaseSalida):
