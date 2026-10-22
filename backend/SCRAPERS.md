@@ -26,6 +26,7 @@ La plantilla completa está en `app/scrapers/_plantilla.py`: no se registra ni s
 12. **Playwright con `abrir_pagina()`**: headless, user agent de escritorio, viewport 1920×1080, `es-ES` y zona `Europe/Madrid`. Ajusta por scraper `timeout_ms` (esperas y clics, 15 s por defecto) y `navegacion_ms` (`goto`, 60 s por defecto). Cualquier otra opción de `browser.new_context` se pasa como argumento con nombre y pisa el valor por defecto.
 13. **Sin archivos de depuración**: el scraper no escribe capturas, volcados de HTML ni otros archivos en el directorio de trabajo. Solo se permite si la variable de entorno `SCRAPERS_DEBUG=1` está activada de forma explícita, y en ese caso se escriben en `tempfile.gettempdir()`, nunca dentro del repo.
 14. **Cómo se ejecuta**: siempre a través del registro de scrapers y `ejecutar_scraper` (paso 2.6). El archivo no se llama directamente desde `run_scrapers.py`.
+15. **Esperas explícitas**: después de un scroll o una carga diferida, espera explícitamente a un elemento (`locator.wait_for()`, `page.wait_for_selector()`); una espera fija no basta.
 
 ## Cómo probar un scraper
 
@@ -46,6 +47,7 @@ Siempre en Docker local (`docker compose up`), nunca contra producción.
    docker compose exec api python -c "from app.scrapers.cines.<nombre> import CINES; from app.services.cines import CINES_CONOCIDOS; print([c for c in CINES if c not in CINES_CONOCIDOS] or '')"
    ```
    Además, en el log no debe aparecer `Cine desconocido`.
+4. **Tres ejecuciones seguidas.** Ejecútalo 3 veces seguidas: el total de pases vistos debe ser estable. Si varía de una ejecución a otra sin que la web haya cambiado, hay una condición de carrera.
 
 ## Ejemplo mínimo
 
