@@ -65,7 +65,7 @@ CINES_DATOS = {
     "renoir-princesa": dict(direccion="Calle de la Princesa, 3, 28008 Madrid", web="https://www.cinesrenoir.com/cine/cines-princesa/cartelera",
                             telefono="91 334 21 77", zona="Argüelles", tipo="autor", lat=40.4250418, lng=-3.7124448),
     "renoir-retiro": dict(direccion="Calle de Narváez, 42, 28009 Madrid", web="https://www.cinesrenoir.com",
-                          telefono=None, zona="Retiro", tipo="autor", lat=40.4205434, lng=-3.6762506),
+                          telefono=None, zona="Retiro", tipo="autor", lat=40.4200969, lng=-3.6764364),
     "equis": dict(direccion="Calle del Duque de Alba, 4, 28012 Madrid", web="https://salaequis.es",
                   telefono=None, zona="Lavapiés", tipo="autor", lat=40.4120092, lng=-3.7059791),
     "embajadores": dict(direccion="Glorieta de Santa María de la Cabeza, 5, 28045 Madrid", web="https://cinesembajadores.es",
