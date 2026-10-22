@@ -1,5 +1,6 @@
 """Self-check de registrar_pase y cerrar_ejecucion. Uso: docker compose exec api python tests/check_pases.py
 Todo ocurre en una sesión que termina en rollback: no deja datos."""
+import logging
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -92,5 +93,43 @@ with Session(engine) as session:
         assert cine.ultima_ejecucion_ok is None
 
         print("OK: cerrar_ejecucion pasa todas las comprobaciones")
+
+        # --- Endurecimiento de registrar_pase (otra fecha para no tocar lo anterior) ---
+        nuevo = {**base, "fecha_hora": datetime(2099, 2, 1, 18, 30), "sala": "Sala 9"}
+
+        def pases_nuevo():
+            return [p for p in pases() if p.sala == "Sala 9"]
+
+        try:
+            registrar_pase(session, **{**nuevo, "pelicula_id": None})
+            raise AssertionError("pelicula_id None debería lanzar ValueError")
+        except ValueError:
+            pass
+
+        # Microsegundos fuera: es el mismo pase
+        assert registrar_pase(session, **{**nuevo, "fecha_hora": nuevo["fecha_hora"].replace(microsecond=987654)}) == "creado"
+        assert registrar_pase(session, **nuevo) == "actualizado"
+        assert [p.fecha_hora.microsecond for p in pases_nuevo()] == [0]
+
+        # Idioma: variantes conocidas -> canónico
+        for variante in ["v.o.s.e.", "V.O.S.E", "vose"]:
+            assert registrar_pase(session, **{**nuevo, "idioma": variante}) == "actualizado", variante
+        assert registrar_pase(session, **{**nuevo, "idioma": "ESPAÑOL"}) == "creado"
+        assert registrar_pase(session, **{**nuevo, "idioma": "espanol"}) == "actualizado"
+        assert sorted(p.idioma for p in pases_nuevo()) == ["Español", "VOSE"]
+
+        # Idioma desconocido: se guarda tal cual y deja un WARNING con el valor
+        avisos = []
+        handler = logging.Handler()
+        handler.emit = lambda registro: avisos.append(registro)
+        logging.getLogger("app.services.pases").addHandler(handler)
+        try:
+            assert registrar_pase(session, **{**nuevo, "idioma": "VO"}) == "creado"
+        finally:
+            logging.getLogger("app.services.pases").removeHandler(handler)
+        assert "VO" in {p.idioma for p in pases_nuevo()}
+        assert [a.levelno for a in avisos] == [logging.WARNING] and "'VO'" in avisos[0].getMessage(), avisos
+
+        print("OK: registrar_pase rechaza pases sin película y normaliza fecha e idioma")
     finally:
         session.rollback()

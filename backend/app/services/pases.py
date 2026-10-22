@@ -1,13 +1,13 @@
 import logging
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, update
 from sqlmodel import Session, select
 
 from app.database.engine import engine
 from app.database.models import Cine, Pase
-from app.services.cines import obtener_o_crear_cine
+from app.services.cines import normalizar, obtener_o_crear_cine
+from app.services.tiempo import ahora_madrid
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +17,26 @@ def _ahora_utc():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _ahora_madrid():
-    # fecha_hora se guarda en hora local de Madrid sin tzinfo.
-    return datetime.now(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
+# Clave normalizada (minúsculas, sin tildes, puntos ni espacios) -> valor canónico.
+IDIOMAS_CANONICOS = {"espanol": "Español", "vose": "VOSE"}
+
+
+def normalizar_idioma(idioma):
+    """Devuelve el valor canónico; si no lo conoce, avisa y lo deja tal cual."""
+    clave = normalizar(idioma or "").replace(".", "").replace(" ", "")
+    if clave in IDIOMAS_CANONICOS:
+        return IDIOMAS_CANONICOS[clave]
+    logger.warning("Idioma desconocido %r: se guarda tal cual", idioma)
+    return idioma
 
 
 def registrar_pase(session: Session, *, cine, pelicula_id, fecha_hora, sala, idioma,
                    precio, link_compra, es_evento_especial) -> str:
     """Crea o actualiza el pase y devuelve "creado" o "actualizado". El commit lo hace quien llama."""
+    if pelicula_id is None:
+        raise ValueError(f"Pase sin película en {cine} ({fecha_hora})")
+    fecha_hora = fecha_hora.replace(microsecond=0)
+    idioma = normalizar_idioma(idioma)
     cine_id = obtener_o_crear_cine(session, cine).id
     ahora = _ahora_utc()
 
@@ -56,7 +68,7 @@ def contar_activos_futuros(session: Session) -> dict:
     """{cine_id: nº de pases activos con fecha_hora >= ahora en Madrid}."""
     return dict(session.exec(
         select(Pase.cine_id, func.count())
-        .where(Pase.activo, Pase.fecha_hora >= _ahora_madrid())
+        .where(Pase.activo, Pase.fecha_hora >= ahora_madrid())
         .group_by(Pase.cine_id)
     ).all())
 
@@ -64,7 +76,7 @@ def contar_activos_futuros(session: Session) -> dict:
 def cerrar_ejecucion(session: Session, inicio: datetime, activos_futuros_previos: dict) -> dict:
     """Desactiva los pases no vistos desde `inicio` (UTC sin tzinfo) en los cines tocados
     por la ejecución. El commit lo hace quien llama."""
-    ahora_madrid = _ahora_madrid()
+    ahora = ahora_madrid()
     cine_ids = session.exec(
         select(Pase.cine_id).where(Pase.visto_ultima_vez >= inicio).distinct()
     ).all()
@@ -76,7 +88,7 @@ def cerrar_ejecucion(session: Session, inicio: datetime, activos_futuros_previos
             Pase.cine_id == cine_id, Pase.visto_ultima_vez >= inicio)).one()
         vistos_futuros = session.exec(select(func.count()).where(
             Pase.cine_id == cine_id, Pase.visto_ultima_vez >= inicio,
-            Pase.fecha_hora >= ahora_madrid)).one()
+            Pase.fecha_hora >= ahora)).one()
         previos = activos_futuros_previos.get(cine_id, 0)
 
         if vistos_futuros < previos / 2:

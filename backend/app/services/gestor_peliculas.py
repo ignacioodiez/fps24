@@ -1,8 +1,12 @@
+import logging
 import re
 from sqlmodel import Session, select
-from thefuzz import process, fuzz 
+from thefuzz import process, fuzz
 from app.database.models import Pelicula
+from app.services.tiempo import hoy_madrid
 from app.services.tmdb import buscar_datos_tmdb
+
+logger = logging.getLogger(__name__)
 
 # --- LISTA NEGRA (Eventos Especiales) ---
 # Si un título tiene algo de esto, se considera Evento Especial
@@ -17,7 +21,18 @@ BASURA_TITULOS = [
 
 ]
 
-UMBRAL_FUZZY = 85 
+# Solo marcan es_especial; a diferencia de BASURA_TITULOS, no se quitan del título.
+# Siempre como palabra completa, para que OPERA no case con "OPERACIÓN".
+# Estas cuentan en cualquier posición del título.
+PALABRAS_ESPECIAL = ["EN DIRECTO", "DIFERIDO", "PROYECCIÓN ESPECIAL", "MET OPERA", "ROYAL BALLET"]
+# Estas solo al inicio o justo antes de ":" ("Ballet: Giselle"), para no marcar
+# "El fantasma de la ópera" o "El concierto".
+PALABRAS_ESPECIAL_INICIO = ["ÓPERA", "OPERA", "BALLET", "CONCIERTO", "RECITAL"]
+
+# Una película es "clásico" si es de antes de (año actual en Madrid - ANTIGUEDAD_CLASICO).
+ANTIGUEDAD_CLASICO = 3
+
+UMBRAL_FUZZY = 85
 
 # 👇 ESTA ES LA NUEVA FUNCIÓN MAESTRA 👇
 def determinar_si_es_especial(titulo_raw: str, anio: int = None) -> bool:
@@ -121,3 +136,25 @@ def obtener_id_pelicula(titulo_raw: str, session: Session, anio_filtro: int = No
     except Exception as e:
         print(f"      ❌ ERROR GESTOR: {e}")
         return None, None
+
+def es_especial(titulo_raw: str, anio: int = None) -> bool:
+    """Regla única de los scrapers del contrato: palabra clave en el título o película antigua."""
+    titulo_upper = (titulo_raw or "").upper()
+    if any(palabra in titulo_upper for palabra in BASURA_TITULOS):
+        return True
+    if any(re.search(rf"\b{re.escape(palabra)}\b", titulo_upper) for palabra in PALABRAS_ESPECIAL):
+        return True
+    if any(re.match(rf"\s*{re.escape(palabra)}\b", titulo_upper)
+           or re.search(rf"\b{re.escape(palabra)}\s*:", titulo_upper)
+           for palabra in PALABRAS_ESPECIAL_INICIO):
+        return True
+    return bool(anio and anio < hoy_madrid().year - ANTIGUEDAD_CLASICO)
+
+
+def resolver_pelicula(session: Session, titulo_raw: str, cine: str, anio_web: int = None):
+    """Para scrapers del contrato: recibe el título tal como sale en la web y devuelve
+    (pelicula_id o None, es_especial). El año de la web, si lo hay, manda sobre el de TMDB."""
+    pelicula_id, anio_tmdb = obtener_id_pelicula(titulo_raw, session, anio_filtro=anio_web)
+    if pelicula_id is None:
+        logger.warning("Sin película para %r en %s", titulo_raw, cine)
+    return pelicula_id, es_especial(titulo_raw, anio_web or anio_tmdb)
