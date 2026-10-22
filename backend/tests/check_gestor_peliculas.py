@@ -157,7 +157,8 @@ def falso_datos_por_id(tmdb_id):
     base = todos.get(tmdb_id, r(tmdb_id, f"Película {tmdb_id}", 2020))
     datos = dict(tmdb_id=tmdb_id, titulo_es=base["title"], titulo_en=None, titulo_original=base["original_title"],
                  poster=None, backdrop=None, imagenes_galeria=[], youtube_id=None, sinopsis="", nota=None,
-                 duracion=None, anio=gestor._anio_resultado(base), generos="")
+                 duracion=None, anio=gestor._anio_resultado(base), generos="", votos=None, fecha_estreno=None,
+                 idioma_original=None, director=None, imdb_id=None)
     return datos | FALSO_DETALLES.get(tmdb_id, {})
 
 

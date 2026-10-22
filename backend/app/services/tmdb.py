@@ -1,6 +1,7 @@
 import os
 import random
 import unicodedata
+from datetime import date
 
 import requests
 from dotenv import load_dotenv
@@ -70,10 +71,19 @@ def _traduccion(detalles: dict, idioma: str, pais: str):
     return titulos.get((idioma, pais)) or next((v for v in titulos.values() if v), None) or original
 
 
+def estreno_es(detalles: dict):
+    """Primera fecha de estreno en cines en España (release_dates ES de tipo 2 limitado o 3 en cines;
+    sin el 1 de festivales ni los digitales), o None si TMDB no tiene ninguna."""
+    fechas = [f["release_date"][:10]
+              for pais in detalles.get("release_dates", {}).get("results", []) if pais.get("iso_3166_1") == "ES"
+              for f in pais.get("release_dates", []) if f.get("type") in (2, 3) and f.get("release_date")]
+    return date.fromisoformat(min(fechas)) if fechas else None
+
+
 def datos_por_id(tmdb_id: int) -> dict:
-    """Detalles + vídeos + imágenes + traducciones de una película, en una sola petición."""
+    """Detalles + vídeos + imágenes + traducciones + reparto + estrenos de una película, en una sola petición."""
     detalles = _get(f"/movie/{tmdb_id}", language="es-ES",
-                    append_to_response="videos,images,translations",
+                    append_to_response="videos,images,translations,credits,release_dates",
                     include_image_language="es,null")  # sin texto o en español
 
     poster_path = detalles.get("poster_path")
@@ -103,4 +113,10 @@ def datos_por_id(tmdb_id: int) -> dict:
         "duracion": detalles.get("runtime"),
         "anio": int(fecha[:4]) if fecha[:4].isdigit() else None,
         "generos": ", ".join(g["name"] for g in detalles.get("genres", [])),
+        "votos": detalles.get("vote_count"),
+        "idioma_original": detalles.get("original_language"),
+        "imdb_id": detalles.get("imdb_id") or None,
+        "director": ", ".join(c["name"] for c in detalles.get("credits", {}).get("crew", [])
+                              if c.get("job") == "Director") or None,
+        "fecha_estreno": estreno_es(detalles),
     }

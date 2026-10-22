@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Index, JSON, text, true  # <--- IMPORTANTE: Desde SQLAlchemy
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 
 # 1. ESQUELETO DE LA PELÍCULA
@@ -27,6 +27,12 @@ class Pelicula(PeliculaBase, table=True):
     imagenes_galeria: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     # Solo en la tabla, no en PeliculaBase: la API no cambia. UTC; None: no se reintenta TMDB.
     tmdb_reintentar_en: Optional[datetime] = None
+    # De TMDB (migración 0007), también solo en la tabla
+    votos: Optional[int] = None
+    fecha_estreno: Optional[date] = None  # estreno en cines en España (release_dates ES, tipo 2 o 3)
+    idioma_original: Optional[str] = None
+    director: Optional[str] = None
+    imdb_id: Optional[str] = None
     pases: List["Pase"] = Relationship(back_populates="pelicula")
 
 # 3. ESQUELETO DEL PASE
@@ -49,6 +55,7 @@ class Pase(PaseBase, table=True):
     cine_id: int = Field(foreign_key="cine.id", index=True)
     activo: bool = Field(default=True, sa_column_kwargs={"server_default": true()})
     visto_ultima_vez: Optional[datetime] = None  # UTC
+    creado_en: Optional[datetime] = None  # UTC; NULL en los pases anteriores a la migración 0007
     pelicula: Optional[Pelicula] = Relationship(back_populates="pases")
     cine_rel: "Cine" = Relationship()
 
@@ -63,6 +70,14 @@ class Cine(SQLModel, table=True):
     slug: str = Field(unique=True, index=True)
     nombre: str
     ultima_ejecucion_ok: Optional[datetime] = None
+    # Ficha del cine (migración 0007)
+    direccion: Optional[str] = None
+    web: Optional[str] = None
+    zona: Optional[str] = None
+    tipo: Optional[str] = None
+    telefono: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 # 6. TABLA ALIAS: título de la web normalizado -> película (caché del emparejamiento).

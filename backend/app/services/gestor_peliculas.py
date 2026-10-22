@@ -233,6 +233,11 @@ def _campos_tmdb(datos: dict, titulo_web: str) -> dict:
         duracion=datos["duracion"],
         youtube_id=datos["youtube_id"],
         imagenes_galeria=datos["imagenes_galeria"],
+        votos=datos["votos"],
+        fecha_estreno=datos["fecha_estreno"],
+        idioma_original=datos["idioma_original"],
+        director=datos["director"],
+        imdb_id=datos["imdb_id"],
     )
 
 
