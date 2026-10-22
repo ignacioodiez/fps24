@@ -11,6 +11,7 @@ from app.database.engine import get_session
 from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
 from app.services.destacadas import leer_destacadas
+from app.services.cines import listar_cines
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -77,6 +78,22 @@ class Destacadas(SQLModel):
     estrenos: List[Estreno]
     especiales: List[Especial]
 
+class CineSalida(SQLModel):
+    id: int
+    slug: str
+    nombre: str
+    zona: Optional[str] = None
+    tipo: Optional[str] = None
+    direccion: Optional[str] = None
+    web: Optional[str] = None
+    telefono: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    # {"entrada", "entrada_laboral", "entrada_finde", "dia_espectador": {"dias", "precio"}, "notas"}: solo las que aplican
+    tarifas: Optional[dict] = None
+    sesiones_hoy: int  # pases activos de hoy (Madrid) desde ahora
+    peliculas_hoy: int
+
 # --- SEGURIDAD ---
 
 ACTUALIZAR_SECRET = os.getenv("ACTUALIZAR_SECRET")
@@ -114,6 +131,11 @@ def leer_destacadas_semana(session: Session = Depends(get_session)):
     return leer_destacadas(session)
 
 # ---------------------------------------------
+
+# --- CINES: ficha, tarifas y lo que proyectan hoy (página "Salas y precios") ---
+@app.get("/cines", response_model=List[CineSalida])
+def leer_cines(session: Session = Depends(get_session)):
+    return listar_cines(session)
 
 @app.post("/actualizar")
 def actualizar_todo(background_tasks: BackgroundTasks, _: None = Depends(verificar_secreto)):
