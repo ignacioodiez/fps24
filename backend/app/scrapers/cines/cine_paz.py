@@ -1,127 +1,95 @@
-import time
-import re
-from datetime import datetime, timedelta
-from playwright.sync_api import sync_playwright
-from sqlmodel import Session, select
+"""Lee: https://www.cinepazmadrid.es/es/cartelera (plantilla mk2, ver app/scrapers/plataforma_mk2.py); todos los días están ya en el HTML.
+Extrae: las 7 primeras pestañas .rotulo_dia ("Hoy", "Mañana", "Sábado 24/10"); en .cines-<data-num>, un .horarios por película con el título en .text-header-span a, .etiqueta-vose y las horas en .horas .btn.metrica ("35mm15:45").
+Se rompe si: cambian las clases de la plantilla o el texto de las pestañas; los botones sin HH:MM se descartan con aviso."""
+from datetime import datetime, time
+
+from playwright.sync_api import Error as PlaywrightError
+from sqlmodel import Session
 
 from app.database.engine import engine
-from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
+from app.scrapers.comun import FuenteNoDisponible, abrir_pagina, obtener_logger
+from app.scrapers.plataforma_mk2 import leer_dias, parsear_hora
+from app.services.gestor_peliculas import resolver_pelicula
+from app.services.pases import registrar_pase
+
+URL = "https://www.cinepazmadrid.es/es/cartelera"
+CINES = ["Cine MK2 Paz"]
+SALA = "Cine Paz"
+PRECIO = "Consultar"
+MAX_DIAS = 7
+
+log = obtener_logger(__name__)
+
+
+def idioma_de(titulo_raw, tiene_etiqueta_vose):
+    """VOSE si la web pone la etiqueta o el título lo dice ("(VOSE)", "V.O.S.E"); si no, Español."""
+    titulo = titulo_raw.upper()
+    return "VOSE" if tiene_etiqueta_vose or "VOSE" in titulo or "V.O.S.E" in titulo else "Español"
+
+
+def _leer_pelicula(session, peli, fecha, cine, peliculas, contadores):
+    titulo = peli.locator(".peli .text-header-span a").first
+    if not titulo.count():
+        log.warning("%s: película sin título el %s", cine, fecha)
+        contadores["descartado"] += 1
+        return
+    titulo_raw = titulo.inner_text().strip()
+    if titulo_raw not in peliculas:  # la misma película sale en varios días: se resuelve una vez
+        peliculas[titulo_raw] = resolver_pelicula(session, titulo_raw, cine)
+    pelicula_id, es_especial = peliculas[titulo_raw]
+    if pelicula_id is None:
+        contadores["descartado"] += 1
+        return
+
+    idioma = idioma_de(titulo_raw, peli.locator(".etiqueta-vose").count() > 0)
+    for boton in peli.locator(".horas .btn.metrica").all():
+        hora_txt = boton.inner_text().strip()
+        try:
+            fecha_hora = datetime.combine(fecha, time(*parsear_hora(hora_txt)))
+        except ValueError:
+            log.warning("Pase descartado de %r: %s %r", titulo_raw, fecha, hora_txt, exc_info=True)
+            contadores["descartado"] += 1
+            continue
+        resultado = registrar_pase(
+            session,
+            cine=cine,
+            pelicula_id=pelicula_id,
+            fecha_hora=fecha_hora,
+            sala=SALA,
+            idioma=idioma,
+            precio=PRECIO,
+            link_compra=boton.get_attribute("href"),
+            es_evento_especial=es_especial,
+        )
+        contadores[resultado] += 1
+
 
 def scrapear_cine_paz():
-    nombre_cine = "Cine  MK2 Paz"
-    BASE_URL = "https://www.cinepazmadrid.es/es/cartelera"
-    MAX_DIAS_A_ESCANEAR = 7 
+    cine = CINES[0]
+    contadores = {"creado": 0, "actualizado": 0, "descartado": 0}
+    peliculas = {}  # título de la web -> (pelicula_id, es_especial)
+    leidas = 0
 
-    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
+    with abrir_pagina() as page, Session(engine) as session:
+        page.goto(URL, wait_until="domcontentloaded")
+        page.locator(".contenedor_cines .horarios").first.wait_for(state="attached")
+        dias = leer_dias(page, cine, MAX_DIAS)
+        log.info("%s: %d días a leer", cine, len(dias))
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        
-        try:
-            page.goto(BASE_URL, timeout=60000)
-            
-            nuevos_pases = 0
-            fecha_actual = datetime.now()
-            anio_actual = fecha_actual.year
+        for data_num, fecha in dias:
+            for peli in page.locator(f".contenedor_cines.cines-{data_num} .horarios").all():
+                leidas += 1
+                try:
+                    _leer_pelicula(session, peli, fecha, cine, peliculas, contadores)
+                except PlaywrightError:
+                    log.warning("Película descartada en %s el %s", cine, fecha, exc_info=True)
+                    contadores["descartado"] += 1
 
-            rotulos = page.locator(".rotulo_dia").all()
-            rotulos_a_procesar = rotulos[:MAX_DIAS_A_ESCANEAR]
+        if not leidas:
+            raise FuenteNoDisponible(f"{URL}: no hay películas en {len(dias)} días")
+        session.commit()
+    log.info("%s: %s", cine, contadores)
 
-            with Session(engine) as session:
-                for rotulo in rotulos_a_procesar:
-                    # --- A. FECHAS (Igual que antes) ---
-                    texto_dia = rotulo.inner_text().strip().lower()
-                    data_num = rotulo.get_attribute("data-num")
-                    if not data_num: continue
-
-                    fecha_target = None
-                    if "hoy" in texto_dia: fecha_target = fecha_actual
-                    elif "mañana" in texto_dia: fecha_target = fecha_actual + timedelta(days=1)
-                    else:
-                        match_fecha = re.search(r"(\d{1,2})/(\d{1,2})", texto_dia)
-                        if match_fecha:
-                            d, m = map(int, match_fecha.groups())
-                            anio_peli_fecha = anio_actual
-                            if m < fecha_actual.month and fecha_actual.month == 12: anio_peli_fecha += 1
-                            fecha_target = datetime(anio_peli_fecha, m, d)
-                    
-                    if not fecha_target: continue
-                    print(f"   📅 Procesando ID {data_num} -> {fecha_target.strftime('%d/%m')}")
-
-                    # --- B. PELÍCULAS ---
-                    contenedor = page.locator(f".contenedor_cines.cines-{data_num}")
-                    peliculas_html = contenedor.locator(".horarios").all()
-
-                    for peli_div in peliculas_html:
-                        try:
-                            # 1. TÍTULO
-                            titulo_elem = peli_div.locator(".peli .text-header-span a").first
-                            if not titulo_elem.count(): continue
-                            raw_titulo = titulo_elem.inner_text().strip().upper()
-
-                            # 2. IDIOMA
-                            idioma = "Español"
-                            etiqueta_vose = peli_div.locator(".etiqueta-vose").count() > 0
-                            if etiqueta_vose or "VOSE" in raw_titulo or "V.O.S.E" in raw_titulo:
-                                idioma = "VOSE"
-                                raw_titulo = raw_titulo.replace("(VOSE)", "").replace("(V.O.S.E)", "").strip()
-
-                            # 3. OBTENER ID Y AÑO (¡NUEVO!) ✨
-                            pelicula_id, anio_peli = obtener_id_pelicula(raw_titulo, session)
-
-                            # 4. LÓGICA DE EVENTO ESPECIAL
-                            # Si es anterior a 2023, asumimos que es reposición/clásico/especial
-                            es_especial = determinar_si_es_especial(raw_titulo, anio_peli)
-                            
-                            # También si el propio cine lo marca (a veces ponen etiquetas)
-                            if "EVENTO" in raw_titulo or "OPERA" in raw_titulo:
-                                es_especial = True
-
-                            # 5. GUARDAR SESIONES
-                            botones = peli_div.locator(".horas .btn.metrica").all()
-                            
-                            for btn in botones:
-                                hora_txt = btn.inner_text().strip()
-                                link_compra = btn.get_attribute("href")
-                                match_hora = re.search(r"(\d{2}:\d{2})", hora_txt)
-                                if not match_hora: continue
-                                h, m = map(int, match_hora.group(1).split(":"))
-                                fecha_final = fecha_target.replace(hour=h, minute=m, second=0)
-
-                                existe = session.exec(select(Pase).where(
-                                    Pase.cine == nombre_cine,
-                                    Pase.pelicula_id == pelicula_id,
-                                    Pase.fecha_hora == fecha_final
-                                )).first()
-
-                                if not existe:
-                                    nuevo_pase = Pase(
-                                        cine=nombre_cine,
-                                        pelicula_id=pelicula_id,
-                                        fecha_hora=fecha_final,
-                                        sala="Cine Paz",
-                                        precio="Consultar",
-                                        link_compra=link_compra,
-                                        idioma=idioma,
-                                        es_evento_especial=es_especial # <--- GUARDAMOS EL VALOR
-                                    )
-                                    session.add(nuevo_pase)
-                                    nuevos_pases += 1
-
-                        except Exception as e:
-                            print(f"⚠️ Error procesando peli: {e}")
-                            continue
-                    
-                    session.commit()
-
-            print(f"🏁 FIN {nombre_cine}. {nuevos_pases} pases guardados.")
-        
-        except Exception as e:
-            print(f"❌ Error crítico en Cine Paz: {e}")
-        
-        browser.close()
 
 if __name__ == "__main__":
     scrapear_cine_paz()

@@ -1,117 +1,106 @@
 import os
+import random
+import unicodedata
+
 import requests
-import random  # <--- 1. IMPORTANTE: Importamos el módulo de aleatoriedad
 from dotenv import load_dotenv
 
 load_dotenv()
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+API = "https://api.themoviedb.org/3"
 
-def buscar_datos_tmdb(titulo: str, anio: int = None, es_evento_especial: bool = False):
-    """
-    1. Busca la película por título.
-    2. Pide DETALLES + VÍDEOS + IMÁGENES.
-    3. Selecciona 4 imágenes ALEATORIAS para la galería.
-    """
+
+class TmdbNoDisponible(Exception):
+    """TMDB no responde, responde con error o falta la API key. No es lo mismo que "sin resultados"."""
+
+
+# Cortacircuito: tras el primer fallo no se llama más a TMDB hasta reiniciar_cortacircuito()
+# (al empezar y al acabar cada ejecución), para no esperar el timeout en cada película.
+_fallo = None
+peticiones = 0  # peticiones reales hechas por este proceso (para el resumen de lanzar_todo)
+
+
+def reiniciar_cortacircuito():
+    global _fallo
+    _fallo = None
+
+
+def _get(ruta: str, **params) -> dict:
+    global _fallo, peticiones
+    if _fallo:
+        raise TmdbNoDisponible(f"cortacircuito abierto: {_fallo}")
     if not TMDB_API_KEY:
-        return None
+        raise TmdbNoDisponible("Falta TMDB_API_KEY")
+    peticiones += 1
+    try:
+        res = requests.get(f"{API}{ruta}", params={"api_key": TMDB_API_KEY, **params}, timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except (requests.RequestException, ValueError) as e:  # ValueError: JSON roto
+        _fallo = f"{ruta}: {e}"
+        raise TmdbNoDisponible(_fallo) from e
 
-    # PASO 1: BUSCAR ID 🔎
-    search_url = "https://api.themoviedb.org/3/search/movie"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "query": titulo,
-        "language": "es-ES",
-        "region": "ES"
-    }
 
+def buscar(consulta: str, idioma: str = "es-ES", anio: int = None) -> list:
+    """Resultados de /search/movie en el orden de TMDB (relevancia). Lista vacía si no hay."""
+    # Sin region: con region=ES, release_date es el estreno en España y no casa con el año de la web
+    params = {"query": consulta, "language": idioma}
     if anio:
         params["year"] = anio
+    return _get("/search/movie", **params).get("results", [])
 
-    try:
-        res = requests.get(search_url, params=params, timeout=5)
-        res.raise_for_status()
-        results = res.json().get("results", [])
 
-        if not results:
-            return None
+def es_latino(texto: str) -> bool:
+    """True si todas las letras son del alfabeto latino ("Cold War", "Ágora"; no "笛吹川")."""
+    letras = [c for c in texto or "" if c.isalpha()]
+    return bool(letras) and all(unicodedata.name(c, "").startswith("LATIN") for c in letras)
 
-        # Priorizar recientes (2024-2026)
-        mejor_opcion = results[0]
-        if not anio and not es_evento_especial:
-            for peli in results:
-                fecha = peli.get("release_date", "")
-                # Priorizamos estrenos recientes solo si es una búsqueda estándar
-                if fecha and ("2024" in fecha or "2025" in fecha or "2026" in fecha):
-                    mejor_opcion = peli
-                    break
-        
-        movie_id = mejor_opcion.get("id")
 
-        # PASO 2: PEDIR TODO DE GOLPE 🚀
-        details_url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-        details_params = {
-            "api_key": TMDB_API_KEY, 
-            "language": "es-ES",
-            "append_to_response": "videos,images",
-            "include_image_language": "es,null" # Priorizamos sin texto o español
-        }
-        
-        detalles = requests.get(details_url, params=details_params, timeout=5).json()
-
-        # --- A. PROCESAR IMÁGENES PRINCIPALES ---
-        poster_path = detalles.get("poster_path")
-        poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
-        
-        backdrop_path = detalles.get("backdrop_path")
-        backdrop_url = f"https://image.tmdb.org/t/p/original{backdrop_path}" if backdrop_path else None
-        
-        # --- B. PROCESAR GALERÍA (MODO ALEATORIO 🎲) ---
-        backdrops_raw = detalles.get("images", {}).get("backdrops", [])
-        galeria = []
-
-        # Truco Pro: Quitamos la primera imagen (index 0) de la lista de candidatos
-        # porque esa es la que acabamos de usar como 'backdrop_url' (fondo principal).
-        # Así no sale repetida en la galería.
-        candidatos = backdrops_raw[1:] if len(backdrops_raw) > 1 else []
-
-        # Si hay candidatos, elegimos hasta 4 al azar
-        if candidatos:
-            num_a_seleccionar = min(4, len(candidatos)) # Cogemos 4, o los que haya si son menos
-            seleccionados = random.sample(candidatos, num_a_seleccionar) # <--- MAGIA ALEATORIA
-            
-            for img in seleccionados:
-                path = img.get("file_path")
-                if path:
-                    galeria.append(f"https://image.tmdb.org/t/p/w780{path}")
-        
-        # --- C. PROCESAR TRÁILER ---
-        videos_raw = detalles.get("videos", {}).get("results", [])
-        youtube_id = None
-        for video in videos_raw:
-            if video.get("site") == "YouTube" and video.get("type") == "Trailer":
-                youtube_id = video.get("key")
-                break 
-
-        # --- D. OTROS DATOS ---
-        fecha_str = detalles.get("release_date", "")
-        anio = int(fecha_str.split("-")[0]) if fecha_str else None
-        generos = ", ".join([g["name"] for g in detalles.get("genres", [])])
-
-        return {
-            "tmdb_id": movie_id,
-            "titulo_tmdb": detalles.get("title"),
-            "titulo_original": detalles.get("original_title"),
-            "poster": poster_url,
-            "backdrop": backdrop_url,    
-            "imagenes_galeria": galeria, # <--- Lista aleatoria
-            "youtube_id": youtube_id,
-            "sinopsis": detalles.get("overview"),
-            "nota": detalles.get("vote_average"),
-            "duracion": detalles.get("runtime"),
-            "anio": anio,
-            "generos": generos
-        }
-
-    except Exception as e:
-        print(f"      ⚠️ Error TMDB: {e}")
+def _traduccion(detalles: dict, idioma: str, pais: str):
+    """Título en ese idioma (primero el de ese país), o None si TMDB no tiene traducción a ese idioma.
+    Si es el idioma original, o la traducción existe con el título vacío ("Cars"), es el original."""
+    original = detalles.get("original_title")
+    if detalles.get("original_language") == idioma:
+        return original
+    titulos = {(t.get("iso_639_1"), t.get("iso_3166_1")): t.get("data", {}).get("title")
+               for t in detalles.get("translations", {}).get("translations", [])
+               if t.get("iso_639_1") == idioma}
+    if not titulos:
         return None
+    return titulos.get((idioma, pais)) or next((v for v in titulos.values() if v), None) or original
+
+
+def datos_por_id(tmdb_id: int) -> dict:
+    """Detalles + vídeos + imágenes + traducciones de una película, en una sola petición."""
+    detalles = _get(f"/movie/{tmdb_id}", language="es-ES",
+                    append_to_response="videos,images,translations",
+                    include_image_language="es,null")  # sin texto o en español
+
+    poster_path = detalles.get("poster_path")
+    backdrop_path = detalles.get("backdrop_path")
+
+    # La primera imagen ya es el backdrop principal: no se repite en la galería
+    candidatos = detalles.get("images", {}).get("backdrops", [])[1:]
+    galeria = [f"https://image.tmdb.org/t/p/w780{img['file_path']}"
+               for img in random.sample(candidatos, min(4, len(candidatos))) if img.get("file_path")]
+
+    youtube_id = next((v.get("key") for v in detalles.get("videos", {}).get("results", [])
+                       if v.get("site") == "YouTube" and v.get("type") == "Trailer"), None)
+
+    fecha = detalles.get("release_date") or ""
+    return {
+        "tmdb_id": detalles.get("id"),
+        # De las traducciones y no de "title": sin traducción, "title" es el original ("Panny z Wilka")
+        "titulo_es": _traduccion(detalles, "es", "ES"),
+        "titulo_en": _traduccion(detalles, "en", "US"),
+        "titulo_original": detalles.get("original_title"),
+        "poster": f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None,
+        "backdrop": f"https://image.tmdb.org/t/p/original{backdrop_path}" if backdrop_path else None,
+        "imagenes_galeria": galeria,
+        "youtube_id": youtube_id,
+        "sinopsis": detalles.get("overview"),
+        "nota": detalles.get("vote_average"),
+        "duracion": detalles.get("runtime"),
+        "anio": int(fecha[:4]) if fecha[:4].isdigit() else None,
+        "generos": ", ".join(g["name"] for g in detalles.get("genres", [])),
+    }

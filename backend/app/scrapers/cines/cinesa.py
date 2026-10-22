@@ -1,180 +1,126 @@
-import time
+"""Lee: https://www.filmaffinity.com/es/theater-showtimes.php?id=<id> (cartelera de FilmAffinity), una página por sede (Proyecciones 271, Príncipe Pío 270).
+Extrae: una .fa-content-card.movie por película; de su primer div.movie-showtimes-n, el título en .mv-title span.fs-5 ("Dune (VOSE)"), una div.row[data-sess-date] por día y un .sess-times a.btn por pase ("19:00", title "Sala 3 XL").
+Se rompe si: cambian las clases o los ids de FilmAffinity; si falla una sede se siguen las demás y al final se lanza la excepción."""
 from datetime import datetime
-from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
-from sqlmodel import Session, select
 
-# Importamos la base de datos
+from playwright.sync_api import Error as PlaywrightError
+from sqlmodel import Session
+
 from app.database.engine import engine
-from app.database.models import Pase, Pelicula
-# 👇 IMPORTANTE: Usamos tu gestor centralizado
-from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
+from app.scrapers.comun import FuenteNoDisponible, abrir_pagina, obtener_logger
+from app.services.gestor_peliculas import resolver_pelicula
+from app.services.pases import registrar_pase
 
-class CinesaFilmAffinityScraper:
-    def __init__(self):
-        self.cines = [
-            {"id": "cinesa-proyecciones", "fa_id": "271", "nombre": "Cinesa Proyecciones"},
-            {"id": "cinesa-principe-pio", "fa_id": "270", "nombre": "Cinesa Príncipe Pío"}
-        ]
-        self.base_url = "https://www.filmaffinity.com/es/theater-showtimes.php?id={}"
+URL = "https://www.filmaffinity.com/es/theater-showtimes.php?id={}"
+CINES = ["Cinesa Proyecciones", "Cinesa Príncipe Pío"]
+FA_IDS = {"Cinesa Proyecciones": "271", "Cinesa Príncipe Pío": "270"}
+PRECIO = "Consultar"
 
-    def get_sessions(self):
-        """
-        Devuelve una lista de diccionarios (NO objetos Pase todavía) con los datos crudos.
-        Ej: [{'titulo': 'Avatar', 'cine': 'Cinesa...', 'fecha': datetime...}, ...]
-        """
-        datos_crudos = []
+log = obtener_logger(__name__)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            
-            for cine in self.cines:
-                url = self.base_url.format(cine["fa_id"])
-                print(f"🎬 Scrapeando {cine['nombre']} con Playwright...")
-                
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-                )
-                page = context.new_page()
 
-                try:
-                    page.goto(url, timeout=60000, wait_until="domcontentloaded")
+def idioma_de(titulo_sesion):
+    return "VOSE" if "(VOSE)" in titulo_sesion else "Español"
 
-                    try:
-                        boton_cookie = page.get_by_role("button", name="ACEPTAR").or_(page.get_by_text("AGREE"))
-                        if boton_cookie.is_visible(timeout=3000):
-                            boton_cookie.click()
-                    except: pass
 
-                    try:
-                        page.wait_for_selector(".fa-content-card.movie", timeout=10000)
-                    except:
-                        print(f"⚠️ No se encontraron películas en {cine['nombre']}")
-                        continue
+def sala_de(title):
+    """'Sala 3 XL' -> '3 XL'; sin title, None."""
+    return (title or "").replace("Sala", "").strip() or None
 
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    time.sleep(1)
 
-                    content = page.content()
-                    soup = BeautifulSoup(content, 'html.parser')
-                    movie_cards = soup.select("div.fa-content-card.movie")
-                    
-                    print(f"   ℹ️ Encontradas {len(movie_cards)} películas.")
+def _leer_tarjeta(session, tarjeta, cine, peliculas, contadores):
+    titulo_card = tarjeta.locator("div.mc-title a").first
+    if not titulo_card.count():
+        log.warning("%s: tarjeta sin título", cine)
+        contadores["descartado"] += 1
+        return
+    titulo_card = titulo_card.inner_text().strip()
+    # shortcut: solo el primer bloque de sesiones (otras versiones: VOSE/doblada, iSense...), como antes; leer todos con .all()
+    bloque = tarjeta.locator("div.movie-showtimes-n").first
+    if not bloque.count():
+        log.info("%s: sin sesiones para %r", cine, titulo_card)
+        return
+    titulo_sesion = bloque.locator("div.mv-title span.fs-5").first
+    titulo_raw = titulo_sesion.inner_text().strip() if titulo_sesion.count() else titulo_card
 
-                    for card in movie_cards:
-                        title_tag = card.select_one("div.mc-title a")
-                        if not title_tag: continue
-                        
-                        titulo_raw = title_tag.text.strip()
-                        
-                        showtimes_block = card.select_one("div.movie-showtimes-n")
-                        if not showtimes_block: continue
-                            
-                        title_showtime_tag = showtimes_block.select_one("div.mv-title span.fs-5")
-                        titulo_sesion = title_showtime_tag.text.strip() if title_showtime_tag else titulo_raw
-                        
-                        es_vose = "(VOSE)" in titulo_sesion
-                        titulo_limpio = titulo_sesion.replace("(VOSE)", "").strip()
-
-                        # NOTA: Ya no sacamos el poster aquí, porque lo hace el gestor_peliculas con TMDB
-
-                        day_rows = showtimes_block.select("div.row[data-sess-date]")
-                        
-                        for row in day_rows:
-                            fecha_str = row.get("data-sess-date")
-                            if not fecha_str: continue
-
-                            time_buttons = row.select("div.sess-times a.btn")
-                            
-                            for btn in time_buttons:
-                                hora_str = btn.text.strip()
-                                link_compra = btn.get("href")
-                                sala_info = btn.get("title", "").replace("Sala", "").strip()
-                                
-                                try:
-                                    fecha_hora_dt = datetime.strptime(f"{fecha_str} {hora_str}", "%Y-%m-%d %H:%M")
-                                    
-                                    # Guardamos los datos crudos para procesarlos luego
-                                    datos_crudos.append({
-                                        "titulo": titulo_limpio,
-                                        "cine": cine["nombre"],
-                                        "sala": sala_info if sala_info else None,
-                                        "fecha_hora": fecha_hora_dt,
-                                        "link": link_compra,
-                                        "idioma": "VOSE" if es_vose else "ESPAÑOL"
-                                    })
-                                    
-                                except ValueError:
-                                    continue
-
-                except Exception as e:
-                    print(f"❌ Error en {cine['nombre']}: {e}")
-                
-                finally:
-                    context.close()
-
-            browser.close()
-
-        return datos_crudos
-
-# 👇 AHORA SÍ: LA FUNCIÓN MAESTRA QUE USA TU GESTOR 👇
-def scrapear_cinesa():
-    print("🍿 Ejecutando Scraper Cinesa (Integrado con Gestor TMDB)...")
-    scraper = CinesaFilmAffinityScraper()
-    datos_pases = scraper.get_sessions() # Devuelve lista de diccionarios
-    
-    if not datos_pases:
-        print("📭 No se han encontrado pases.")
+    if titulo_raw not in peliculas:  # Proyecciones y Príncipe Pío comparten películas: se resuelve una vez
+        peliculas[titulo_raw] = resolver_pelicula(session, titulo_raw, cine)
+    pelicula_id, es_especial = peliculas[titulo_raw]
+    if pelicula_id is None:
+        contadores["descartado"] += 1
         return
 
-    print(f"💾 Procesando {len(datos_pases)} pases...")
-    
-    with Session(engine) as session:
-        nuevos_pases = 0
-        
-        for dato in datos_pases:
+    idioma = idioma_de(titulo_raw)
+    for fila in bloque.locator("div.row[data-sess-date]").all():
+        fecha_str = fila.get_attribute("data-sess-date")
+        for boton in fila.locator("div.sess-times a.btn").all():
+            hora_txt = boton.inner_text().strip()
             try:
-                # 1. USAMOS TU GESTOR PARA OBTENER EL ID (O CREARLA CON TMDB)
-                # Esto rellena poster, sinopsis, trailer, etc. automáticamente
-                pelicula_id, _ = obtener_id_pelicula(dato["titulo"], session)
-                
-                if not pelicula_id:
-                    print(f"⚠️ Saltando pase, no se pudo identificar peli: {dato['titulo']}")
-                    continue
-
-                # 2. Comprobar si el pase ya existe
-                existe = session.exec(select(Pase).where(
-                    Pase.cine == dato["cine"],
-                    Pase.pelicula_id == pelicula_id,
-                    Pase.fecha_hora == dato["fecha_hora"],
-                    Pase.sala == dato["sala"]
-                )).first()
-
-                if not existe:
-                    # 3. Detectar evento especial (lógica simple)
-                    tit_lower = dato["titulo"].lower()
-                    es_especial = determinar_si_es_especial(dato["titulo"], None) # No hay año en datos_crudos
-
-                    # 4. Crear el Pase
-                    nuevo_pase = Pase(
-                        pelicula_id=pelicula_id,
-                        cine=dato["cine"],
-                        sala=dato["sala"],
-                        fecha_hora=dato["fecha_hora"],
-                        precio="Consultar",
-                        link_compra=dato["link"],
-                        idioma=dato["idioma"],
-                        es_evento_especial=es_especial
-                    )
-                    session.add(nuevo_pase)
-                    nuevos_pases += 1
-
-            except Exception as e:
-                print(f"⚠️ Error procesando pase de '{dato['titulo']}': {e}")
+                fecha_hora = datetime.strptime(f"{fecha_str} {hora_txt}", "%Y-%m-%d %H:%M")
+            except ValueError:
+                log.warning("Pase descartado de %r en %s: %r %r", titulo_raw, cine, fecha_str, hora_txt)
+                contadores["descartado"] += 1
                 continue
-        
+            resultado = registrar_pase(
+                session,
+                cine=cine,
+                pelicula_id=pelicula_id,
+                fecha_hora=fecha_hora,
+                sala=sala_de(boton.get_attribute("title")),
+                idioma=idioma,
+                precio=PRECIO,
+                link_compra=boton.get_attribute("href"),
+                es_evento_especial=es_especial,
+            )
+            contadores[resultado] += 1
+
+
+def _scrapear_sede(page, session, cine, peliculas, contadores):
+    url = URL.format(FA_IDS[cine])
+    respuesta = page.goto(url, wait_until="domcontentloaded")
+    if respuesta and respuesta.status in (403, 429):
+        raise FuenteNoDisponible(f"{cine}: FilmAffinity bloqueado por Cloudflare (HTTP {respuesta.status}) en {url}")
+    if respuesta and respuesta.status >= 400:
+        raise FuenteNoDisponible(f"{cine}: FilmAffinity responde HTTP {respuesta.status} en {url}")
+    cookies = page.get_by_role("button", name="ACEPTAR").or_(page.get_by_text("AGREE")).first
+    if cookies.is_visible():
+        cookies.click()
+    try:
+        page.wait_for_selector(".fa-content-card.movie")
+    except PlaywrightError as e:
+        raise FuenteNoDisponible(f"{cine}: no hay películas en {url} ({page.title()!r})") from e
+
+    tarjetas = page.locator(".fa-content-card.movie").all()
+    log.info("%s: %d películas", cine, len(tarjetas))
+    for tarjeta in tarjetas:
+        try:
+            _leer_tarjeta(session, tarjeta, cine, peliculas, contadores)
+        except PlaywrightError:
+            log.warning("Película descartada en %s", cine, exc_info=True)
+            contadores["descartado"] += 1
+
+
+def scrapear_cinesa():
+    fallos = {}
+    peliculas = {}  # título de la web -> (pelicula_id, es_especial)
+
+    with Session(engine) as session:
+        for cine in CINES:
+            contadores = {"creado": 0, "actualizado": 0, "descartado": 0}
+            try:
+                # Navegador limpio por sede: con las cookies que deja la primera (cf_clearance...), Cloudflare responde 403
+                with abrir_pagina() as page:
+                    _scrapear_sede(page, session, cine, peliculas, contadores)
+            except (PlaywrightError, FuenteNoDisponible) as e:
+                log.error("%s: la sede falla; se sigue con las demás", cine, exc_info=True)
+                fallos[cine] = e
+            log.info("%s: %s", cine, contadores)
         session.commit()
-        print(f"🏁 FIN CINESA. {nuevos_pases} pases guardados correctamente en la BD.")
+
+    # Se lanza después del commit: lo leído queda guardado y ejecutar_scraper no desactiva nada
+    if fallos:
+        raise FuenteNoDisponible(f"Cinesa: fallan {', '.join(fallos)}") from next(iter(fallos.values()))
+
 
 if __name__ == "__main__":
     scrapear_cinesa()

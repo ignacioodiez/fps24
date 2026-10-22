@@ -1,6 +1,6 @@
 # FPS24 — Independent Cinema Listings for Madrid
 
-FPS24 aggregates showtimes from Madrid's independent, arthouse, and original-language (VOSE) cinemas — Doré, Cineteca, Sala Equis, the Renoir chain, Verdi, Golem, Embajadores, MK2 Palacio de Hielo, Cine Paz, Yelmo Ideal, Cinesa, Palacio de la Prensa, and more — into a single, searchable listing, with movie data automatically enriched via TMDB.
+FPS24 aggregates showtimes from Madrid's independent, arthouse, and original-language (VOSE) cinemas — Doré, Cineteca, Sala Equis, the Renoir chain, Verdi, Golem, Embajadores, MK2 Palacio de Hielo, Cine Paz, Yelmo Ideal, Cinesa, and more — into a single, searchable listing, with movie data automatically enriched via TMDB.
 
 🔗 **Live site:** [fps24.es](https://fps24.es)
 
@@ -57,7 +57,7 @@ flowchart LR
 - **Scrapers:** Playwright (headless Chromium), one module per cinema, orchestrated by `run_scrapers.py`.
 - **Data enrichment:** TMDB integration (poster, synopsis, rating, year, runtime, YouTube trailer, image gallery).
 - **Deduplication:** `gestor_peliculas.py` resolves whether a movie already exists via exact match + fuzzy matching (`thefuzz`) before creating a new entry or querying TMDB.
-- **Automation:** a Render Cron Job runs `python -m app.run_scrapers` daily, executing the full scrape-and-repopulate pipeline.
+- **Automation:** a Render Cron Job runs `python -m app.run_scrapers` daily, executing the full scraping pipeline.
 - **Frontend:** Next.js (App Router), fetches from the API and handles filtering/grouping client-side.
 - **Deploy:** Vercel (frontend, auto-deploy on push to `main`) + Render (backend + cron job).
 
@@ -78,9 +78,8 @@ fps24/
 │   │   ├── services/
 │   │   │   ├── gestor_peliculas.py  # Dedup + TMDB resolution
 │   │   │   └── tmdb.py              # TMDB API client
-│   │   ├── run_scrapers.py     # Orchestrator: wipes DB and reruns all scrapers
+│   │   ├── run_scrapers.py     # Orchestrator: runs all scrapers (or --solo a,b)
 │   │   └── main.py             # FastAPI app and endpoints
-│   ├── crear_tablas.py         # Local setup utility
 │   ├── ver_db.py               # Local inspection utility
 │   ├── database.db             # Local SQLite (tests only, never used in production)
 │   └── requirements.txt
@@ -111,14 +110,12 @@ fps24/
 
 ### Data refresh
 
-The full pipeline (`lanzar_todo()` in `run_scrapers.py`) **wipes all showings and movies** and repopulates the database from scratch. It's triggered through two equivalent paths that call the exact same function:
+The full pipeline (`lanzar_todo()` in `run_scrapers.py`) updates the database incrementally: each showing seen is created or refreshed, and at the end of each cinema's run the showings that were not seen are marked inactive (unless fewer than half of its future showings were seen, which points to a broken scraper). It's triggered through two equivalent paths that call the exact same function:
 
 | Trigger | Description |
 |---|---|
 | **Cron (Render)** | Scheduled job running `python -m app.run_scrapers` directly, daily at 08:00 UTC. Doesn't go through HTTP. |
 | **HTTP endpoint** | `POST /actualizar`, protected with an `X-Actualizar-Secret` header. Meant for manual triggering (not used by the cron). Runs as a background task. |
-
-> ⚠️ Because this is a wipe-and-repopulate pattern, a failure mid-run can leave the database incomplete until the next scheduled run.
 
 ---
 
@@ -182,7 +179,6 @@ python -m app.run_scrapers
 ## 🗺️ Roadmap
 
 - [ ] More detailed logging in scrapers' silent `except` blocks, to catch individual failures without losing resilience.
-- [ ] Incremental updates instead of full wipe-and-repopulate.
 - [ ] Restrict CORS to actual production domains instead of `*`.
 - [ ] Protect the `/test/*` endpoints.
 

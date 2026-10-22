@@ -1,155 +1,124 @@
-import time
+"""Lee: https://www.yelmocines.es/cartelera/madrid (cartelera de Madrid; la web pinta cada fecha en el navegador al cambiar #ddlDate, sin pedir nada a la red).
+Extrae: por cada uno de los 7 primeros valores de #ddlDate ("22-octubre"), los article.now__movie de div[data-cinema=ideal]; formato en .horarioExp .col3 y horas/enlaces en time.btn a.
+Se rompe si: Cloudflare bloquea el navegador (403 "Attention Required"), cambian las clases, el id del select o el formato "DD-mes"."""
+import re
 from datetime import datetime
-from playwright.sync_api import sync_playwright
-from sqlmodel import Session, select
+
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from sqlmodel import Session
 
 from app.database.engine import engine
-from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial # <--- EL CEREBRO
+from app.scrapers.comun import FuenteNoDisponible, abrir_pagina, numero_mes, obtener_logger, resolver_anio
+from app.services.gestor_peliculas import resolver_pelicula
+from app.services.pases import registrar_pase
+
+URL = "https://www.yelmocines.es/cartelera/madrid"
+CINES = ["Yelmo Cines Ideal"]
+SALA = "Yelmo Ideal"
+PRECIO = "Consultar"
+DIAS = 7
+
+log = obtener_logger(__name__)
+
+
+def parsear_fecha(valor, hora_txt):
+    """('22-octubre', '15:45') -> datetime. ValueError si no cuadra."""
+    dia, mes_txt = valor.split("-")
+    dia, mes = int(dia), numero_mes(mes_txt)
+    h, m = map(int, hora_txt.split(":"))
+    return datetime(resolver_anio(mes, dia), mes, dia, h, m)
+
+
+def idioma_de(formato):
+    """'2D INGLÉS SUBTITULADO EN ESPAÑOL (VOSE)' -> 'VOSE'; el resto, 'Español'."""
+    formato = formato.upper()
+    return "VOSE" if "VOSE" in formato or "SUBTITULADO" in formato else "Español"
+
+
+def _abrir_cartelera(page):
+    respuesta = page.goto(URL, wait_until="domcontentloaded")
+    if (respuesta and respuesta.status == 403) or "Attention Required" in page.title():
+        raise FuenteNoDisponible(f"Yelmo: bloqueado por Cloudflare (HTTP {respuesta.status if respuesta else '?'}) en {URL}")
+    try:
+        page.locator("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll").click(timeout=5000)
+    except PlaywrightTimeoutError:
+        log.info("Yelmo: sin banner de cookies")
+    page.wait_for_function("document.querySelectorAll('#ddlDate option').length > 1")
+    return [v for v in page.locator("#ddlDate option").evaluate_all("os => os.map(o => o.value)") if v != "0"][:DIAS]
+
+
+def _leer_pelicula(session, peli, valor, cine, peliculas, contadores):
+    titulo = peli.locator("header h3 a").first
+    if not titulo.count():
+        log.warning("%s: película sin título el %s", cine, valor)
+        contadores["descartado"] += 1
+        return
+    titulo_raw = titulo.inner_text().strip()
+    if titulo_raw not in peliculas:  # la misma película sale en varios días: se resuelve una vez
+        peliculas[titulo_raw] = resolver_pelicula(session, titulo_raw, cine)
+    pelicula_id, es_especial = peliculas[titulo_raw]
+    if pelicula_id is None:
+        contadores["descartado"] += 1
+        return
+
+    for bloque in peli.locator(".horarioExp").all():
+        idioma = idioma_de(bloque.locator(".col3").inner_text())
+        for boton in bloque.locator("time.btn a").all():
+            hora_txt = boton.inner_text().strip()
+            try:
+                fecha_hora = parsear_fecha(valor, hora_txt)
+            except ValueError:
+                log.warning("Pase descartado de %r: %s %r", titulo_raw, valor, hora_txt, exc_info=True)
+                contadores["descartado"] += 1
+                continue
+            resultado = registrar_pase(
+                session,
+                cine=cine,
+                pelicula_id=pelicula_id,
+                fecha_hora=fecha_hora,
+                sala=SALA,
+                idioma=idioma,
+                precio=PRECIO,
+                link_compra=boton.get_attribute("href"),
+                es_evento_especial=es_especial,
+            )
+            contadores[resultado] += 1
+
 
 def scrapear_yelmo_ideal():
-    nombre_cine = "Yelmo Cines Ideal"
-    url = "https://www.yelmocines.es/cartelera/madrid"
-    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
+    cine = CINES[0]
+    contadores = {"creado": 0, "actualizado": 0, "descartado": 0}
+    peliculas = {}  # título de la web -> (pelicula_id, es_especial)
+    leidas = 0
 
-    with sync_playwright() as p:
-        # ⚠️ Mantenemos headless=False y channel="chrome" para evitar bloqueos agresivos de Yelmo
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        
-        try:
-            page.goto(url, timeout=90000, wait_until="domcontentloaded")
-            
-            # --- COOKIES ---
-            try:
-                page.locator("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll").click(timeout=5000)
-            except: pass
-            
-            # --- EL CENTINELA ---
-            print("   ⏳ Esperando a que Yelmo rellene las fechas...")
-            page.wait_for_function(
-                "document.querySelectorAll('#ddlDate option').length > 1", 
-                timeout=20000
-            )
-            
-            valores_fechas = page.evaluate("""
-                () => {
-                    const options = document.querySelectorAll('#ddlDate option');
-                    return Array.from(options).map(o => o.value).filter(v => v != '0');
-                }
-            """)
-            valores_fechas = valores_fechas[:7] # Próximos 7 días
-            print(f"   📅 Fechas detectadas: {len(valores_fechas)}")
+    with abrir_pagina(navegacion_ms=90_000) as page, Session(engine) as session:
+        fechas = _abrir_cartelera(page)
+        log.info("%s: %d fechas a leer", cine, len(fechas))
+        for valor in fechas:
+            texto = page.locator(f"#ddlDate option[value='{valor}']").inner_text().strip()
+            page.select_option("#ddlDate", value=valor, force=True)
+            # El cambio pinta la cartelera y luego actualiza la etiqueta del select, en el mismo evento
+            page.locator("#uniform-ddlDate span", has_text=re.compile(rf"^{re.escape(texto)}$")).wait_for()
 
-        except Exception as e:
-            print(f"   ❌ Error inicializando Yelmo: {e}")
-            browser.close()
-            return
-
-        nuevos_pases = 0
-
-        with Session(engine) as session:
-            for valor_fecha in valores_fechas:
-                print(f"   👉 Procesando: {valor_fecha}")
-                
+            contenedor = page.locator('div[data-cinema="ideal"]')
+            if not contenedor.count():
+                log.info("%s: sin cartelera el %s", cine, valor)
+                continue
+            contenedor.first.evaluate("e => e.style.display = 'block'")
+            for peli in contenedor.first.locator("article.now__movie").all():
+                leidas += 1
                 try:
-                    # 1. CAMBIAR LA FECHA
-                    page.select_option("#ddlDate", value=valor_fecha, force=True)
-                    try:
-                        page.wait_for_selector("#preloadCartelera", state="visible", timeout=1000)
-                        page.wait_for_selector("#preloadCartelera", state="hidden", timeout=10000)
-                    except:
-                        time.sleep(1.5)
+                    _leer_pelicula(session, peli, valor, cine, peliculas, contadores)
+                except PlaywrightError:
+                    log.warning("Película descartada en %s el %s", cine, valor, exc_info=True)
+                    contadores["descartado"] += 1
 
-                    # 2. SELECCIONAR EL CINE IDEAL
-                    contenedor_ideal = page.locator('div[data-cinema="ideal"]')
-                    if contenedor_ideal.count():
-                        page.evaluate("document.querySelector('div[data-cinema=\"ideal\"]').style.display = 'block'")
-                    else:
-                        continue
+        if not leidas:
+            raise FuenteNoDisponible(f"{URL}: no hay películas de {cine} en {len(fechas)} fechas")
+        session.commit()
+    log.info("%s: %s", cine, contadores)
 
-                    # 3. EXTRAER PELÍCULAS
-                    peliculas = contenedor_ideal.locator("article.now__movie").all()
-                    
-                    for peli in peliculas:
-                        try:
-                            # TÍTULO BASE
-                            titulo_elem = peli.locator("header h3 a").first
-                            if not titulo_elem.count(): continue
-                            raw_titulo = titulo_elem.inner_text().strip()
-                            
-                            # --- INTELIGENCIA 1:N ---
-                            # Obtenemos el ID usando el título base (limpio de etiquetas raras si las hubiera)
-                            pelicula_id, anio_peli = obtener_id_pelicula(raw_titulo, session)
-
-                            # --- ESPECIAL? ---
-                            es_especial = determinar_si_es_especial(raw_titulo, anio_peli)
-
-                            # 4. HORARIOS Y FORMATOS
-                            bloques_formato = peli.locator(".horarioExp").all()
-                            
-                            for bloque in bloques_formato:
-                                texto_formato = bloque.locator(".col3").inner_text().upper()
-                                idioma = "Español"
-                                
-                                # Yelmo suele poner el idioma en el bloque del formato
-                                if "VOSE" in texto_formato or "SUBTITULADO" in texto_formato:
-                                    idioma = "VOSE"
-                                
-                                botones = bloque.locator("time.btn a").all()
-                                
-                                for btn in botones:
-                                    hora_txt = btn.inner_text().strip()
-                                    link_compra = btn.get_attribute("href")
-                                    if ":" not in hora_txt: continue
-                                    
-                                    # PARSEO FECHA (Yelmo usa formato "04-febrero")
-                                    anio_actual = datetime.now().year
-                                    meses = {"enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6, "julio": 7, "agosto": 8, "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12}
-                                    
-                                    dia_str, mes_nombre = valor_fecha.split("-")
-                                    mes = meses.get(mes_nombre.lower(), datetime.now().month)
-                                    anio_pase = anio_actual
-                                    
-                                    # Ajuste si estamos en diciembre y el pase es en enero
-                                    if mes < datetime.now().month and datetime.now().month == 12:
-                                        anio_pase += 1
-                                    
-                                    h, m = map(int, hora_txt.split(":"))
-                                    fecha_final = datetime(anio_pase, mes, int(dia_str), h, m)
-
-                                    # GUARDAR PASE
-                                    existe = session.exec(select(Pase).where(
-                                        Pase.cine == nombre_cine,
-                                        Pase.pelicula_id == pelicula_id,
-                                        Pase.fecha_hora == fecha_final,
-                                        Pase.idioma == idioma
-                                    )).first()
-
-                                    if not existe:
-                                        nuevo = Pase(
-                                            cine=nombre_cine,
-                                            pelicula_id=pelicula_id,
-                                            fecha_hora=fecha_final,
-                                            sala="Yelmo Ideal",
-                                            precio="Consultar",
-                                            link_compra=link_compra,
-                                            idioma=idioma,
-                                            es_evento_especial=es_especial
-                                        )
-                                        session.add(nuevo)
-                                        nuevos_pases += 1
-
-                        except: continue
-
-                except Exception as e:
-                    print(f"   ⚠️ Error procesando día {valor_fecha}: {e}")
-                    continue
-            
-            session.commit()
-            print(f"🏁 FIN YELMO IDEAL. {nuevos_pases} pases guardados.")
-        
-        browser.close()
 
 if __name__ == "__main__":
     scrapear_yelmo_ideal()
