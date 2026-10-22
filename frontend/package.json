@@ -9,10 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
     "next": "16.1.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-leaflet": "^5.0.0",
     "react-lite-youtube-embed": "^3.3.3"
   },
   "devDependencies": {
