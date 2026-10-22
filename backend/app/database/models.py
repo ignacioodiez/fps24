@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Index, JSON, text, true  # <--- IMPORTANTE: Desde SQLAlchemy
+from sqlalchemy.dialects.postgresql import JSONB
 from typing import Optional, List
 from datetime import date, datetime, timezone
 
@@ -79,6 +80,8 @@ class Cine(SQLModel, table=True):
     telefono: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
+    # Precios (migración 0008): {"entrada", "entrada_laboral", "entrada_finde", "dia_espectador": {"dias", "precio"}, "notas"}
+    tarifas: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
 
 
 # 6. TABLA ALIAS: título de la web normalizado -> película (caché del emparejamiento).
