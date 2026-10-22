@@ -8,6 +8,7 @@ import Header from "@/components/Header";
 import DateSelector from "@/components/DateSelector";
 import MovieGrid from "@/components/MovieGrid";
 import FilterMenu from "@/components/FilterMenu"; 
+import SeccionDestacadas from "@/components/SeccionDestacadas";
 import { groupMovies, backdropDeHoy } from "@/lib/peliculas";
 
 
@@ -63,12 +64,8 @@ export default function Home() {
     return ["Todos", ...Array.from(uniqueCinemas).sort()];
   }, [futurePases, selectedDate]);
 
-  // RESETEAR CINE SI NO EXISTE ESE DÍA
-  useEffect(() => {
-    if (selectedCinema !== "Todos" && !availableCinemas.includes(selectedCinema)) {
-        setSelectedCinema("Todos");
-    }
-  }, [selectedDate, availableCinemas, selectedCinema]);
+  // CINE EFECTIVO: si el elegido no tiene sesiones ese día, se usa "Todos" (derivado, sin efecto)
+  const cineActivo = availableCinemas.includes(selectedCinema) ? selectedCinema : "Todos";
 
 
   // 🚨 3. LOGICA DE FILTRADO MAESTRA (AQUÍ ESTÁ LA MAGIA) 🚨
@@ -79,8 +76,8 @@ export default function Home() {
     data = data.filter((pase) => isSameDay(pase.fecha_hora, selectedDate));
     
     // B. Filtro por Cine
-    if (selectedCinema !== "Todos") {
-        data = data.filter((pase) => pase.cine === selectedCinema);
+    if (cineActivo !== "Todos") {
+        data = data.filter((pase) => pase.cine === cineActivo);
     }
 
     // C. 🆕 Filtro por Hora (Rango)
@@ -104,7 +101,7 @@ export default function Home() {
     }
 
     return data;
-  }, [futurePases, selectedDate, selectedCinema, timeRange, spectatorOnly, onlySpecials]);
+  }, [futurePases, selectedDate, cineActivo, timeRange, spectatorOnly, onlySpecials]);
 
 
   // 4. AGRUPACIÓN (Esto sigue igual, pero usa 'filteredPases' que ya viene limpito)
@@ -159,6 +156,9 @@ export default function Home() {
 
       <div className="px-4 md:px-8">
 
+      {/* Destacadas de la semana: se ocultan al buscar o filtrar por cine */}
+      <SeccionDestacadas oculta={Boolean(searchTerm) || cineActivo !== "Todos"} />
+
       {/* --- NUEVA BARRA DE CONTROLES --- */}
       <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mt-8 md:mt-10 max-w-9xl mx-auto w-full sticky top-0 z-40 py-4 bg-background border-b border-line">
         
@@ -194,7 +194,7 @@ export default function Home() {
             {/* 🆕 BOTÓN FILTRO (Menú Desplegable) */}
             <FilterMenu 
                 availableCinemas={availableCinemas}
-                selectedCinema={selectedCinema}
+                selectedCinema={cineActivo}
                 setSelectedCinema={setSelectedCinema}
                 timeRange={timeRange}
                 setTimeRange={setTimeRange}
@@ -235,7 +235,7 @@ export default function Home() {
         <MovieGrid 
             groupedMovies={groupedMovies}
             searchTerm={searchTerm}
-            selectedCinema={selectedCinema}
+            selectedCinema={cineActivo}
         />
       </div>
       </div>
