@@ -14,7 +14,7 @@ from app.scrapers.cines import (cine_estudio, cine_paz, cinesa, cineteca, dore, 
                                 mk2_palacio_hielo, renoir, sensacine, yelmo_ideal)
 from app.scrapers.comun import obtener_logger
 from app.services import tmdb
-from app.services.gestor_peliculas import limpiar_peliculas, reintentar_sin_tmdb
+from app.services.gestor_peliculas import limpiar_peliculas, refrescar_tmdb, reintentar_sin_tmdb
 from app.services.pases import ejecutar_scraper
 
 log = obtener_logger("app.scrapers.run_scrapers")
@@ -110,6 +110,7 @@ def lanzar_todo(solo: str = None):
                 with Session(engine) as session:
                     log.info("Limpieza de películas: %s", limpiar_peliculas(session))
                     log.info("Reintento TMDB: %s", reintentar_sin_tmdb(session))
+                    log.info("Refresco TMDB: %s", refrescar_tmdb(session))
                     session.commit()
             except Exception:
                 log.error("Falla el mantenimiento de películas", exc_info=True)

@@ -1,6 +1,6 @@
-"""Backfill de un solo uso (migración 0007): rellena votos, fecha_estreno, idioma_original, director e
-imdb_id y refresca nota_tmdb de las películas con tmdb_id, con una petición a TMDB por película.
-Idempotente: siempre sobrescribe esas columnas con lo que diga TMDB. Si TMDB falla, para (cortacircuito).
+"""Backfill de un solo uso (migración 0007): rellena votos, fecha_estreno, idioma_original, director,
+imdb_id y tmdb_actualizado_en y refresca nota_tmdb de las películas con tmdb_id, con una petición a TMDB
+por película. Idempotente: siempre sobrescribe esas columnas con lo que diga TMDB. Si TMDB falla, para.
 Uso: python -m app.rellenar_peliculas [--dry-run] [--limite N]"""
 import argparse
 import time
@@ -11,11 +11,10 @@ from app.database.engine import engine
 from app.database.models import Pelicula
 from app.scrapers.comun import obtener_logger
 from app.services import tmdb
-from app.services.gestor_peliculas import _campos_tmdb
+from app.services.gestor_peliculas import aplicar_refresco
 
 log = obtener_logger("app.scrapers.rellenar_peliculas")
 
-CAMPOS = ("nota_tmdb", "votos", "fecha_estreno", "idioma_original", "director", "imdb_id")
 PAUSA = 0.25  # segundos entre peticiones
 
 
@@ -33,16 +32,13 @@ def rellenar(session: Session, limite: int = None, dry_run: bool = False, pausa:
             log.warning("TMDB no disponible, se para en la película %s: %s", pelicula.id, e)
             resumen["interrumpido"] = True
             break
-        nuevos = {k: v for k, v in _campos_tmdb(datos, pelicula.titulo).items() if k in CAMPOS}
-        cambios = {k: v for k, v in nuevos.items() if getattr(pelicula, k) != v}
+        cambios = aplicar_refresco(pelicula, datos)
         resumen["revisadas"] += 1
-        resumen["con_estreno_es" if nuevos["fecha_estreno"] else "sin_estreno_es"] += 1
+        resumen["con_estreno_es" if pelicula.fecha_estreno else "sin_estreno_es"] += 1
         if cambios:
             resumen["cambiadas"] += 1
             log.info("%s %r: %s", pelicula.id, pelicula.titulo, cambios)
-        if cambios and not dry_run:
-            for k, v in cambios.items():
-                setattr(pelicula, k, v)
+        if not dry_run:
             session.add(pelicula)
             session.commit()
     if dry_run:

@@ -2,7 +2,7 @@
 Uso: docker compose exec api python tests/check_rellenar_peliculas.py
 Lo que toca la BD va en una transacción que acaba en rollback (los commits del backfill son savepoints)."""
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -13,7 +13,8 @@ from sqlmodel import Session, select
 from app import rellenar_peliculas
 from app.database.engine import engine
 from app.database.models import Pase, Pelicula
-from app.services import tmdb
+from app.services import gestor_peliculas as gestor, tmdb
+from app.services.cines import obtener_o_crear_cine
 from app.services.pases import registrar_pase
 
 
@@ -90,6 +91,40 @@ try:
             assert creado and creado >= antes.replace(microsecond=0), creado
             assert registrar_pase(session, **datos) == "actualizado" and pase.creado_en == creado
             print("OK: registrar_pase creado_en")
+
+            # --- refrescar_tmdb (mantenimiento de lanzar_todo) ---
+            tmdb._get = lambda ruta, **p: SIN_ES if ruta == "/movie/2" else CON_ES
+            tmdb.reiniciar_cortacircuito()
+            session.exec(delete(Pase))
+            session.exec(delete(Pelicula))
+            ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+            futuro, pasado = datetime(2099, 1, 1, 20), datetime(2000, 1, 1, 20)
+            casos = {  # titulo: (tmdb_id, tmdb_actualizado_en, fecha del pase, activo)
+                "nunca": (1, None, futuro, True), "hace 8 días": (2, ahora - timedelta(days=8), futuro, True),
+                "hace 3 días": (3, ahora - timedelta(days=3), futuro, True),
+                "solo pasado": (4, None, pasado, True), "inactivo": (5, None, futuro, False),
+                "sin tmdb": (None, None, futuro, True),
+            }
+            cine_id = obtener_o_crear_cine(session, "Cine de Prueba Rellenar").id
+            pelis = {}
+            for titulo, (tmdb_id, actualizado, fecha, activo) in casos.items():
+                pelis[titulo] = Pelicula(titulo=titulo, tmdb_id=tmdb_id, tmdb_actualizado_en=actualizado)
+                session.add(pelis[titulo])
+                session.flush()
+                session.add(Pase(pelicula_id=pelis[titulo].id, cine_id=cine_id, fecha_hora=fecha, activo=activo))
+            session.flush()
+
+            assert gestor.refrescar_tmdb(session, limite=1) == dict(refrescadas=1, cambiadas=1)
+            assert pelis["nunca"].votos == 3210 and pelis["nunca"].tmdb_actualizado_en >= ahora  # NULL primero
+            assert gestor.refrescar_tmdb(session) == dict(refrescadas=1, cambiadas=1)          # solo "hace 8 días"
+            assert pelis["hace 8 días"].fecha_estreno is None and pelis["hace 8 días"].votos == 3210
+            assert all(pelis[t].tmdb_actualizado_en in (None, casos[t][1])
+                       for t in ("hace 3 días", "solo pasado", "inactivo", "sin tmdb"))
+            assert gestor.refrescar_tmdb(session) == dict(refrescadas=0, cambiadas=0)          # ya al día
+            pelis["nunca"].tmdb_actualizado_en = None
+            tmdb._get = falla
+            assert gestor.refrescar_tmdb(session) == dict(refrescadas=0, cambiadas=0)          # cortacircuito
+            print("OK: refrescar_tmdb (activos futuros, 7 días, NULL primero, límite, cortacircuito)")
         externa.rollback()
 finally:
     tmdb._get = get_real

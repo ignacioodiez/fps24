@@ -2,13 +2,15 @@ import os
 import uvicorn
 from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 from typing import List, Optional
+from datetime import date
 from sqlalchemy.orm import selectinload
 
 from app.database.engine import get_session
 from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
+from app.services.destacadas import leer_destacadas
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -45,6 +47,31 @@ class PeliculaDetalle(PeliculaBase):
     imagenes_galeria: Optional[List[str]] = [] # <--- ¡ESTO FALTABA! 📸
     pases: List[PaseSalida] = []
 
+class PaseConId(PaseSalida):
+    id: int
+
+class Semana(SQLModel):
+    inicio: date
+    fin: date
+
+class Estreno(SQLModel):
+    pelicula: PeliculaConId
+    fecha_estreno: date
+    votos: int
+    pases: int
+    cines: int
+    primera_sesion: PaseConId
+
+class Especial(SQLModel):
+    pelicula: PeliculaConId
+    pase: PaseConId
+    nota: float
+
+class Destacadas(SQLModel):
+    semana: Semana
+    estrenos: List[Estreno]
+    especiales: List[Especial]
+
 # --- SEGURIDAD ---
 
 ACTUALIZAR_SECRET = os.getenv("ACTUALIZAR_SECRET")
@@ -75,6 +102,11 @@ def leer_detalle_pelicula(pelicula_id: int, session: Session = Depends(get_sessi
     # Lista nueva: reasignar peli.pases desvincularía en BD los pases excluidos
     pases = sorted((p for p in peli.pases if p.activo), key=lambda p: (p.fecha_hora, p.id))
     return {**peli.model_dump(), "pases": pases}
+
+# --- DESTACADAS DE LA SEMANA (estrenos y especiales) ---
+@app.get("/destacadas", response_model=Destacadas)
+def leer_destacadas_semana(session: Session = Depends(get_session)):
+    return leer_destacadas(session)
 
 # ---------------------------------------------
 

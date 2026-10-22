@@ -1,4 +1,4 @@
-"""datos para destacadas: pelicula (votos, estreno ES, idioma, director, imdb), cine (ficha) y pase.creado_en
+"""datos para destacadas: pelicula (votos, estreno ES, idioma, director, imdb, refresco TMDB), cine (ficha) y pase.creado_en
 
 Revision ID: 0007
 Revises: 0006
@@ -22,7 +22,7 @@ TEXTO = sqlmodel.sql.sqltypes.AutoString
 
 COLUMNAS = {
     'pelicula': [('votos', sa.Integer), ('fecha_estreno', sa.Date), ('idioma_original', TEXTO),
-                 ('director', TEXTO), ('imdb_id', TEXTO)],
+                 ('director', TEXTO), ('imdb_id', TEXTO), ('tmdb_actualizado_en', sa.DateTime)],
     'cine': [('direccion', TEXTO), ('web', TEXTO), ('zona', TEXTO), ('tipo', TEXTO), ('telefono', TEXTO),
              ('lat', sa.Float), ('lng', sa.Float)],
 }

@@ -4,7 +4,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple, Optional
 
-from sqlalchemy import delete, func, update
+from sqlalchemy import delete, func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
@@ -14,7 +14,7 @@ from app.database.models import Pase, Pelicula, PeliculaAlias
 from app.services import tmdb
 from app.services.cines import limpiar_espacios
 from app.services.correcciones_peliculas import CORRECCIONES, IGNORAR, SIN_TMDB
-from app.services.tiempo import hoy_madrid
+from app.services.tiempo import ahora_madrid, hoy_madrid
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,11 @@ UMBRAL_PARECIDO = 80
 
 # Sin resultados en TMDB: se vuelve a buscar pasado este tiempo (si sigue con pases activos).
 REINTENTO_SIN_RESULTADOS = timedelta(days=7)
+
+# Lo que cambia en TMDB con el tiempo (o falta en las anteriores a la migración 0007): se refresca
+# cada REFRESCO_TMDB en las películas con pases activos futuros.
+CAMPOS_REFRESCO = ("nota_tmdb", "votos", "fecha_estreno", "idioma_original", "director", "imdb_id")
+REFRESCO_TMDB = timedelta(days=7)
 
 
 def _palabras(lista):
@@ -238,6 +243,7 @@ def _campos_tmdb(datos: dict, titulo_web: str) -> dict:
         idioma_original=datos["idioma_original"],
         director=datos["director"],
         imdb_id=datos["imdb_id"],
+        tmdb_actualizado_en=_ahora_utc(),
     )
 
 
@@ -401,6 +407,38 @@ def reintentar_sin_tmdb(session: Session, limite: int = 50) -> dict:
         except tmdb.TmdbNoDisponible as e:
             logger.warning("Reintento TMDB interrumpido, TMDB no disponible: %s", e)
             break
+    session.flush()
+    return resumen
+
+
+def aplicar_refresco(pelicula: Pelicula, datos: dict) -> dict:
+    """Pone en la película los CAMPOS_REFRESCO de datos_por_id y la fecha de refresco. Devuelve lo que cambia."""
+    nuevos = {k: v for k, v in _campos_tmdb(datos, pelicula.titulo).items() if k in CAMPOS_REFRESCO}
+    cambios = {k: v for k, v in nuevos.items() if getattr(pelicula, k) != v}
+    for campo, valor in cambios.items():
+        setattr(pelicula, campo, valor)
+    pelicula.tmdb_actualizado_en = _ahora_utc()
+    return cambios
+
+
+def refrescar_tmdb(session: Session, limite: int = 50) -> dict:
+    """Refresca desde TMDB (nota, votos...) las películas con pases activos futuros y sin refrescar
+    en REFRESCO_TMDB, las más antiguas primero. Si TMDB no responde, para. Flush, no commit."""
+    pendientes = session.exec(select(Pelicula).where(
+        Pelicula.tmdb_id.is_not(None),
+        or_(Pelicula.tmdb_actualizado_en.is_(None), Pelicula.tmdb_actualizado_en < _ahora_utc() - REFRESCO_TMDB),
+        select(Pase.id).where(Pase.pelicula_id == Pelicula.id, Pase.activo, Pase.fecha_hora >= ahora_madrid()).exists(),
+    ).order_by(Pelicula.tmdb_actualizado_en.asc().nulls_first(), Pelicula.id).limit(limite)).all()
+    resumen = dict(refrescadas=0, cambiadas=0)
+    for pelicula in pendientes:
+        try:
+            datos = tmdb.datos_por_id(pelicula.tmdb_id)
+        except tmdb.TmdbNoDisponible as e:
+            logger.warning("Refresco TMDB interrumpido, TMDB no disponible: %s", e)
+            break
+        resumen["refrescadas"] += 1
+        resumen["cambiadas"] += bool(aplicar_refresco(pelicula, datos))
+        session.add(pelicula)
     session.flush()
     return resumen
 

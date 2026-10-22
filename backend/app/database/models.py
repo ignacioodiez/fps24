@@ -33,6 +33,7 @@ class Pelicula(PeliculaBase, table=True):
     idioma_original: Optional[str] = None
     director: Optional[str] = None
     imdb_id: Optional[str] = None
+    tmdb_actualizado_en: Optional[datetime] = None  # UTC; último refresco desde TMDB
     pases: List["Pase"] = Relationship(back_populates="pelicula")
 
 # 3. ESQUELETO DEL PASE
