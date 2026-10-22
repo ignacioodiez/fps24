@@ -1,8 +1,10 @@
 """Utilidades comunes de los scrapers del contrato (ver backend/SCRAPERS.md)."""
 import logging
 import sys
+import time
 from contextlib import contextmanager
 
+import requests
 from playwright.sync_api import sync_playwright
 
 from app.services.cines import normalizar
@@ -67,3 +69,25 @@ def abrir_pagina(timeout_ms=15_000, navegacion_ms=60_000, **opciones_contexto):
             yield page
         finally:
             browser.close()
+
+
+def obtener_json(url, timeout=15, pausa_reintento=2):
+    """GET con User-Agent de navegador -> JSON decodificado. Un reintento si falla; si vuelve a fallar
+    (red, timeout, 403/429/5xx u otro código de error, JSON inválido) lanza FuenteNoDisponible."""
+    for intento in (1, 2):
+        try:
+            respuesta = requests.get(url, timeout=timeout,
+                                     headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+            if respuesta.status_code in (403, 429):
+                motivo = f"HTTP {respuesta.status_code} (bloqueo o límite de peticiones)"
+            elif respuesta.status_code >= 400:
+                motivo = f"HTTP {respuesta.status_code}"
+            else:
+                return respuesta.json()
+        except requests.exceptions.JSONDecodeError:
+            motivo = "la respuesta no es JSON válido"
+        except requests.RequestException as e:
+            motivo = f"error de red: {e}"
+        if intento == 1:
+            time.sleep(pausa_reintento)
+    raise FuenteNoDisponible(f"{url}: {motivo}")
