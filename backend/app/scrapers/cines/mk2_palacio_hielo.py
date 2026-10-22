@@ -1,121 +1,104 @@
-import time
-from datetime import datetime, timedelta
-from playwright.sync_api import sync_playwright
-from sqlmodel import Session, select
+"""Lee: https://www.mk2palaciodehielo.es/es/cartelera (plantilla mk2, ver app/scrapers/plataforma_mk2.py); solo el día visible (hoy), aunque el HTML trae más.
+Extrae: en el .cines-<data-num> visible, un .horarios por película con el título en p.gibsonT b, .etiqueta-vose y las horas en .horas a.btn ("VOSE19:00").
+Se rompe si: cambian las clases de la plantilla; los botones con otra etiqueta ("Directo19:00", "TEATRO EN VIVO19:00") se descartan con aviso."""
+from datetime import datetime, time
+
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from sqlmodel import Session
 
 from app.database.engine import engine
-from app.database.models import Pase
-from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial # <--- EL CEREBRO
+from app.scrapers.comun import FuenteNoDisponible, abrir_pagina, obtener_logger
+from app.scrapers.plataforma_mk2 import leer_dias
+from app.services.gestor_peliculas import resolver_pelicula
+from app.services.pases import registrar_pase
+
+URL = "https://www.mk2palaciodehielo.es/es/cartelera"
+CINES = ["Mk2 Palacio de Hielo"]
+SALA = "Mk2 Palacio de Hielo"
+PRECIO = "Consultar"
+MAX_DIAS = 7
+
+log = obtener_logger(__name__)
+
+
+def parsear_hora(texto):
+    """'19:00' o 'VOSE19:00' -> (19, 0); con cualquier otra etiqueta, ValueError."""
+    h, m = texto.replace("VOSE", "").strip().split(":")
+    return int(h), int(m)
+
+
+def idioma_de(titulo_raw, tiene_etiqueta_vose):
+    """VOSE si el título lleva "(VOSE)" o la web pone .etiqueta-vose; si no, Español."""
+    return "VOSE" if "(VOSE)" in titulo_raw.upper() or tiene_etiqueta_vose else "Español"
+
+
+def _leer_pelicula(session, bloque, fecha, cine, contadores):
+    titulo = bloque.locator("p.gibsonT b").first
+    if not titulo.count():
+        log.warning("%s: película sin título el %s", cine, fecha)
+        contadores["descartado"] += 1
+        return
+    titulo_raw = titulo.inner_text().strip()
+    pelicula_id, es_especial = resolver_pelicula(session, titulo_raw, cine)
+    if pelicula_id is None:
+        contadores["descartado"] += 1
+        return
+
+    idioma = idioma_de(titulo_raw, bloque.locator(".etiqueta-vose").count() > 0)
+    for boton in bloque.locator(".horas a.btn").all():
+        hora_txt = boton.inner_text().strip()
+        try:
+            fecha_hora = datetime.combine(fecha, time(*parsear_hora(hora_txt)))
+        except ValueError:
+            log.warning("Pase descartado de %r: %s %r", titulo_raw, fecha, hora_txt)
+            contadores["descartado"] += 1
+            continue
+        resultado = registrar_pase(
+            session,
+            cine=cine,
+            pelicula_id=pelicula_id,
+            fecha_hora=fecha_hora,
+            sala=SALA,
+            idioma=idioma,
+            precio=PRECIO,
+            link_compra=boton.get_attribute("href"),
+            es_evento_especial=es_especial,
+        )
+        contadores[resultado] += 1
+
 
 def scrapear_mk2_palacio_hielo():
-    nombre_cine = "Mk2 Palacio de Hielo"
-    url = "https://www.mk2palaciodehielo.es/es/cartelera"
-    print(f"🎹 Entrando en {nombre_cine} (Modo Relacional)...")
+    cine = CINES[0]
+    contadores = {"creado": 0, "actualizado": 0, "descartado": 0}
+    leidas = 0
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        
+    with abrir_pagina() as page, Session(engine) as session:
+        page.goto(URL, wait_until="domcontentloaded")
         try:
-            page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            
-            # --- COOKIES ---
-            try:
-                page.get_by_text("ACEPTAR", exact=True).click(timeout=3000)
-            except: pass
+            page.get_by_text("ACEPTAR", exact=True).click(timeout=3000)
+        except PlaywrightTimeoutError:
+            log.info("%s: sin banner de cookies", cine)
+        page.locator(".contenedor_cines .horarios").first.wait_for(state="attached")
 
-            # Scroll para cargar (aunque ya no necesitamos imágenes, ayuda a cargar horarios)
-            page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-            time.sleep(1)
+        for data_num, fecha in leer_dias(page, cine, MAX_DIAS):
+            contenedor = page.locator(f".cines-{data_num}")
+            # shortcut: solo el día visible (hoy), como la versión anterior; para leer los 7 días, quitar este if
+            if not contenedor.is_visible():
+                continue
+            for bloque in contenedor.locator(".horarios").all():
+                leidas += 1
+                try:
+                    _leer_pelicula(session, bloque, fecha, cine, contadores)
+                except PlaywrightError:
+                    log.warning("Película descartada en %s el %s", cine, fecha, exc_info=True)
+                    contadores["descartado"] += 1
 
-        except Exception as e:
-            print(f"❌ Error cargando {nombre_cine}: {e}")
-            browser.close()
-            return
+        if not leidas:
+            raise FuenteNoDisponible(f"{URL}: no hay películas en el día visible")
+        session.commit()
+    log.info("%s: %s", cine, contadores)
 
-        nuevos_pases = 0
-        hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-
-        with Session(engine) as session:
-            # Iteramos los próximos 7 días
-            for i in range(7):
-                dia_target = hoy + timedelta(days=i)
-                selector_dia = f".cines-{i}"
-                
-                # Si no existe el contenedor de ese día, saltamos
-                if not page.locator(selector_dia).is_visible(): continue
-
-                print(f"   📅 {nombre_cine}: Procesando día {dia_target.strftime('%d/%m')}")
-
-                bloques_peli = page.locator(f"{selector_dia} .horarios").all()
-
-                for bloque in bloques_peli:
-                    try:
-                        # 1. TÍTULO
-                        titulo_elem = bloque.locator("p.gibsonT b").first
-                        if not titulo_elem.count(): continue
-                        
-                        raw_titulo = titulo_elem.inner_text().strip()
-                        titulo_limpio = raw_titulo
-                        idioma = "Español"
-
-                        # Detección VOSE y limpieza básica para el gestor
-                        if "(VOSE)" in raw_titulo.upper():
-                            idioma = "VOSE"
-                            titulo_limpio = raw_titulo.replace("(VOSE)", "").replace("(vose)", "").strip()
-                        
-                        # Doble chequeo de etiqueta visual
-                        if bloque.locator(".etiqueta-vose").count() > 0:
-                            idioma = "VOSE"
-
-                        # 2. INTELIGENCIA 1:N
-                        pelicula_id, anio_peli = obtener_id_pelicula(titulo_limpio, session)
-
-                        # 3. ESPECIAL? (Por año)
-                        es_especial = determinar_si_es_especial(titulo_limpio, anio_peli)
-
-                        # 4. HORARIOS
-                        botones = bloque.locator(".horas a.btn").all()
-                        
-                        for btn in botones:
-                            hora_txt = btn.inner_text().replace("VOSE", "").strip()
-                            link_compra = btn.get_attribute("href")
-                            
-                            if ":" not in hora_txt: continue
-                            
-                            try:
-                                h, m = map(int, hora_txt.split(":"))
-                                fecha_final = dia_target.replace(hour=h, minute=m)
-                                
-                                # GUARDAR PASE
-                                existe = session.exec(select(Pase).where(
-                                    Pase.cine == nombre_cine,
-                                    Pase.pelicula_id == pelicula_id,
-                                    Pase.fecha_hora == fecha_final
-                                )).first()
-
-                                if not existe:
-                                    nuevo = Pase(
-                                        cine=nombre_cine,
-                                        pelicula_id=pelicula_id,
-                                        fecha_hora=fecha_final,
-                                        sala=nombre_cine,
-                                        precio="Consultar",
-                                        link_compra=link_compra,
-                                        idioma=idioma,
-                                        es_evento_especial=es_especial
-                                    )
-                                    session.add(nuevo)
-                                    nuevos_pases += 1
-
-                            except: continue
-
-                    except: continue
-
-            session.commit()
-            print(f"🏁 FIN {nombre_cine}. {nuevos_pases} pases guardados.")
-        
-        browser.close()
 
 if __name__ == "__main__":
     scrapear_mk2_palacio_hielo()
