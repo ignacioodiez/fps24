@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from app.database.engine import engine
 from app.scrapers.cines import (cine_estudio, cine_paz, cinesa, cineteca, dore, embajadores, equis, golem,
-                                mk2_palacio_hielo, renoir, verdi, yelmo_ideal)
+                                mk2_palacio_hielo, renoir, sensacine, yelmo_ideal)
 from app.scrapers.comun import obtener_logger
 from app.services import tmdb
 from app.services.gestor_peliculas import limpiar_peliculas, reintentar_sin_tmdb
@@ -36,12 +36,12 @@ def _desde(modulo) -> Scraper:
 
 
 # En el orden de ejecución
-REGISTRO = [_desde(m) for m in (dore, cineteca, cine_estudio, equis, renoir, golem, embajadores,
+REGISTRO = [_desde(m) for m in (dore, cineteca, cine_estudio, equis, renoir, sensacine, golem, embajadores,
                                 cine_paz, mk2_palacio_hielo, yelmo_ideal, cinesa)]
 
 # Fuera de la ejecución normal (con el motivo); siguen funcionando con --solo
-DESHABILITADOS = {"verdi": "captcha de SiteGround desde IPs de Render; pendiente de nueva fuente"}
-_MODULOS_DESHABILITADOS = {"verdi": verdi}
+DESHABILITADOS = {}  # {"nombre": "motivo"}
+_MODULOS_DESHABILITADOS = {}  # {"nombre": módulo}
 
 
 def elegir(solo: str = None) -> list:

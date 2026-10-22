@@ -16,7 +16,7 @@ modulos = {p.stem for p in CARPETA.glob("*.py") if not p.stem.startswith("_")}
 nombres = [s.nombre for s in REGISTRO] + list(DESHABILITADOS)
 assert sorted(nombres) == sorted(modulos) and len(set(nombres)) == len(nombres), (nombres, modulos)
 assert all(DESHABILITADOS.values())  # cada deshabilitado con su motivo
-todos = REGISTRO + elegir(",".join(DESHABILITADOS))
+todos = REGISTRO + (elegir(",".join(DESHABILITADOS)) if DESHABILITADOS else [])
 cines = [c for s in todos for c in s.cines]
 assert all(c in CINES_CONOCIDOS for c in cines), [c for c in cines if c not in CINES_CONOCIDOS]
 assert sorted(cines) == sorted(CINES_CONOCIDOS), set(CINES_CONOCIDOS) ^ set(cines)  # y cada cine una sola vez
@@ -26,7 +26,8 @@ print("OK: registro")
 # --solo: orden del registro, espacios tolerados, error claro con los válidos
 assert elegir() == REGISTRO
 assert [s.nombre for s in elegir("equis, dore")] == ["dore", "equis"]
-assert [s.nombre for s in elegir("verdi,dore")] == ["dore", "verdi"]  # deshabilitado: solo a mano
+for nombre in DESHABILITADOS:  # deshabilitado: solo a mano, después de los del registro
+    assert [s.nombre for s in elegir(f"{nombre},dore")] == ["dore", nombre]
 for malo in ["dore,palacio_prensa", "", " , "]:
     try:
         elegir(malo)
