@@ -14,6 +14,7 @@ from app.scrapers.cines import (cine_estudio, cine_paz, cinesa, cineteca, dore, 
                                 mk2_palacio_hielo, renoir, sensacine, yelmo_ideal)
 from app.scrapers.comun import obtener_logger
 from app.services import tmdb
+from app.services.cines import sincronizar_cines
 from app.services.gestor_peliculas import limpiar_peliculas, refrescar_tmdb, reintentar_sin_tmdb
 from app.services.pases import ejecutar_scraper
 
@@ -92,6 +93,12 @@ def lanzar_todo(solo: str = None):
             return None
         tmdb.reiniciar_cortacircuito()
         peticiones_previas = tmdb.peticiones
+        try:
+            with Session(engine) as session:
+                log.info("Ficha de cines: %d actualizados", sincronizar_cines(session))
+                session.commit()
+        except Exception:
+            log.error("Falla la sincronización de la ficha de cines; se sigue con los scrapers", exc_info=True)
         resultados = {}
         try:
             for scraper in scrapers:

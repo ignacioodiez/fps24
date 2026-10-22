@@ -57,10 +57,11 @@ class Semana(SQLModel):
 class Estreno(SQLModel):
     pelicula: PeliculaConId
     fecha_estreno: date
-    votos: int
+    votos: Optional[int] = None
     pases: int
     cines: int
     primera_sesion: PaseConId
+    sin_nota: bool  # relleno por nº de cines: no llega a la nota/votos mínimos
 
 class Especial(SQLModel):
     pelicula: PeliculaConId
