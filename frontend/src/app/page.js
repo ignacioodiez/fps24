@@ -10,6 +10,7 @@ import MovieGrid from "@/components/MovieGrid";
 import FilterMenu from "@/components/FilterMenu"; 
 import SeccionDestacadas from "@/components/SeccionDestacadas";
 import { groupMovies, backdropDeHoy } from "@/lib/peliculas";
+import { guardarDia } from "@/lib/diaSeleccionado";
 
 
 export default function Home() {
@@ -63,6 +64,9 @@ export default function Home() {
     const uniqueCinemas = new Set(pasesDelDia.map(p => p.cine));
     return ["Todos", ...Array.from(uniqueCinemas).sort()];
   }, [futurePases, selectedDate]);
+
+  // La vista rápida (modal) muestra primero las sesiones del día elegido
+  useEffect(() => guardarDia(selectedDate), [selectedDate]);
 
   // CINE EFECTIVO: si el elegido no tiene sesiones ese día, se usa "Todos" (derivado, sin efecto)
   const cineActivo = availableCinemas.includes(selectedCinema) ? selectedCinema : "Todos";
@@ -234,6 +238,7 @@ export default function Home() {
       <div className="mt-8">
         <MovieGrid 
             groupedMovies={groupedMovies}
+            selectedDate={selectedDate}
             searchTerm={searchTerm}
             selectedCinema={cineActivo}
         />

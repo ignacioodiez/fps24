@@ -15,6 +15,7 @@ export const groupMovies = (pases, sortBy) =>
           backdrop: pase.pelicula?.backdrop_url,
           nota: pase.pelicula?.nota_tmdb || 0,
           anio: pase.pelicula?.anio || null,
+          fecha_estreno: pase.pelicula?.fecha_estreno || null, // "YYYY-MM-DD" (Madrid) o null
           es_especial: false,
           cines: {},
           total_sesiones: 0
