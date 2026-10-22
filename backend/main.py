@@ -58,7 +58,8 @@ def leer_pases(session: Session = Depends(get_session)):
     pases = session.exec(
         select(Pase)
         .options(selectinload(Pase.pelicula)) 
-        .order_by(Pase.fecha_hora)
+        .where(Pase.activo == True)
+        .order_by(Pase.fecha_hora, Pase.id)
     ).all()
     return pases
 
@@ -69,12 +70,9 @@ def leer_detalle_pelicula(pelicula_id: int, session: Session = Depends(get_sessi
     if not peli:
         raise HTTPException(status_code=404, detail="Película no encontrada")
     
-    # Ordenamos pases
-    peli.pases.sort(key=lambda x: x.fecha_hora)
-    
-    # FastAPI ahora verá que 'imagenes_galeria' está en PeliculaDetalle
-    # y dejará pasar los datos que vienen de la BD.
-    return peli
+    # Lista nueva: reasignar peli.pases desvincularía en BD los pases excluidos
+    pases = sorted((p for p in peli.pases if p.activo), key=lambda p: (p.fecha_hora, p.id))
+    return {**peli.model_dump(), "pases": pases}
 
 # ---------------------------------------------
 
