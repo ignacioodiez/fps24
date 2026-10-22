@@ -9,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # --- IMPORTAMOS LA BBDD Y LOS MODELOS ---
 from app.database.engine import engine
 from app.database.models import Pase, Pelicula # <--- AÑADIDO PELICULA
+from app.services import tmdb
+from app.services.gestor_peliculas import limpiar_peliculas, reintentar_sin_tmdb
 
 # --- IMPORTAMOS TUS AGENTES ---
 from app.scrapers.cines.dore import scrapear_dore
@@ -107,7 +109,17 @@ def lanzar_todo():
     try: scrapear_cinesa()          
     except Exception as e: print(f"❌ Error crítico en Cinesa: {e}")
 
-   
+    # --- MANTENIMIENTO: limpieza y reintento de TMDB ---
+    print("\n-----------------------------------------------------------")
+    try:
+        with Session(engine) as session:
+            print(f"🧹 Limpieza de películas: {limpiar_peliculas(session)}")
+            print(f"🔁 Reintento TMDB: {reintentar_sin_tmdb(session)}")
+            session.commit()
+    except Exception as e: print(f"❌ Error crítico en el mantenimiento: {e}")
+    finally: tmdb.reiniciar_cortacircuito()
+
+
     # FIN CRONÓMETRO
     fin = time.time()
     tiempo_total = fin - inicio

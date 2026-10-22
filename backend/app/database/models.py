@@ -25,6 +25,8 @@ class Pelicula(PeliculaBase, table=True):
                             postgresql_where=text("tmdb_id IS NOT NULL")),)
     id: Optional[int] = Field(default=None, primary_key=True)
     imagenes_galeria: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    # Solo en la tabla, no en PeliculaBase: la API no cambia. UTC; None: no se reintenta TMDB.
+    tmdb_reintentar_en: Optional[datetime] = None
     pases: List["Pase"] = Relationship(back_populates="pelicula")
 
 # 3. ESQUELETO DEL PASE

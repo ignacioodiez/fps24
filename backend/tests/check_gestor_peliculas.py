@@ -5,11 +5,12 @@ Lo que toca la BD ocurre en una sesión que vacía pase y pelicula y termina en 
 import os
 import sys
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import delete, text
+from sqlalchemy import delete, text, update
 from sqlmodel import Session, select
 
 from app.database.engine import engine
@@ -18,6 +19,7 @@ from app.services import gestor_peliculas as gestor, tmdb
 from app.services.correcciones_peliculas import IGNORAR, SIN_TMDB
 from app.services.gestor_peliculas import (analizar_titulo, clave_titulo, elegir_candidato, es_especial,
                                            resolver_pelicula)
+from app.services.pases import registrar_pase
 from app.services.tiempo import hoy_madrid
 
 CINE = "Cine de Prueba Gestor"
@@ -257,7 +259,82 @@ try:
     with sesion_vacia() as session:
         p, _ = resolver(session, "Una película cualquiera")
         assert p.tmdb_id is None and session.get(PeliculaAlias, clave_titulo("Una película cualquiera")) is None
+        assert p.tmdb_reintentar_en <= gestor._ahora_utc()   # reintento en la siguiente ejecución
     print("OK: TMDB no disponible")
+
+    # Cortacircuito: tras el primer fallo de red no se vuelve a llamar a TMDB
+    peticiones_red = []
+
+    def red_caida(*args, **kwargs):
+        peticiones_red.append(args)
+        raise tmdb.requests.ConnectionError("simulado")
+
+    get_real, clave_real = tmdb.requests.get, tmdb.TMDB_API_KEY
+    tmdb.buscar, tmdb.requests.get, tmdb.TMDB_API_KEY = tmdb_real[0], red_caida, "falsa"
+    try:
+        with sesion_vacia() as session:
+            for titulo in ["Primera caída", "Segunda caída", "Tercera caída"]:
+                p, _ = resolver(session, titulo)
+                assert p.tmdb_id is None and p.tmdb_reintentar_en <= gestor._ahora_utc(), titulo
+            assert len(peticiones_red) == 1, peticiones_red
+    finally:
+        tmdb.requests.get, tmdb.TMDB_API_KEY = get_real, clave_real
+        tmdb.reiniciar_cortacircuito()
+    print("OK: cortacircuito")
+
+    # Reintento: rellena, fusiona sin duplicar pases, aplaza si no hay resultados y no toca eventos
+    def pase(session, pelicula, hora, sala="1"):
+        registrar_pase(session, cine=CINE, pelicula_id=pelicula.id, fecha_hora=datetime(ANIO + 1, 1, 1, hora),
+                       sala=sala, idioma="VOSE", precio=None, link_compra=None, es_evento_especial=False)
+
+    FALSO_BUSCAR[("pelicula tardia", "es-ES")] = [r(BASE + 40, "Película tardía", 2025)]
+    with sesion_vacia() as session:
+        tmdb.buscar = tmdb_caido
+        tardia, _ = resolver(session, "Película tardía")
+        sucia, _ = resolver(session, "Sucia")
+        tmdb.buscar = falso_buscar
+        nada, _ = resolver(session, "Nada de nada")
+        evento, _ = resolver(session, "MANON - BALLET LIVE ROH 26-27")
+        assert nada.tmdb_reintentar_en > gestor._ahora_utc() + timedelta(days=6) and evento.tmdb_reintentar_en is None
+        destino = Pelicula(titulo="Película tardía", tmdb_id=BASE + 40)
+        session.add(destino)
+        session.add(PeliculaAlias(titulo_norm="pelicula tardia vose", pelicula_id=tardia.id))
+        session.flush()
+        for pelicula in (tardia, sucia, nada, evento):
+            pase(session, pelicula, 18)
+        pase(session, tardia, 21)
+        pase(session, destino, 18)   # el mismo pase que el de tardia a las 18: no se duplica
+        nada.tmdb_reintentar_en = gestor._ahora_utc() - timedelta(minutes=1)
+        session.add(nada)
+        tardia_id = tardia.id
+
+        assert gestor.reintentar_sin_tmdb(session) == dict(rellenadas=1, fusionadas=1, sin_resultados=1)
+        assert session.get(Pelicula, tardia_id) is None
+        horas = sorted(p.fecha_hora.hour for p in session.exec(select(Pase).where(Pase.pelicula_id == destino.id)))
+        assert horas == [18, 21], horas
+        assert session.get(PeliculaAlias, "pelicula tardia vose").pelicula_id == destino.id
+        session.refresh(sucia)
+        assert (sucia.tmdb_id, sucia.tmdb_reintentar_en) == (BASE + 4, None), sucia
+        assert nada.tmdb_id is None and nada.tmdb_reintentar_en > gestor._ahora_utc() + timedelta(days=6)
+        llamadas.clear()
+        assert gestor.reintentar_sin_tmdb(session) == dict(rellenadas=0, fusionadas=0, sin_resultados=0)
+        assert not llamadas   # nada pendiente: ni el evento ni lo aplazado
+    print("OK: reintento sin TMDB")
+
+    # Limpieza: BONO (con sus pases) y películas sin pases; no las que tienen pases, aunque inactivos
+    with sesion_vacia() as session:
+        bono, huerfana, inactiva, normal = (Pelicula(titulo=t) for t in ["BONO 10 FILMOTECA", "Sin pases",
+                                                                          "Con pase inactivo", "Con pase"])
+        session.add_all([bono, huerfana, inactiva, normal])
+        session.flush()
+        for pelicula in (bono, inactiva, normal):
+            pase(session, pelicula, 18)
+        session.exec(update(Pase).where(Pase.pelicula_id == inactiva.id).values(activo=False))
+        ids = [p.id for p in (bono, huerfana, inactiva, normal)]
+        assert gestor.limpiar_peliculas(session) == dict(excluidas=1, pases_excluidos=1, sin_pases=1)
+        assert [session.exec(select(Pelicula.id).where(Pelicula.id == i)).first() for i in ids] == [None, None] + ids[2:]
+        assert not session.exec(select(Pase).where(Pase.pelicula_id == ids[0])).all()
+    print("OK: limpiar_peliculas")
 
     # Un error de BD sube: no se traga ni se confunde con "TMDB no disponible"
     def tmdb_con_error_bd(*args, **kwargs):

@@ -1,13 +1,16 @@
 import logging
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple, Optional
 
+from sqlalchemy import delete, func, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 from thefuzz import fuzz
 
-from app.database.models import Pelicula, PeliculaAlias
+from app.database.models import Pase, Pelicula, PeliculaAlias
 from app.services import tmdb
 from app.services.cines import limpiar_espacios
 from app.services.correcciones_peliculas import CORRECCIONES, IGNORAR, SIN_TMDB
@@ -53,6 +56,9 @@ ANTIGUEDAD_CLASICO = 3
 # palabras con fuzz.ratio >= UMBRAL_PARECIDO. Admite erratas ("PARDISO") pero no una palabra
 # distinta: con el ratio del título entero, "...INTERNACIONAL - AWFF 26" y "...NACIONAL..." dan 94.
 UMBRAL_PARECIDO = 80
+
+# Sin resultados en TMDB: se vuelve a buscar pasado este tiempo (si sigue con pases activos).
+REINTENTO_SIN_RESULTADOS = timedelta(days=7)
 
 
 def _palabras(lista):
@@ -213,12 +219,8 @@ def _titulo_a_guardar(datos: dict, titulo_web: str) -> str:
                 titulo_web)
 
 
-def _por_tmdb_id(session: Session, tmdb_id: int, titulo_web: str) -> Pelicula:
-    pelicula = session.exec(select(Pelicula).where(Pelicula.tmdb_id == tmdb_id)).first()
-    if pelicula:
-        return pelicula
-    datos = tmdb.datos_por_id(tmdb_id)
-    return _crear(session, Pelicula(
+def _campos_tmdb(datos: dict, titulo_web: str) -> dict:
+    return dict(
         titulo=_titulo_a_guardar(datos, titulo_web),
         titulo_original=datos["titulo_original"],
         tmdb_id=datos["tmdb_id"],
@@ -231,7 +233,14 @@ def _por_tmdb_id(session: Session, tmdb_id: int, titulo_web: str) -> Pelicula:
         duracion=datos["duracion"],
         youtube_id=datos["youtube_id"],
         imagenes_galeria=datos["imagenes_galeria"],
-    ))
+    )
+
+
+def _por_tmdb_id(session: Session, tmdb_id: int, titulo_web: str) -> Pelicula:
+    pelicula = session.exec(select(Pelicula).where(Pelicula.tmdb_id == tmdb_id)).first()
+    if pelicula:
+        return pelicula
+    return _crear(session, Pelicula(**_campos_tmdb(tmdb.datos_por_id(tmdb_id), titulo_web)))
 
 
 def _por_titulo_exacto(session: Session, t: Titulo, anio: int):
@@ -243,13 +252,18 @@ def _por_titulo_exacto(session: Session, t: Titulo, anio: int):
     return candidatas[0] if len(candidatas) == 1 else None
 
 
-def _sin_tmdb(session: Session, titulo: str, sinopsis: str = None) -> Pelicula:
-    """Película sin TMDB: reutiliza la que tenga el mismo título normalizado."""
+def _ahora_utc():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _sin_tmdb(session: Session, titulo: str, sinopsis: str = None, reintentar_en: datetime = None) -> Pelicula:
+    """Película sin TMDB: reutiliza la que tenga el mismo título normalizado (y su fecha de reintento).
+    reintentar_en None: no se vuelve a buscar en TMDB (eventos y correcciones SIN_TMDB)."""
     clave = clave_titulo(titulo)
     for pelicula in session.exec(select(Pelicula).where(Pelicula.tmdb_id.is_(None))).all():
         if clave_titulo(pelicula.titulo) == clave:
             return pelicula
-    return _crear(session, Pelicula(titulo=titulo, sinopsis=sinopsis))
+    return _crear(session, Pelicula(titulo=titulo, sinopsis=sinopsis, tmdb_reintentar_en=reintentar_en))
 
 
 _CORRECCIONES = {clave_titulo(k): v for k, v in CORRECCIONES.items()}
@@ -278,10 +292,10 @@ def _emparejar(session: Session, titulo_raw: str, cine: str, t: Titulo, anio: in
         if tmdb_id:
             return _por_tmdb_id(session, tmdb_id, titulo), True
         logger.warning("Sin TMDB: %r en %s; se guarda como %r", titulo_raw, cine, titulo)
-        return _sin_tmdb(session, titulo, "No encontrada en TMDB"), True
-    except tmdb.TmdbNoDisponible:
-        logger.warning("TMDB no disponible para %r en %s; se guarda sin TMDB", titulo_raw, cine, exc_info=True)
-        return _sin_tmdb(session, titulo, "No encontrada en TMDB"), False
+        return _sin_tmdb(session, titulo, "No encontrada en TMDB", _ahora_utc() + REINTENTO_SIN_RESULTADOS), True
+    except tmdb.TmdbNoDisponible as e:
+        logger.warning("TMDB no disponible para %r en %s; se guarda sin TMDB: %s", titulo_raw, cine, e)
+        return _sin_tmdb(session, titulo, "No encontrada en TMDB", _ahora_utc()), False
 
 
 def _guardar_alias(session: Session, clave: str, pelicula_id: int):
@@ -319,3 +333,81 @@ def resolver_pelicula(session: Session, titulo_raw: str, cine: str, anio_web: in
 
     especial = es_especial(titulo_raw, anio or pelicula.anio) or (t.doble and pelicula.tmdb_id is None)
     return pelicula.id, especial
+
+
+# --- MANTENIMIENTO (al final de cada ejecución) ---
+
+def fusionar_peliculas(session: Session, origen: Pelicula, destino: Pelicula):
+    """Pasa los pases y alias de origen a destino y borra origen. Los pases de origen que ya
+    existen en destino (mismo cine, fecha, idioma y sala) se borran. Hace flush, no commit."""
+    otro = aliased(Pase)
+    choca = select(otro.id).where(
+        otro.pelicula_id == destino.id, otro.cine_id == Pase.cine_id, otro.fecha_hora == Pase.fecha_hora,
+        otro.idioma.is_not_distinct_from(Pase.idioma),
+        func.coalesce(otro.sala, "") == func.coalesce(Pase.sala, "")).exists()
+    session.exec(delete(Pase).where(Pase.pelicula_id == origen.id, choca))
+    session.exec(update(Pase).where(Pase.pelicula_id == origen.id).values(pelicula_id=destino.id))
+    session.exec(update(PeliculaAlias).where(PeliculaAlias.pelicula_id == origen.id).values(pelicula_id=destino.id))
+    # Sentencia y no session.delete(): el ORM pondría a NULL la película de los pases ya cargados
+    session.exec(delete(Pelicula).where(Pelicula.id == origen.id))
+    session.flush()
+
+
+def reintentar_sin_tmdb(session: Session, limite: int = 50) -> dict:
+    """Vuelve a buscar en TMDB, por su título y sus alias, las películas sin TMDB con pases activos
+    y el reintento cumplido. Si encuentra, rellena sus datos o la fusiona con la que ya tiene ese
+    tmdb_id. Si TMDB no responde, para: el resto queda para la siguiente ejecución. Flush, no commit."""
+    ahora = _ahora_utc()
+    pendientes = session.exec(select(Pelicula).where(
+        Pelicula.tmdb_id.is_(None), Pelicula.tmdb_reintentar_en <= ahora,
+        select(Pase.id).where(Pase.pelicula_id == Pelicula.id, Pase.activo).exists(),
+    ).order_by(Pelicula.tmdb_reintentar_en).limit(limite)).all()
+    resumen = dict(rellenadas=0, fusionadas=0, sin_resultados=0)
+    for pelicula in pendientes:
+        alias = session.exec(select(PeliculaAlias.titulo_norm).where(PeliculaAlias.pelicula_id == pelicula.id)).all()
+        try:
+            tmdb_id = None
+            for titulo in dict.fromkeys([pelicula.titulo, *alias]):
+                t = analizar_titulo(titulo)
+                tmdb_id = _buscar_en_tmdb(t, t.anio, es_especial(titulo))
+                if tmdb_id:
+                    break
+            if not tmdb_id:
+                pelicula.tmdb_reintentar_en = ahora + REINTENTO_SIN_RESULTADOS
+                session.add(pelicula)
+                resumen["sin_resultados"] += 1
+                continue
+            destino = session.exec(select(Pelicula).where(Pelicula.tmdb_id == tmdb_id)).first()
+            if destino is None:
+                datos = tmdb.datos_por_id(tmdb_id)
+                try:
+                    with session.begin_nested():  # otra ejecución puede haber creado ya ese tmdb_id
+                        for campo, valor in _campos_tmdb(datos, pelicula.titulo).items():
+                            setattr(pelicula, campo, valor)
+                        pelicula.tmdb_reintentar_en = None
+                        session.add(pelicula)
+                    resumen["rellenadas"] += 1
+                    continue
+                except IntegrityError:
+                    destino = session.exec(select(Pelicula).where(Pelicula.tmdb_id == tmdb_id)).one()
+            logger.info("Reintento TMDB: %r se fusiona con %r (tmdb_id %s)", pelicula.titulo, destino.titulo, tmdb_id)
+            fusionar_peliculas(session, pelicula, destino)
+            resumen["fusionadas"] += 1
+        except tmdb.TmdbNoDisponible as e:
+            logger.warning("Reintento TMDB interrumpido, TMDB no disponible: %s", e)
+            break
+    session.flush()
+    return resumen
+
+
+def limpiar_peliculas(session: Session) -> dict:
+    """Borra las películas cuyo título encaja en EXCLUIDOS (con sus pases y, en cascada, sus alias)
+    y las que no tienen ningún pase, activo o no. Flush, no commit."""
+    excluidas = [id_ for id_, titulo in session.exec(select(Pelicula.id, Pelicula.titulo)).all()
+                 if _EXCLUIDOS.search(titulo or "")]
+    pases = session.exec(delete(Pase).where(Pase.pelicula_id.in_(excluidas))).rowcount
+    session.exec(delete(Pelicula).where(Pelicula.id.in_(excluidas)))
+    sin_pases = session.exec(delete(Pelicula).where(
+        ~select(Pase.id).where(Pase.pelicula_id == Pelicula.id).exists())).rowcount
+    session.flush()
+    return dict(excluidas=len(excluidas), pases_excluidos=pases, sin_pases=sin_pases)

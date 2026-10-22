@@ -14,7 +14,20 @@ class TmdbNoDisponible(Exception):
     """TMDB no responde, responde con error o falta la API key. No es lo mismo que "sin resultados"."""
 
 
+# Cortacircuito: tras el primer fallo no se llama más a TMDB hasta reiniciar_cortacircuito()
+# (al final de cada ejecución), para no esperar el timeout en cada película.
+_fallo = None
+
+
+def reiniciar_cortacircuito():
+    global _fallo
+    _fallo = None
+
+
 def _get(ruta: str, **params) -> dict:
+    global _fallo
+    if _fallo:
+        raise TmdbNoDisponible(f"cortacircuito abierto: {_fallo}")
     if not TMDB_API_KEY:
         raise TmdbNoDisponible("Falta TMDB_API_KEY")
     try:
@@ -22,7 +35,8 @@ def _get(ruta: str, **params) -> dict:
         res.raise_for_status()
         return res.json()
     except (requests.RequestException, ValueError) as e:  # ValueError: JSON roto
-        raise TmdbNoDisponible(f"{ruta}: {e}") from e
+        _fallo = f"{ruta}: {e}"
+        raise TmdbNoDisponible(_fallo) from e
 
 
 def buscar(consulta: str, idioma: str = "es-ES", anio: int = None) -> list:
