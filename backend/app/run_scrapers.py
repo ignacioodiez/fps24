@@ -36,20 +36,26 @@ def _desde(modulo) -> Scraper:
 
 
 # En el orden de ejecución
-REGISTRO = [_desde(m) for m in (dore, cineteca, cine_estudio, equis, renoir, verdi, golem, embajadores,
+REGISTRO = [_desde(m) for m in (dore, cineteca, cine_estudio, equis, renoir, golem, embajadores,
                                 cine_paz, mk2_palacio_hielo, yelmo_ideal, cinesa)]
+
+# Fuera de la ejecución normal (con el motivo); siguen funcionando con --solo
+DESHABILITADOS = {"verdi": "captcha de SiteGround desde IPs de Render; pendiente de nueva fuente"}
+_MODULOS_DESHABILITADOS = {"verdi": verdi}
 
 
 def elegir(solo: str = None) -> list:
-    """Scrapers de "dore,equis" en el orden del registro; todos si solo es None. ValueError si no existe."""
+    """Scrapers de "dore,equis" en el orden del registro (los deshabilitados al final, solo si se piden);
+    todos los del registro si solo es None. ValueError si no existe."""
     if solo is None:
         return REGISTRO
     nombres = {n.strip() for n in solo.split(",") if n.strip()}
-    desconocidos = nombres - {s.nombre for s in REGISTRO}
+    desconocidos = nombres - {s.nombre for s in REGISTRO} - DESHABILITADOS.keys()
     if desconocidos or not nombres:
         raise ValueError(f"Scraper desconocido: {', '.join(sorted(desconocidos)) or '(vacío)'}. "
-                         f"Válidos: {', '.join(s.nombre for s in REGISTRO)}")
-    return [s for s in REGISTRO if s.nombre in nombres]
+                         f"Válidos: {', '.join([s.nombre for s in REGISTRO] + list(DESHABILITADOS))}")
+    return ([s for s in REGISTRO if s.nombre in nombres]
+            + [_desde(_MODULOS_DESHABILITADOS[n]) for n in DESHABILITADOS if n in nombres])
 
 
 class _Candado:
@@ -116,6 +122,9 @@ def lanzar_todo(solo: str = None):
 
 def _imprimir_resumen(resultados: dict, peticiones_tmdb: int, segundos: float):
     print("\n===========================================================")
+    for nombre, motivo in DESHABILITADOS.items():
+        if nombre not in resultados:
+            print(f"{nombre:<18} DESHABILITADO: {motivo}")
     for nombre, r in resultados.items():
         print(f"{nombre:<18} {'OK' if r['ok'] else 'FALLO':<6} {r['segundos']:6.0f} s")
         for slug, c in r["cines"].items():
