@@ -11,6 +11,7 @@
   --primary-soft: #f1ebfe;
   --accent: #86e3b0;
   --accent-soft: #e6f8ee;
+  --estreno: #e5e7eb; /* gris claro: etiqueta de estreno */
 }
 
 @theme inline {
@@ -23,6 +24,7 @@
   --color-primary-soft: var(--primary-soft);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-estreno: var(--estreno);
   /* Fuentes: se cargan en layout.js (--font-text y --font-title) */
   --font-sans: var(--font-text);
   --font-display: var(--font-title);

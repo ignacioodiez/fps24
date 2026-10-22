@@ -20,7 +20,8 @@ export const metadata = {
   },
 };
 
-export default function RootLayout({ children }) {
+// modal: hueco paralelo (app/@modal) para la vista rápida de una película sobre la portada
+export default function RootLayout({ children, modal }) {
   return (
     <html lang="es" className={`${textFont.variable} ${displayFont.variable}`}>
       <head>
@@ -53,6 +54,7 @@ export default function RootLayout({ children }) {
         <main className="flex-grow">
             {children}
         </main>
+        {modal}
 
         {/* FOOTER: Siempre al final */}
         <Footer />

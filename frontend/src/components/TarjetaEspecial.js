@@ -21,15 +21,18 @@ function Entradas({ href, className }) {
 }
 
 // grande: imagen a sangre con el texto encima (la de mayor nota). Si no, compacta: miniatura a la izquierda y
-// solo fecha, título y cine. La tarjeta entera lleva al detalle (el enlace del título se estira por encima);
-// "Entradas" queda por encima del enlace.
+// solo fecha, título y cine. La tarjeta abre la vista rápida; el título, la página completa; "Entradas", la compra.
 export default function TarjetaEspecial({ especial, grande = false, amplia = false, className = "" }) {
   const { pelicula, pase, nota } = especial;
   const imagen = imagenDe(pelicula);
   const precio = pase.precio && pase.precio !== "Consultar" ? pase.precio : null;
   const idioma = pase.idioma && pase.idioma !== "Español" ? pase.idioma : null;
+  // Título: <a> normal (navegación completa) a la página entera. El resto de la tarjeta abre la vista rápida.
   const enlace = (
-    <Link href={`/pelicula/${pelicula.id}`} className="after:absolute after:inset-0">{pelicula.titulo}</Link>
+    <a href={`/pelicula/${pelicula.id}`} onClick={(e) => e.stopPropagation()} className="relative z-[2] hover:underline">{pelicula.titulo}</a>
+  );
+  const capa = (
+    <Link href={`/pelicula/${pelicula.id}`} scroll={false} aria-label={`Vista rápida: ${pelicula.titulo}`} className="absolute inset-0 z-[1]" />
   );
 
   if (grande) {
@@ -43,11 +46,12 @@ export default function TarjetaEspecial({ especial, grande = false, amplia = fal
           </span>
         )}
         <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/30 to-transparent" />
+        {capa}
         <p className="absolute top-3 left-3 bg-background text-primary text-sm md:text-base font-bold uppercase tracking-wide px-2.5 py-1 rounded-lg">
           {fechaDestacada(pase.fecha_hora)}
         </p>
         <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-          <h4 className="text-lg md:text-xl font-display font-bold leading-tight line-clamp-2 group-hover:underline" title={pelicula.titulo}>
+          <h4 className="text-lg md:text-xl font-display font-bold leading-tight line-clamp-2" title={pelicula.titulo}>
             {enlace}
             {pelicula.anio && <span className="font-sans font-normal text-xs text-white/70"> ({pelicula.anio})</span>}
           </h4>
@@ -74,6 +78,7 @@ export default function TarjetaEspecial({ especial, grande = false, amplia = fal
           <span className="font-display font-bold text-xl text-primary" aria-hidden="true">{pelicula.titulo?.[0]}</span>
         )}
       </div>
+      {capa}
       <div className="flex-1 min-w-0 px-2 py-1.5 flex flex-col justify-center gap-0.5">
         <div className="flex flex-wrap items-center justify-between gap-1">
           <p className="text-xs font-bold uppercase tracking-wide text-primary">{fechaDestacada(pase.fecha_hora)}</p>

@@ -62,3 +62,18 @@ export const isDiaEspectador = (cineNombre, fechaString) => {
   // Nota: Sala Equis, Cineteca y Doré no tienen día "fijo" o tienen precio único, así que devuelven false.
   return false;
 };
+// Sala a mostrar ("Sala 9") o null si no aporta nada: vacía o solo repite el nombre del cine
+// ("Cines Verdi" en Cines Verdi, "Cine Paz" en Cine MK2 Paz). "4" -> "Sala 4", "Renoir Princesa (Sala 07)" -> "Sala 7".
+const PALABRAS_VACIAS = new Set(["cine", "cines", "sala", "de", "del", "la", "el"]);
+const palabras = (texto) =>
+  cleanForSearch(texto).replace(/[^a-z0-9ñ]+/g, " ").split(" ").filter((p) => p && !PALABRAS_VACIAS.has(p));
+
+export const textoSala = (sala, cine) => {
+  if (!sala || !sala.trim()) return null;
+  const numerada = sala.match(/sala\s+0*(\d[^)]*)/i) || sala.trim().match(/^0*(\d.*)$/);
+  if (numerada) return `Sala ${numerada[1].trim()}`;
+  const deCine = new Set(palabras(cine || ""));
+  const propias = palabras(sala);
+  if (propias.every((p) => deCine.has(p))) return null;
+  return /^sala\b/i.test(sala.trim()) ? sala.trim() : `Sala ${sala.trim()}`;
+};

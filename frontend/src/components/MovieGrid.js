@@ -1,13 +1,45 @@
 import Link from "next/link";
-import { cleanCinemaName, extractTime, isDiaEspectador } from "@/utils/helpers";
+import { useRouter } from "next/navigation";
+import { cleanCinemaName } from "@/utils/helpers";
+import { SesionesCine } from "@/components/Sesiones";
+import { ChipDato } from "@/components/FichaPelicula";
 
 const PALETTE_AQUAMARINE = "#42E2B8";
 
 export default function MovieGrid({ 
   groupedMovies, 
   searchTerm, 
-  selectedCinema 
+  selectedCinema,
+  selectedDate
 }) {
+  const router = useRouter();
+
+  // Clic en la tarjeta: vista rápida (ruta interceptada, sin mover el scroll); Ctrl/Cmd o botón central: página
+  // completa en pestaña nueva. Los enlaces de dentro (título, horas, póster) gestionan su propio clic.
+  // Es un onClick en la tarjeta y no una capa absolute encima: la capa tapaba la lista de pases y la rueda del
+  // ratón desplazaba la página en vez de la lista.
+  const abrirPelicula = (e, id) => {
+    if (e.target.closest("a")) return;
+    const url = `/pelicula/${id}`;
+    if (e.ctrlKey || e.metaKey || e.button === 1) {
+      window.open(url, "_blank", "noopener");
+      return;
+    }
+    // Foco en el enlace del póster: al cerrar el modal vuelve ahí
+    e.currentTarget.querySelector("a[data-vista-rapida]")?.focus({ preventScroll: true });
+    router.push(url, { scroll: false });
+  };
+
+  // overscroll "contain" solo si la lista de pases desborda: en una lista corta bloquearía la rueda y la página
+  // no bajaría con el cursor encima. Se recalcula en cada render (cambio de día, filtros).
+  // shortcut: no se recalcula al redimensionar la ventana; si hiciera falta, un ResizeObserver.
+  const contenerScroll = (lista) => {
+    if (lista) lista.style.overscrollBehavior = lista.scrollHeight > lista.clientHeight ? "contain" : "";
+  };
+
+  // Día elegido como "YYYY-MM-DD" en hora local, para compararlo con fecha_estreno
+  const diaElegido = selectedDate ? selectedDate.toLocaleDateString("sv-SE") : null;
+
   if (groupedMovies.length === 0) {
     return (
       <div className="col-span-full text-center py-24 bg-surface rounded-3xl border border-line border-dashed max-w-9xl mx-auto">
@@ -26,15 +58,19 @@ export default function MovieGrid({
       {groupedMovies.map((movie, index) => (
         <div
           key={index}
+          onClick={(e) => abrirPelicula(e, movie.id)}
+          onAuxClick={(e) => e.button === 1 && abrirPelicula(e, movie.id)}
           className={`
-            bg-background rounded-3xl overflow-hidden border flex flex-col sm:flex-row 
+            relative cursor-pointer bg-background rounded-3xl overflow-hidden border flex flex-col sm:flex-row 
             h-auto sm:h-64 
             transition-colors group
             ${movie.es_especial ? "border-primary" : "border-line hover:border-muted"}
           `}
         >
           {/* POSTER */}
-          <Link href={`/pelicula/${movie.id}`} className="w-full sm:w-40 flex-shrink-0 relative h-64 sm:h-auto overflow-hidden bg-surface flex items-center justify-center cursor-pointer">
+          <div className="w-full sm:w-40 flex-shrink-0 relative h-64 sm:h-auto overflow-hidden bg-surface flex items-center justify-center">
+            {/* Enlace accesible (teclado, lector de pantalla) a la vista rápida; con el ratón vale toda la tarjeta */}
+            <Link href={`/pelicula/${movie.id}`} scroll={false} data-vista-rapida aria-label={`Vista rápida: ${movie.titulo}`} className="absolute inset-0" />
             {movie.poster ? (
               <img
                 src={movie.poster}
@@ -52,17 +88,25 @@ export default function MovieGrid({
                 {movie.nota.toFixed(1)}
               </div>
             )}
-          </Link>
+
+            {movie.fecha_estreno && movie.fecha_estreno === diaElegido && (
+              <div className="absolute bottom-2 left-2 bg-estreno text-foreground text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                Estreno
+              </div>
+            )}
+          </div>
 
           {/* INFO SECTION */}
-          <div className="flex-1 p-4 flex flex-col min-w-0 overflow-y-auto custom-scrollbar bg-background">
+          {/* Lista de pases con scroll propio; si desborda, al llegar al final no arrastra la página */}
+          <div ref={contenerScroll} className="flex-1 p-4 flex flex-col min-w-0 overflow-y-auto custom-scrollbar bg-background">
             
             <div className="mb-3 border-b border-line pb-2">
-              <Link href={`/pelicula/${movie.id}`}>
-                <h2 className="text-xl md:text-2xl font-display font-bold leading-tight text-foreground mb-1 truncate hover:text-primary transition-colors cursor-pointer" title={movie.titulo}>
+              {/* Título: <a> normal (navegación completa del documento, Next no la intercepta) a la página entera */}
+              <h2 className="text-xl md:text-2xl font-display font-bold leading-tight text-foreground mb-1 truncate" title={movie.titulo}>
+                <a href={`/pelicula/${movie.id}`} onClick={(e) => e.stopPropagation()} className="hover:text-primary transition-colors">
                   {movie.titulo}
-                </h2>
-              </Link>
+                </a>
+              </h2>
               
               <div className="flex flex-wrap items-center gap-2">
                 {movie.es_especial && (
@@ -70,73 +114,15 @@ export default function MovieGrid({
                     Especial
                   </span>
                 )}
-                {movie.anio && (
-                  <span className="text-muted text-xs bg-surface px-2 py-0.5 rounded-md border border-line">
-                    {movie.anio}
-                  </span>
-                )}
+                {movie.anio && <ChipDato>{movie.anio}</ChipDato>}
               </div>
             </div>
 
-            {/* CINEMAS & SESSIONS */}
+            {/* CINES Y SESIONES (mismo bloque que la vista rápida y la página completa) */}
             <div className="space-y-3">
-              {Object.entries(movie.cines).map(([cinemaName, sessions]) => {
-                
-                // --- 🧠 LOGIC CHANGE: Check discount on the Cinema Header instead of per session ---
-                // We take the first session date to determine if today is Spectator Day for this cinema
-                const firstSession = sessions[0]; 
-                const isPromoDay = isDiaEspectador(cinemaName, firstSession?.fecha_hora);
-
-                return (
-                  <div key={cinemaName} className="flex flex-col gap-1.5">
-                    
-                    {/* CINEMA HEADER CARD */}
-                    <div className={`
-                      flex items-center justify-between px-2.5 py-1.5 rounded-lg border w-fit
-                      ${isPromoDay 
-                        ? "bg-accent text-foreground border-accent" // ✨ TEAL STYLE
-                        : "bg-surface text-foreground border-line" // NORMAL STYLE
-                      }
-                    `}>
-                      <h3 className={`
-                        text-xs font-bold uppercase tracking-wide flex items-center gap-2
-                        ${isPromoDay ? "text-foreground" : "text-foreground"}
-                      `}>
-                        {cleanCinemaName(cinemaName)}
-                      </h3>
-
-                      {/* PROMO BADGE IN HEADER */}
-                      
-                    </div>
-                    
-                    {/* TIME BUTTONS */}
-                    <div className={`flex flex-wrap gap-2 `}>
-                      {sessions.map((session) => (
-                        <a
-                          key={session.id}
-                          href={session.link_compra}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`
-                            px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-2 border
-                            ${session.es_evento_especial 
-                              ? 'bg-primary-soft text-primary border-primary hover:bg-primary hover:text-white' 
-                              : 'bg-background text-foreground border-line hover:border-primary hover:text-primary' // Standard gray style
-                            }
-                          `}
-                        >
-                          <span className="text-sm">{extractTime(session.fecha_hora)}</span>
-                          
-                          {/* We only keep the VO tag, price tag removed as header implies discount */}
-                          {session.idioma === 'VOSE' && (
-                            <span className="text-[9px] bg-surface px-1 rounded font-medium text-muted border border-line">VO</span>
-                          )}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+              {Object.entries(movie.cines).map(([cinemaName, sessions]) => (
+                <SesionesCine key={cinemaName} cine={cinemaName} pases={sessions} />
+              ))}
             </div>
 
           </div>
