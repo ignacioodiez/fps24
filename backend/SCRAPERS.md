@@ -22,7 +22,7 @@ La plantilla completa está en `app/scrapers/_plantilla.py`: no se registra ni s
    - `hoy_madrid()` / `ahora_madrid()` cuando haga falta "hoy". Nunca `datetime.now()` suelto: el contenedor está en UTC.
    - `fecha_hora` es hora de Madrid **sin zona** y sin segundos ni microsegundos sueltos.
 10. **Logging, no `print`**: `log = obtener_logger(__name__)` a nivel de módulo. Escribe en stdout con el formato `fecha NIVEL [modulo] mensaje`. Al final, una línea `log.info` con los contadores.
-11. **Una sesión por ejecución y `session.commit()` al final**. Ojo: `resolver_pelicula` hace commit cuando crea una película nueva, y eso confirma también los pases pendientes hasta ese momento.
+11. **Una sesión por ejecución y `session.commit()` al final**. `resolver_pelicula` solo hace flush (nunca commit): si el scraper falla antes del commit, no se guarda nada, ni pases ni películas nuevas. Sus errores de base de datos no se capturan: deja que suban.
 12. **Playwright con `abrir_pagina()`**: headless, user agent de escritorio, viewport 1920×1080, `es-ES` y zona `Europe/Madrid`. Ajusta por scraper `timeout_ms` (esperas y clics, 15 s por defecto) y `navegacion_ms` (`goto`, 60 s por defecto). Cualquier otra opción de `browser.new_context` se pasa como argumento con nombre y pisa el valor por defecto.
 13. **Sin archivos de depuración**: el scraper no escribe capturas, volcados de HTML ni otros archivos en el directorio de trabajo. Solo se permite si la variable de entorno `SCRAPERS_DEBUG=1` está activada de forma explícita, y en ese caso se escriben en `tempfile.gettempdir()`, nunca dentro del repo.
 14. **Cómo se ejecuta**: siempre a través del registro de scrapers y `ejecutar_scraper` (paso 2.6). El archivo no se llama directamente desde `run_scrapers.py`.

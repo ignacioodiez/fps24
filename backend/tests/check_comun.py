@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 from app.database.engine import engine
 from app.database.models import Pelicula
 from app.scrapers.comun import MESES, abrir_pagina, numero_mes, obtener_logger
-from app.services.gestor_peliculas import ANTIGUEDAD_CLASICO, es_especial, limpiar_titulo_avanzado, resolver_pelicula
+from app.services.gestor_peliculas import ANTIGUEDAD_CLASICO, analizar_titulo, es_especial, resolver_pelicula
 from app.services.tiempo import ahora_madrid, hoy_madrid, resolver_anio
 
 # --- tiempo ---
@@ -61,7 +61,7 @@ print("OK: comun")
 
 # --- regla de especial ---
 anio = hoy_madrid().year
-assert es_especial("Ciclo Bergman: Persona") is True                # BASURA_TITULOS
+assert es_especial("Ciclo Bergman: Persona") is True                # PROGRAMACION
 # Año reciente: que solo decida el título
 for titulo in ["Met Opera: La Traviata", "Ballet: Giselle", "Concierto: X", "Gala de ballet: Giselle",
                "Royal Ballet - El cascanueces", "Recital de piano", "El lago de los cisnes (en diferido)"]:
@@ -74,15 +74,16 @@ assert es_especial("Una película", anio - ANTIGUEDAD_CLASICO) is False      # h
 assert es_especial("Una película", None) is False
 
 # PALABRAS_ESPECIAL no limpia el título: "ópera" sigue ahí
-assert limpiar_titulo_avanzado("El fantasma de la ópera") == "EL FANTASMA DE LA ÓPERA"
-assert limpiar_titulo_avanzado("El fantasma de la ópera (VOSE)") == "EL FANTASMA DE LA ÓPERA"
+assert analizar_titulo("El fantasma de la ópera").limpio == "El fantasma de la ópera"
+assert analizar_titulo("El fantasma de la ópera (VOSE)").limpio == "El fantasma de la ópera"
 print("OK: regla de especial")
 
-# --- resolver_pelicula (con una película que ya existe: no llama a TMDB) ---
+# --- resolver_pelicula (con una película de TMDB que ya existe: no llama a TMDB) ---
 with Session(engine) as session:
     try:
-        peli = session.exec(select(Pelicula).where(Pelicula.titulo.not_ilike("%(%"))).first()
-        assert peli, "hace falta al menos una película en la BD"
+        peli = Pelicula(titulo="Película de Prueba Check", tmdb_id=990_000_999, anio=hoy_madrid().year)
+        session.add(peli)
+        session.flush()
         pelicula_id, especial = resolver_pelicula(session, peli.titulo, "Cine de Prueba")
         assert pelicula_id == peli.id
         assert especial == es_especial(peli.titulo, peli.anio)

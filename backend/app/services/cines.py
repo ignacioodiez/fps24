@@ -27,7 +27,6 @@ CINES_CONOCIDOS = {
     "Renoir Retiro": "renoir-retiro",
     "Sala Equis": "equis",
     "Yelmo Cines Ideal": "yelmo-ideal",
-    "Palacio de la Prensa": "palacio-prensa",
 }
 
 

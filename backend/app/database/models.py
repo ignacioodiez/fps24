@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, JSON, true  # <--- IMPORTANTE: Desde SQLAlchemy
+from sqlalchemy import Column, Index, JSON, text, true  # <--- IMPORTANTE: Desde SQLAlchemy
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # 1. ESQUELETO DE LA PELÍCULA
@@ -21,6 +21,8 @@ class PeliculaBase(SQLModel):
 
 # 2. TABLA PELÍCULA
 class Pelicula(PeliculaBase, table=True):
+    __table_args__ = (Index("ix_pelicula_tmdb_id_unico", "tmdb_id", unique=True,
+                            postgresql_where=text("tmdb_id IS NOT NULL")),)
     id: Optional[int] = Field(default=None, primary_key=True)
     imagenes_galeria: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     pases: List["Pase"] = Relationship(back_populates="pelicula")
@@ -50,3 +52,12 @@ class Cine(SQLModel, table=True):
     slug: str = Field(unique=True, index=True)
     nombre: str
     ultima_ejecucion_ok: Optional[datetime] = None
+
+
+# 6. TABLA ALIAS: título de la web normalizado -> película (caché del emparejamiento).
+# Las correcciones manuales no van aquí: están en app/services/correcciones_peliculas.py.
+class PeliculaAlias(SQLModel, table=True):
+    __tablename__ = "pelicula_alias"
+    titulo_norm: str = Field(primary_key=True)
+    pelicula_id: int = Field(foreign_key="pelicula.id", index=True, ondelete="CASCADE")
+    creado_en: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))  # UTC

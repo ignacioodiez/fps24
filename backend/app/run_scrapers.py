@@ -24,7 +24,6 @@ from app.scrapers.cines.golem import scrapear_golem
 # CORREGIDO: yelmo_ideal en vez de yelmo
 from app.scrapers.cines.yelmo_ideal import scrapear_yelmo_ideal 
 from app.scrapers.cines.cinesa import scrapear_cinesa
-from app.scrapers.cines.palacio_prensa import scrapear_palacio_prensa
 
 def limpiar_base_datos():
     print("🧹 LIMPIEZA TOTAL: Borrando datos antiguos...")
