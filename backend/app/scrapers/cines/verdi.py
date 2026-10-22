@@ -1,11 +1,11 @@
 import time
 from datetime import datetime
 from playwright.sync_api import sync_playwright
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.database.engine import engine
-from app.database.models import Pase
 from app.services.gestor_peliculas import obtener_id_pelicula, determinar_si_es_especial
+from app.services.pases import registrar_pase
 
 def scrapear_verdi():
     # Target official Verdi website instead of FilmAffinity
@@ -48,7 +48,7 @@ def scrapear_verdi():
         articles = page.locator(".collection article").all()
         print(f"  🔎 Found {len(articles)} movies.")
         
-        nuevos_pases = 0
+        contadores = {"creado": 0, "actualizado": 0}
 
         with Session(engine) as session:
             for idx, article in enumerate(articles):
@@ -119,27 +119,18 @@ def scrapear_verdi():
                                 fecha_completa_str = f"{fecha_str} {hora_txt}"
                                 fecha_final = datetime.strptime(fecha_completa_str, "%Y-%m-%d %H:%M")
                                 
-                                # Check if showing already exists in DB
-                                existe = session.exec(select(Pase).where(
-                                    Pase.cine == "Cines Verdi",
-                                    Pase.pelicula_id == pelicula_id,
-                                    Pase.fecha_hora == fecha_final,
-                                    Pase.idioma == idioma
-                                )).first()
-                                
-                                if not existe:
-                                    nuevo = Pase(
-                                        cine="Cines Verdi",
-                                        pelicula_id=pelicula_id,
-                                        fecha_hora=fecha_final,
-                                        sala="Cines Verdi",
-                                        precio="Consultar",
-                                        link_compra=link_compra,
-                                        idioma=idioma,
-                                        es_evento_especial=es_especial 
-                                    )
-                                    session.add(nuevo)
-                                    nuevos_pases += 1
+                                resultado = registrar_pase(
+                                    session,
+                                    cine="Cines Verdi",
+                                    pelicula_id=pelicula_id,
+                                    fecha_hora=fecha_final,
+                                    sala="Cines Verdi",
+                                    idioma=idioma,
+                                    precio="Consultar",
+                                    link_compra=link_compra,
+                                    es_evento_especial=es_especial
+                                )
+                                contadores[resultado] += 1
 
                             except ValueError as ve:
                                 print(f"  ⚠️ Date parsing error for {fecha_completa_str}: {ve}")
@@ -151,7 +142,7 @@ def scrapear_verdi():
                     continue
 
             session.commit()
-            print(f"🏁 FINISH VERDI. {nuevos_pases} showings saved.")
+            print(f"🏁 FINISH VERDI. {contadores['creado']} showings created, {contadores['actualizado']} updated.")
         
         browser.close()
 
