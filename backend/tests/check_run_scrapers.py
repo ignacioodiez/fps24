@@ -6,24 +6,27 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import run_scrapers
-from app.run_scrapers import REGISTRO, elegir
+from app.run_scrapers import DESHABILITADOS, REGISTRO, elegir
 from app.services.cines import CINES_CONOCIDOS
 
 CARPETA = Path(__file__).resolve().parent.parent / "app" / "scrapers" / "cines"
 
-# El registro cubre todos los módulos de scrapers, sin repetir, y sus cines son conocidos
+# Registro + deshabilitados cubren todos los módulos de scrapers, sin repetir, y sus cines son conocidos
 modulos = {p.stem for p in CARPETA.glob("*.py") if not p.stem.startswith("_")}
-nombres = [s.nombre for s in REGISTRO]
+nombres = [s.nombre for s in REGISTRO] + list(DESHABILITADOS)
 assert sorted(nombres) == sorted(modulos) and len(set(nombres)) == len(nombres), (nombres, modulos)
-cines = [c for s in REGISTRO for c in s.cines]
+assert all(DESHABILITADOS.values())  # cada deshabilitado con su motivo
+todos = REGISTRO + elegir(",".join(DESHABILITADOS))
+cines = [c for s in todos for c in s.cines]
 assert all(c in CINES_CONOCIDOS for c in cines), [c for c in cines if c not in CINES_CONOCIDOS]
 assert sorted(cines) == sorted(CINES_CONOCIDOS), set(CINES_CONOCIDOS) ^ set(cines)  # y cada cine una sola vez
-assert all(s.funcion.__name__ == f"scrapear_{s.nombre}" for s in REGISTRO)
+assert all(s.funcion.__name__ == f"scrapear_{s.nombre}" for s in todos)
 print("OK: registro")
 
 # --solo: orden del registro, espacios tolerados, error claro con los válidos
 assert elegir() == REGISTRO
 assert [s.nombre for s in elegir("equis, dore")] == ["dore", "equis"]
+assert [s.nombre for s in elegir("verdi,dore")] == ["dore", "verdi"]  # deshabilitado: solo a mano
 for malo in ["dore,palacio_prensa", "", " , "]:
     try:
         elegir(malo)

@@ -77,8 +77,10 @@ def _leer_pases(bloque, titulo_raw, contadores):
 
 def _leer_ficha(session, page, link_ficha, cine, contadores):
     page.goto(link_ficha, wait_until="domcontentloaded")
-    page.wait_for_selector("h2.title")
-    titulo_raw = page.locator("h2.title").first.inner_text().strip()
+    # En Render el primer h2.title (el de la ficha) no cuenta como visible: basta con que esté en el DOM
+    titulo = page.locator("h2.title").first
+    titulo.wait_for(state="attached")
+    titulo_raw = " ".join(titulo.text_content().split())
 
     bloque = page.locator(".sb-sessions__items")
     if not bloque.count():
