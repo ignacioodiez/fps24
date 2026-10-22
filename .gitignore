@@ -24,4 +24,4 @@ frontend/.env.local
 frontend/.env
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
+yarn-error.log*capturas/
