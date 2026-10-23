@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 // Secciones de la barra: añadir una es añadir una línea. "tambien" = otras rutas en las que la pestaña cuenta como activa.
 const SECCIONES = [
@@ -11,6 +12,8 @@ const SECCIONES = [
   { href: "/estrenos", etiqueta: "Estrenos" },
   { href: "/especiales", etiqueta: "Especiales" },
 ];
+// Solo con sesión. En el servidor y al hidratar AuthProvider está cargando: no se pinta (sin desajustes)
+const PERFIL = { href: "/perfil", etiqueta: "Mi perfil" };
 
 // "/" solo coincide exacta; el resto, la ruta y sus subrutas
 const dentro = (ruta, base) => (base === "/" ? ruta === "/" : ruta === base || ruta.startsWith(base + "/"));
@@ -21,19 +24,21 @@ const ENLACE = "flex items-center min-h-11 whitespace-nowrap px-3 md:px-4 text-x
 export default function NavSecciones() {
   const ruta = usePathname();
   const fila = useRef(null);
+  const { usuario, cargando } = useAuth();
+  const secciones = usuario && !cargando ? [...SECCIONES, PERFIL] : SECCIONES;
 
   // En móvil la fila se desliza: lleva la pestaña activa a la vista sin mover la página
   useEffect(() => {
     const activa = fila.current?.querySelector("[aria-current]");
     if (activa) fila.current.scrollLeft = activa.offsetLeft - 16; // offsetLeft relativo a la fila (relative)
-  }, [ruta]);
+  }, [ruta, secciones.length]);
 
   return (
     <nav aria-label="Secciones" className="w-full bg-surface border-y border-line">
       {/* px resta el padding del primer enlace para que el texto se alinee con el contenido */}
       <div ref={fila} className="relative max-w-9xl mx-auto overflow-x-auto px-1 md:px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <ul className="flex w-max">
-          {SECCIONES.map(({ href, etiqueta, tambien = [] }) => {
+          {secciones.map(({ href, etiqueta, tambien = [] }) => {
             const activa = [href, ...tambien].some((base) => dentro(ruta, base));
             return (
               <li key={href}>

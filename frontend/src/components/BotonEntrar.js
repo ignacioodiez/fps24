@@ -33,12 +33,14 @@ function errorOAuth() {
 
 // Botón "Iniciar sesión" de la cabecera: magic link por email (Supabase Auth). Sin variables de Supabase no se pinta.
 export default function BotonEntrar() {
-  const { usuario, cargando, entrar, entrarConGoogle, salir } = useAuth();
+  const { usuario, cargando, entrar, entrarConGoogle, salir, peticionLogin } = useAuth();
   const dialogo = useRef(null);
   const [estado, setEstado] = useState("inicio"); // inicio | enviando | enviado
   const [error, setError] = useState("");
   const [google, setGoogle] = useState("inicio"); // inicio | redirigiendo
   const [errorGoogle, setErrorGoogle] = useState("");
+  const [motivo, setMotivo] = useState(""); // por qué se abre el panel desde fuera ("Inicia sesión para guardar tu diario")
+  const atendida = useRef(peticionLogin); // la de antes de montar (otra página) no se atiende
 
   // Al volver de Google con error: se avisa en el panel y se limpia la URL sin recargar
   useEffect(() => {
@@ -48,6 +50,15 @@ export default function BotonEntrar() {
     setErrorGoogle(mensaje); // eslint-disable-line react-hooks/set-state-in-effect -- la URL solo se lee en el navegador
     dialogo.current?.showModal();
   }, [cargando, usuario]);
+
+  // abrirLogin() del contexto: abre el panel con su mensaje
+  useEffect(() => {
+    if (!peticionLogin || peticionLogin === atendida.current || usuario) return;
+    atendida.current = peticionLogin;
+    setMotivo(peticionLogin.mensaje); // eslint-disable-line react-hooks/set-state-in-effect -- la petición llega por el contexto
+    dialogo.current?.showModal();
+    dialogo.current?.querySelector("input")?.focus();
+  }, [peticionLogin, usuario]);
 
   if (!AUTH_DISPONIBLE || cargando) return null;
 
@@ -103,7 +114,7 @@ export default function BotonEntrar() {
       <dialog
         ref={dialogo}
         aria-labelledby="titulo-entrar"
-        onClose={() => { setEstado("inicio"); setError(""); setErrorGoogle(""); setGoogle("inicio"); }}
+        onClose={() => { setEstado("inicio"); setError(""); setErrorGoogle(""); setGoogle("inicio"); setMotivo(""); }}
         onClick={(e) => e.target === e.currentTarget && cerrar()}
         className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-line bg-background text-foreground p-0 backdrop:bg-black/40"
       >
@@ -112,6 +123,8 @@ export default function BotonEntrar() {
             <h2 id="titulo-entrar" className="text-xl font-display font-bold uppercase">Iniciar sesión</h2>
             <button type="button" onClick={cerrar} aria-label="Cerrar" className="text-muted hover:text-primary text-xl leading-none">×</button>
           </div>
+
+          {motivo && <p className="mt-2 text-sm font-semibold text-primary">{motivo}</p>}
 
           {estado === "enviado" ? (
             <p role="status" className="mt-4 text-foreground leading-relaxed">

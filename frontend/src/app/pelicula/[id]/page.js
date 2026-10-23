@@ -7,6 +7,7 @@ import 'react-lite-youtube-embed/dist/LiteYouTubeEmbed.css'; // <--- ESTILOS YOU
 // Mismos bloques que la vista rápida (modal) y la cartelera de la portada
 import { ChipDato, ChipsGeneros, LineaDireccion, NotaPelicula, duracionTexto } from "@/components/FichaPelicula";
 import { SelectorAgrupacion, SesionesPorDias, diaConSesiones, useAgrupacion } from "@/components/Sesiones";
+import BotonDiario from "@/components/BotonDiario";
 
 export default function MovieDetail({ params, searchParams }) {
   const { id } = use(params);
@@ -72,6 +73,8 @@ export default function MovieDetail({ params, searchParams }) {
                         </a>
                     )}
                 </div>
+
+                <BotonDiario pelicula={movie} dia={dia} className="mt-4" />
             </div>
       </div>
 
