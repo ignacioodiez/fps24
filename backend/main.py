@@ -13,6 +13,7 @@ from app.run_scrapers import lanzar_todo
 from app.services.destacadas import SEMANAS_MAX, leer_destacadas, leer_pagina, seleccionar_especiales, seleccionar_estrenos
 from app.services.cines import detalle_cine, listar_cines
 from app.auth import Usuario, usuario_actual
+from app.diario import router as diario_router
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -27,6 +28,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Diario del usuario (/diario...) y GET /pelicula/{id}/cines
+app.include_router(diario_router)
 
 # --- ⚡ MODELOS DE RESPUESTA (AQUÍ ESTABA EL TAPÓN) ---
 
