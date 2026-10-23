@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { LocateFixed, X } from "lucide-react";
 import { ChipDato } from "@/components/FichaPelicula";
 
@@ -86,18 +87,19 @@ function ChipFiltro({ activo, onClick, verde = false, children }) {
   );
 }
 
-// Botón secundario de la portada ("Salas y precios")
-function Boton({ href, children, nueva = false }) {
+// Botón secundario de la portada ("Salas y precios"); interno: enlace de Next (página de un cine)
+const BOTON = "px-3 py-1.5 rounded-full border border-line bg-background text-foreground text-xs font-bold uppercase tracking-wide hover:border-primary hover:text-primary transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+export function Boton({ href, children, nueva = false, interno = false }) {
+  if (interno) return <Link href={href} className={BOTON}>{children}</Link>;
   return (
-    <a href={href} {...(nueva ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-       className="px-3 py-1.5 rounded-full border border-line bg-background text-foreground text-xs font-bold uppercase tracking-wide hover:border-primary hover:text-primary transition-colors">
+    <a href={href} {...(nueva ? { target: "_blank", rel: "noopener noreferrer" } : {})} className={BOTON}>
       {children}
     </a>
   );
 }
 
 // Precio de hoy destacado: en la tarjeta y en el popup del mapa
-function LineaHoy({ tarifas, hoy }) {
+export function LineaHoy({ tarifas, hoy }) {
   if (!tarifas) return <p className="text-sm text-muted">Consulta los precios en su web</p>;
   return hoy.tipo === "espectador" ? (
     <p className="px-3 py-2 rounded-lg bg-accent border border-accent text-sm font-bold text-foreground">
@@ -113,7 +115,7 @@ function LineaHoy({ tarifas, hoy }) {
   );
 }
 
-function BloquePrecio({ tarifas, hoy }) {
+export function BloquePrecio({ tarifas, hoy }) {
   if (!tarifas) return <LineaHoy tarifas={tarifas} hoy={hoy} />;
   const resumen = [
     tarifas.entrada != null && `Entrada ${euros(tarifas.entrada)}`,
@@ -141,7 +143,9 @@ function TarjetaCine({ cine, hoy, activo, distancia, onActivar }) {
           activo ? "border-primary ring-2 ring-primary" : "border-line"}`}>
       <div className="min-w-0">
         {distancia != null && <p className="mb-1 text-xs font-bold text-primary">a {km(distancia)}</p>}
-        <h3 className="text-lg font-display font-bold uppercase leading-tight text-foreground">{cine.nombre}</h3>
+        <h3 className="text-lg font-display font-bold uppercase leading-tight text-foreground">
+          <Link href={`/cines/${cine.slug}`} className="hover:text-primary transition-colors rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{cine.nombre}</Link>
+        </h3>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {cine.zona && <ChipDato>{cine.zona}</ChipDato>}
           {cine.tipo === "autor" && (
@@ -163,6 +167,7 @@ function TarjetaCine({ cine, hoy, activo, distancia, onActivar }) {
       <BloquePrecio tarifas={cine.tarifas} hoy={hoy} />
 
       <div className="mt-auto pt-1 flex flex-wrap gap-2">
+        <Boton href={`/cines/${cine.slug}`} interno>Ver cartelera →</Boton>
         {cine.web && <Boton href={cine.web} nueva>Web</Boton>}
         {cine.lat != null && cine.lng != null && (
           <Boton href={`https://www.google.com/maps/dir/?api=1&destination=${cine.lat},${cine.lng}`} nueva>Cómo llegar</Boton>
@@ -306,6 +311,7 @@ export default function SalasYPrecios({ cines, diaHoy }) {
                          <p className="text-sm text-foreground"><span className="font-bold">Hoy:</span> {plural(cine.sesiones_hoy, "sesión", "sesiones")}</p>
                          <LineaHoy tarifas={cine.tarifas} hoy={hoy} />
                          <div className="flex flex-wrap gap-2">
+                           <Boton href={`/cines/${cine.slug}`} interno>Ver cartelera →</Boton>
                            <Boton href={`https://www.google.com/maps/dir/?api=1&destination=${cine.lat},${cine.lng}`} nueva>Cómo llegar</Boton>
                            {cine.web && <Boton href={cine.web} nueva>Web</Boton>}
                          </div>

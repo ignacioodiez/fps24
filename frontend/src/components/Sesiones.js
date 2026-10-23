@@ -85,7 +85,7 @@ export function CabeceraCine({ nombre, fecha }) {
 // Chip de hora. Con link_compra es el botón de compra (pestaña nueva); sin él, apagado y no clicable.
 // conPrecio: el precio salvo "Consultar"; conSala: la sala ("Sala 9") si no repite el cine. La portada no usa ninguno.
 export function ChipHora({ pase, cine, conPrecio = false, conSala = false }) {
-  const hora = extractTime(pase.fecha_hora);
+  const hora = pase.hora ?? extractTime(pase.fecha_hora); // hora: "HH:MM" ya formateada (/cines/{slug}, sin depender del locale)
   const precio = conPrecio && pase.precio && pase.precio !== "Consultar" ? pase.precio : null;
   const sala = conSala ? textoSala(pase.sala, cine) : null;
   const contenido = (
