@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans as TextFont, Nunito as DisplayFont } from "next/font/
 import "./globals.css";
 // 👇 IMPORTANTE: Importamos el componente Footer
 import Footer from "@/components/Footer"; 
+import AuthProvider from "@/components/AuthProvider";
 import Script from "next/script"; // 👈 NUEVO
 import { GA_TRACKING_ID } from "@/lib/gtag"; // 👈 NUEVO
 
@@ -50,11 +51,13 @@ export default function RootLayout({ children, modal }) {
       <body
         className="font-sans bg-background text-foreground antialiased flex flex-col min-h-screen"
       >
+        <AuthProvider>
         {/* MAIN: El contenido principal crece para empujar el footer */}
         <main className="flex-grow">
             {children}
         </main>
         {modal}
+        </AuthProvider>
 
         {/* FOOTER: Siempre al final */}
         <Footer />
