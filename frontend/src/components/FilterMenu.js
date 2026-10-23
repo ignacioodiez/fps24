@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { cleanCinemaName } from "@/utils/helpers";
-import * as gtag from "@/lib/gtag"; // 👈 AÑADE ESTO AL INICIO
 
 export default function FilterMenu({
   availableCinemas,
