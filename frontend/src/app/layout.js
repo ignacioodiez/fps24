@@ -4,8 +4,6 @@ import "./globals.css";
 // 👇 IMPORTANTE: Importamos el componente Footer
 import Footer from "@/components/Footer"; 
 import AuthProvider from "@/components/AuthProvider";
-import Script from "next/script"; // 👈 NUEVO
-import { GA_TRACKING_ID } from "@/lib/gtag"; // 👈 NUEVO
 
 
 // Si la nueva fuente no es variable, añade weight: ["400", "700", "900"]
@@ -25,29 +23,6 @@ export const metadata = {
 export default function RootLayout({ children, modal }) {
   return (
     <html lang="es" className={`${textFont.variable} ${displayFont.variable}`}>
-      <head>
-        <Script
-          strategy="afterInteractive"
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA_TRACKING_ID}`}
-        />
-        <Script
-          id="google-analytics"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', '${GA_TRACKING_ID}', {
-                page_path: window.location.pathname,
-              });
-            `,
-          }}
-        />
-      </head>
-      {/* 👆 FIN GOOGLE ANALYTICS */}
-
-
       <body
         className="font-sans bg-background text-foreground antialiased flex flex-col min-h-screen"
       >

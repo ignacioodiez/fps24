@@ -30,6 +30,11 @@ export default function Footer() {
                         Contacto
                     </a>
                 </li>
+                <li>
+                    <Link href="/privacidad" className="text-muted hover:text-primary transition-colors">
+                        Privacidad
+                    </Link>
+                </li>
                  {/* Aquí pondremos el Ko-fi luego */}
             </ul>
         </div>
@@ -51,10 +56,15 @@ export default function Footer() {
       </div>
       
       {/* COPYRIGHT */}
-      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-line flex flex-col md:flex-row justify-between items-center text-xs text-muted">
+      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-line flex flex-col md:flex-row md:flex-wrap justify-between items-center gap-2 text-center text-xs text-muted">
         <p>© {new Date().getFullYear()} FPS24. Todos los derechos reservados.</p>
         <p>Los pósters e imágenes son propiedad de sus distribuidoras.</p>
         <p>Las notas de las películas son asignadas por TMDB.</p>
+        <p>
+          Este producto usa la API de{" "}
+          <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" className="hover:text-primary underline">TMDB</a>{" "}
+          pero no está respaldado ni certificado por TMDB.
+        </p>
       </div>
     </footer>
   );

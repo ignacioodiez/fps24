@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 
@@ -15,7 +16,7 @@ function mensajeError(error) {
   return "No hemos podido enviar el enlace. Inténtalo de nuevo.";
 }
 
-// Botón "Entrar" de la cabecera: magic link por email (Supabase Auth). Sin variables de Supabase no se pinta.
+// Botón "Iniciar sesión" de la cabecera: magic link por email (Supabase Auth). Sin variables de Supabase no se pinta.
 export default function BotonEntrar() {
   const { usuario, cargando, entrar, salir } = useAuth();
   const dialogo = useRef(null);
@@ -30,7 +31,7 @@ export default function BotonEntrar() {
         <span className="text-sm font-bold text-foreground bg-background rounded-full px-3 py-2 truncate max-w-[10rem]" title={usuario.email}>
           {usuario.email?.split("@")[0]}
         </span>
-        <button type="button" onClick={salir} className={PILDORA}>Salir</button>
+        <button type="button" onClick={salir} className={PILDORA}>Cerrar sesión</button>
       </div>
     );
   }
@@ -58,7 +59,7 @@ export default function BotonEntrar() {
   return (
     <>
       <button type="button" onClick={abrir} aria-haspopup="dialog" className={PILDORA}>
-        Entrar
+        Iniciar sesión
       </button>
 
       {/* <dialog> nativo: Esc cierra, el foco queda dentro y vuelve al botón al cerrar */}
@@ -71,7 +72,7 @@ export default function BotonEntrar() {
       >
         <div className="p-6 text-left">
           <div className="flex items-start justify-between gap-4">
-            <h2 id="titulo-entrar" className="text-xl font-display font-bold uppercase">Entrar</h2>
+            <h2 id="titulo-entrar" className="text-xl font-display font-bold uppercase">Iniciar sesión</h2>
             <button type="button" onClick={cerrar} aria-label="Cerrar" className="text-muted hover:text-primary text-xl leading-none">×</button>
           </div>
 
@@ -81,7 +82,7 @@ export default function BotonEntrar() {
             </p>
           ) : (
             <form onSubmit={enviar} className="mt-4 space-y-3">
-              <p className="text-sm text-muted">Sin contraseñas: te mandamos un enlace para entrar.</p>
+              <p className="text-sm text-muted">Sin contraseñas: te mandamos un enlace para iniciar sesión.</p>
               <label htmlFor="email-entrar" className="block text-xs font-bold uppercase tracking-wider text-muted">Email</label>
               <input
                 id="email-entrar" name="email" type="email" required autoComplete="email"
@@ -93,6 +94,10 @@ export default function BotonEntrar() {
                       className="w-full px-4 py-2 rounded-full bg-primary text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60">
                 {estado === "enviando" ? "Enviando…" : "Enviarme el enlace"}
               </button>
+              <p className="text-xs text-muted text-center">
+                Al continuar aceptas la{" "}
+                <Link href="/privacidad" onClick={cerrar} className="underline hover:text-primary">política de privacidad</Link>
+              </p>
             </form>
           )}
         </div>
