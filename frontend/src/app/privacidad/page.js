@@ -47,6 +47,10 @@ export default function PrivacidadPage() {
             <p>Puedes usar la cartelera sin cuenta. Si decides entrar, guardamos:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Tu <strong className="text-foreground">email</strong>, para enviarte el enlace de acceso e identificar tu cuenta.</li>
+              <li>
+                Si inicias sesión con <strong className="text-foreground">Google</strong>, recibimos de tu cuenta de Google
+                solo tu email y tu nombre de perfil. Nada más: ni contactos, ni archivos, ni tu contraseña.
+              </li>
               <li>Próximamente, la lista de películas que marques como <strong className="text-foreground">&quot;quiero verla&quot;</strong>.</li>
             </ul>
           </Seccion>
@@ -68,6 +72,7 @@ export default function PrivacidadPage() {
             <p>Solo con los proveedores técnicos que hacen funcionar la web:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-foreground">Supabase</strong>: gestiona las cuentas.</li>
+              <li><strong className="text-foreground">Google</strong>: si eliges &quot;Continuar con Google&quot;, actúa como proveedor de inicio de sesión y nos confirma tu email y tu nombre.</li>
               <li><strong className="text-foreground">Resend</strong>: envía los correos con el enlace de acceso.</li>
               <li><strong className="text-foreground">Vercel</strong> y <strong className="text-foreground">Render</strong>: alojan la web.</li>
             </ul>
