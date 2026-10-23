@@ -1,7 +1,8 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, Index, JSON, text, true  # <--- IMPORTANTE: Desde SQLAlchemy
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, JSON, SmallInteger, Text, UniqueConstraint, false, func, text, true  # <--- IMPORTANTE: Desde SQLAlchemy
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from typing import Optional, List
+import uuid
 from datetime import date, datetime, timezone
 
 
@@ -91,3 +92,27 @@ class PeliculaAlias(SQLModel, table=True):
     titulo_norm: str = Field(primary_key=True)
     pelicula_id: int = Field(foreign_key="pelicula.id", index=True, ondelete="CASCADE")
     creado_en: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))  # UTC
+
+
+# 7. DIARIO (migración 0010): películas vistas en sala por cada usuario. Privado: siempre se filtra por user_id.
+class DiarioEntrada(SQLModel, table=True):
+    __tablename__ = "diario_entrada"
+    __table_args__ = (
+        UniqueConstraint("user_id", "pelicula_id", "fecha_vista", name="uq_diario_entrada_usuario_pelicula_fecha"),
+        CheckConstraint("nota BETWEEN 1 AND 10", name="ck_diario_entrada_nota"),
+        CheckConstraint("char_length(comentario) <= 2000", name="ck_diario_entrada_comentario"),
+        Index("ix_diario_entrada_usuario_fecha", "user_id", text("fecha_vista DESC")),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: uuid.UUID = Field(sa_column=Column(UUID(as_uuid=True), nullable=False))  # sub del JWT, sin FK
+    pelicula_id: int = Field(foreign_key="pelicula.id")
+    cine_id: Optional[int] = Field(default=None, foreign_key="cine.id", ondelete="SET NULL")
+    pase_id: Optional[int] = Field(default=None, foreign_key="pase.id", ondelete="SET NULL")
+    fecha_vista: date
+    nota: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))  # 1-10 = ½ a 5 estrellas
+    comentario: Optional[str] = Field(default=None, sa_column=Column(Text))
+    repeticion: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    pelicula: Pelicula = Relationship()
+    cine: Optional[Cine] = Relationship()
