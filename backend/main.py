@@ -4,14 +4,14 @@ from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header, Qu
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel, select
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy.orm import selectinload
 
 from app.database.engine import get_session
 from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
 from app.services.destacadas import SEMANAS_MAX, leer_destacadas, leer_pagina, seleccionar_especiales, seleccionar_estrenos
-from app.services.cines import listar_cines
+from app.services.cines import detalle_cine, listar_cines
 from app.auth import Usuario, usuario_actual
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
@@ -115,6 +115,34 @@ class CineSalida(SQLModel):
     sesiones_hoy: int  # pases activos de hoy (Madrid) desde ahora
     peliculas_hoy: int
 
+# /cines/{slug}: la ficha de /cines más sus sesiones de los próximos 7 días
+class SesionCine(SQLModel):
+    id: int
+    hora: str  # "HH:MM"
+    fecha_hora: datetime
+    link_compra: Optional[str] = None
+    idioma: Optional[str] = None
+    sala: Optional[str] = None
+    precio: Optional[str] = None
+    es_evento_especial: bool = False
+
+class PeliculaCine(SQLModel):
+    id: int
+    titulo: str
+    poster_url: Optional[str] = None
+    nota_tmdb: Optional[float] = None
+    votos: Optional[int] = None
+    director: Optional[str] = None
+    sesiones: List[SesionCine]
+
+class DiaCine(SQLModel):
+    fecha: date
+    peliculas: List[PeliculaCine]
+
+class CineDetalle(CineSalida):
+    dias: List[DiaCine]
+    solo_hoy: bool  # tiene sesiones hoy y ninguna desde mañana
+
 # --- SEGURIDAD ---
 
 ACTUALIZAR_SECRET = os.getenv("ACTUALIZAR_SECRET")
@@ -166,6 +194,13 @@ def leer_especiales(semana: int = Query(0, ge=0, le=SEMANAS_MAX), session: Sessi
 @app.get("/cines", response_model=List[CineSalida])
 def leer_cines(session: Session = Depends(get_session)):
     return listar_cines(session)
+
+@app.get("/cines/{slug}", response_model=CineDetalle)
+def leer_cine(slug: str, session: Session = Depends(get_session)):
+    cine = detalle_cine(session, slug)
+    if cine is None:
+        raise HTTPException(status_code=404, detail="Cine no encontrado")
+    return cine
 
 # --- USUARIO: quién soy (JWT de Supabase Auth en Authorization: Bearer) ---
 @app.get("/me")

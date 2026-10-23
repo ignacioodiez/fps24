@@ -4,6 +4,7 @@ import unicodedata
 from datetime import datetime, time, timedelta
 
 from sqlalchemy import and_, distinct, func
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.database.models import Cine, Pase
@@ -187,3 +188,42 @@ def listar_cines(session: Session, ahora: datetime = None) -> list:
         .order_by(Cine.zona.asc().nulls_last(), Cine.nombre)
     ).all()
     return [dict(cine.model_dump(), sesiones_hoy=sesiones, peliculas_hoy=peliculas) for cine, sesiones, peliculas in filas]
+
+
+DIAS_DETALLE = 7
+
+
+def detalle_cine(session: Session, slug: str, ahora: datetime = None):
+    """Ficha de /cines (la misma de listar_cines) más los próximos DIAS_DETALLE días desde hoy (Madrid) con sus
+    películas y sesiones activas, o None si el slug no existe. Las sesiones de hoy van desde las 00:00, también
+    las ya pasadas, como la ficha de película (SesionesPorDias). Películas por su primera sesión del día.
+    solo_hoy: hay sesiones activas hoy y ninguna desde mañana (cines cuyo scraper solo trae el día)."""
+    ahora = ahora or ahora_madrid()
+    ficha = next((c for c in listar_cines(session, ahora) if c["slug"] == slug), None)
+    if ficha is None:
+        return None
+    hoy = datetime.combine(ahora.date(), time())
+    manana = hoy + timedelta(days=1)
+    pases = session.exec(
+        select(Pase).options(selectinload(Pase.pelicula))
+        .where(Pase.cine_id == ficha["id"], Pase.activo, Pase.fecha_hora >= hoy)
+        .order_by(Pase.fecha_hora, Pase.id)
+    ).all()
+
+    dias = {(hoy + timedelta(days=i)).date(): {} for i in range(DIAS_DETALLE)}
+    for p in pases:
+        peliculas = dias.get(p.fecha_hora.date())
+        if peliculas is None:
+            continue  # más allá de la ventana
+        if p.pelicula_id not in peliculas:  # dict: orden de inserción = primera sesión del día
+            peli = p.pelicula
+            peliculas[p.pelicula_id] = dict(id=peli.id, titulo=peli.titulo, poster_url=peli.poster_url,
+                                           nota_tmdb=peli.nota_tmdb, votos=peli.votos, director=peli.director,
+                                           sesiones=[])
+        peliculas[p.pelicula_id]["sesiones"].append(dict(
+            id=p.id, hora=p.fecha_hora.strftime("%H:%M"), fecha_hora=p.fecha_hora, link_compra=p.link_compra,
+            idioma=p.idioma, sala=p.sala, precio=p.precio, es_evento_especial=p.es_evento_especial))
+
+    hay_hoy = any(hoy <= p.fecha_hora < manana for p in pases)
+    return dict(ficha, dias=[dict(fecha=f, peliculas=list(ps.values())) for f, ps in dias.items()],
+                solo_hoy=hay_hoy and pases[-1].fecha_hora < manana)
