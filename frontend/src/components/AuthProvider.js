@@ -9,7 +9,7 @@ export const AUTH_DISPONIBLE = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 );
 
-const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, salir: async () => {} });
+const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, salir: async () => {} });
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -45,12 +45,23 @@ export default function AuthProvider({ children }) {
     if (error) throw error;
   };
 
+  // Redirige a Google; vuelve a la misma página y onAuthStateChange recoge la sesión
+  const entrarConGoogle = async () => {
+    const sb = supabase();
+    if (!sb) return;
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + window.location.pathname },
+    });
+    if (error) throw error;
+  };
+
   const salir = async () => {
     await supabase()?.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, entrar, salir }}>
+    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir }}>
       {children}
     </AuthContext.Provider>
   );
