@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 
 const BOTON = "w-full px-4 py-2 rounded-full bg-primary text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60";
-const PILDORA = "flex items-center gap-2 px-5 py-2 rounded-full border border-line bg-background text-foreground hover:border-primary hover:text-primary transition-colors text-sm font-bold uppercase tracking-wide";
 
 function mensajeError(error) {
   if (error?.status === 429 || /rate limit/i.test(error?.message)) {
@@ -31,9 +30,10 @@ function errorOAuth() {
     : "No hemos podido iniciar sesión con Google. Inténtalo de nuevo o usa tu email.";
 }
 
-// Botón "Iniciar sesión" de la cabecera: magic link por email (Supabase Auth). Sin variables de Supabase no se pinta.
-export default function BotonEntrar() {
-  const { usuario, cargando, entrar, entrarConGoogle, salir, peticionLogin } = useAuth();
+// Panel de inicio de sesión (Google o magic link por email, Supabase Auth). Montado una vez en el layout; lo abre
+// abrirLogin() del contexto (p. ej. "Iniciar sesión" de la barra). Sin variables de Supabase no se pinta.
+export default function PanelLogin() {
+  const { usuario, cargando, entrar, entrarConGoogle, peticionLogin } = useAuth();
   const dialogo = useRef(null);
   const [estado, setEstado] = useState("inicio"); // inicio | enviando | enviado
   const [error, setError] = useState("");
@@ -60,18 +60,7 @@ export default function BotonEntrar() {
     dialogo.current?.querySelector("input")?.focus();
   }, [peticionLogin, usuario]);
 
-  if (!AUTH_DISPONIBLE || cargando) return null;
-
-  if (usuario) {
-    return (
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-sm font-bold text-foreground bg-background rounded-full px-3 py-2 truncate max-w-[10rem]" title={usuario.email}>
-          {usuario.email?.split("@")[0]}
-        </span>
-        <button type="button" onClick={salir} className={PILDORA}>Cerrar sesión</button>
-      </div>
-    );
-  }
+  if (!AUTH_DISPONIBLE || cargando || usuario) return null;
 
   const enviar = async (e) => {
     e.preventDefault();
@@ -97,20 +86,11 @@ export default function BotonEntrar() {
     }
   };
 
-  // autoFocus de React no sirve en un <dialog> cerrado: se enfoca el email al abrir
-  const abrir = () => {
-    dialogo.current?.showModal();
-    dialogo.current?.querySelector("input")?.focus();
-  };
   const cerrar = () => dialogo.current?.close();
 
   return (
     <>
-      <button type="button" onClick={abrir} aria-haspopup="dialog" className={PILDORA}>
-        Iniciar sesión
-      </button>
-
-      {/* <dialog> nativo: Esc cierra, el foco queda dentro y vuelve al botón al cerrar */}
+      {/* <dialog> nativo: Esc cierra, el foco queda dentro y vuelve al botón que lo abrió al cerrar */}
       <dialog
         ref={dialogo}
         aria-labelledby="titulo-entrar"

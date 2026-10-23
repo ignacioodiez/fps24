@@ -5,7 +5,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import DialogoDiario, { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import NotaEstrellas from "@/components/NotaEstrellas";
-import { borrar, listar } from "@/lib/diario";
+import BuscadorPeliculas from "@/components/BuscadorPeliculas";
+import { borrar, hoyMadrid, listar } from "@/lib/diario";
 
 const POR_PAGINA = 20;
 const COMENTARIO_CORTO = 240; // más largo (o con más de 3 líneas) se recorta con "ver más"
@@ -33,7 +34,7 @@ function Comentario({ texto }) {
   );
 }
 
-function Entrada({ entrada, onEditar, onBorrar }) {
+function Entrada({ entrada, marcada, onEditar, onBorrar }) {
   const [confirmar, setConfirmar] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const { pelicula, cine } = entrada;
@@ -44,7 +45,7 @@ function Entrada({ entrada, onEditar, onBorrar }) {
   };
 
   return (
-    <li className="flex gap-3 md:gap-4 py-4 border-b border-line">
+    <li id={`entrada-${entrada.id}`} className={`flex gap-3 md:gap-4 py-4 border-b border-line transition-colors duration-700 ${marcada ? "bg-primary-soft" : ""}`}>
       <div className="w-12 md:w-16 aspect-[2/3] shrink-0 overflow-hidden border border-line bg-surface">
         {pelicula.poster_url && <img src={pelicula.poster_url} alt="" className="w-full h-full object-cover" loading="lazy" />}
       </div>
@@ -91,13 +92,16 @@ function Entrada({ entrada, onEditar, onBorrar }) {
   );
 }
 
-function PestanaDiario() {
+// total: lo guarda Perfil, que lo enseña en la cabecera
+function PestanaDiario({ total, setTotal }) {
   const [entradas, setEntradas] = useState([]);
-  const [total, setTotal] = useState(0);
   const [estado, setEstado] = useState("cargando"); // cargando | listo | error
   const [error, setError] = useState("");
   const [editando, setEditando] = useState(null);
   const [aviso, setAviso] = useState("");
+  const [nueva, setNueva] = useState(null); // película elegida en el buscador
+  const [marcada, setMarcada] = useState(null); // id de la entrada recién añadida
+  const [buscador, setBuscador] = useState(0); // cambiar la key vacía el buscador
 
   // desplazamiento 0 = primera página; si no, se añade a lo cargado (sin repetir: un borrado mueve el desplazamiento)
   const pedirPagina = useCallback((desplazamiento) => {
@@ -114,9 +118,19 @@ function PestanaDiario() {
         setError(err.message);
         setEstado("error");
       });
-  }, []);
+  }, [setTotal]);
 
   useEffect(() => pedirPagina(0), [pedirPagina]);
+
+  // La entrada recién añadida: a la vista, con el foco en su título y marcada un momento
+  useEffect(() => {
+    if (!marcada) return;
+    const li = document.getElementById(`entrada-${marcada}`);
+    li?.scrollIntoView({ block: "center" });
+    li?.querySelector("a")?.focus({ preventScroll: true });
+    const t = setTimeout(() => setMarcada(null), 2000);
+    return () => clearTimeout(t);
+  }, [marcada]);
 
   const cargarMas = () => {
     setEstado("cargando");
@@ -140,8 +154,6 @@ function PestanaDiario() {
     }
   };
 
-  if (estado === "cargando" && entradas.length === 0) return <Esqueleto />;
-  if (estado === "error" && entradas.length === 0) return <p role="alert" className="py-8 text-red-600">{error}</p>;
 
   // Agrupadas por mes, en el orden de la lista
   const meses = [];
@@ -153,13 +165,17 @@ function PestanaDiario() {
 
   return (
     <div>
-      <p role="status" aria-live="polite" className="text-sm font-semibold text-primary min-h-5">{aviso}</p>
+      <BuscadorPeliculas key={buscador} onElegir={setNueva} />
+      <p role="status" aria-live="polite" className="mt-2 text-sm font-semibold text-primary min-h-5">{aviso}</p>
 
-      {entradas.length === 0 ? (
-        <div className="py-12 text-center space-y-4">
-          <p className="text-lg text-foreground">Abre una película y pulsa «Añadir al diario».</p>
-          <Link href="/" className={`inline-block ${BOTON_PRIMARIO}`}>Ver la cartelera</Link>
-        </div>
+      {estado === "cargando" && entradas.length === 0 ? (
+        <Esqueleto />
+      ) : estado === "error" && entradas.length === 0 ? (
+        <p role="alert" className="py-8 text-red-600">{error}</p>
+      ) : entradas.length === 0 ? (
+        <p className="py-12 text-center text-lg text-foreground">
+          Tu diario está vacío. Busca arriba una película que hayas visto para añadirla.
+        </p>
       ) : (
         <>
           <p className="text-sm text-muted">{total} {total === 1 ? "película apuntada" : "películas apuntadas"}</p>
@@ -170,7 +186,7 @@ function PestanaDiario() {
               </h3>
               <ul>
                 {m.entradas.map((e) => (
-                  <Entrada key={e.id} entrada={e} onEditar={setEditando} onBorrar={borrarEntrada} />
+                  <Entrada key={e.id} entrada={e} marcada={e.id === marcada} onEditar={setEditando} onBorrar={borrarEntrada} />
                 ))}
               </ul>
             </section>
@@ -184,6 +200,20 @@ function PestanaDiario() {
             </div>
           )}
         </>
+      )}
+
+      {nueva && (
+        <DialogoDiario
+          pelicula={nueva} fechaInicial={hoyMadrid()}
+          onCerrar={() => setNueva(null)}
+          onGuardado={(guardada) => {
+            setEntradas((previas) => ordenar([...previas, guardada]));
+            setTotal((t) => t + 1);
+            setAviso(`«${guardada.pelicula.titulo}» añadida a tu diario`);
+            setMarcada(guardada.id);
+            setBuscador((k) => k + 1);
+          }}
+        />
       )}
 
       {editando && (
@@ -231,6 +261,7 @@ const PESTANA = "flex items-center min-h-11 whitespace-nowrap px-3 md:px-4 text-
 export default function Perfil() {
   const { usuario, cargando, abrirLogin } = useAuth();
   const [activa, setActiva] = useState(PESTANAS[0].id);
+  const [total, setTotal] = useState(null); // del GET /diario; null hasta que llega
   const pestanas = useRef({});
   const id = useId();
 
@@ -271,7 +302,10 @@ export default function Perfil() {
     <div className="max-w-3xl mx-auto px-4 md:px-6">
       <div className="mb-6">
         <h2 className="text-3xl md:text-5xl font-black font-display uppercase text-primary">Mi perfil</h2>
-        <p className="mt-1 text-muted break-all">{usuario.email}</p>
+        <p className="mt-1 text-muted">
+          <span className="break-all">{usuario.email}</span>
+          {total !== null && <> · {total} {total === 1 ? "película" : "películas"} en tu diario</>}
+        </p>
       </div>
 
       <div role="tablist" aria-label="Secciones del perfil" onKeyDown={tecla} className="flex overflow-x-auto bg-surface border-y border-line">
@@ -288,7 +322,7 @@ export default function Perfil() {
       </div>
 
       <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${activa}`} className="pt-4">
-        <Contenido />
+        <Contenido total={total} setTotal={setTotal} />
       </div>
     </div>
   );

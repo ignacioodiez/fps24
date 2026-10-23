@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import NotaEstrellas from "@/components/NotaEstrellas";
 import { useAuth } from "@/components/AuthProvider";
-import { COMENTARIO_MAX, borrar, cinesDelDia, crear, editar, hoyMadrid, todosLosCines } from "@/lib/diario";
+import { COMENTARIO_MAX, ayerMadrid, borrar, cinesDelDia, crear, editar, hoyMadrid, todosLosCines } from "@/lib/diario";
 
 const OTRO = "__otro";
 const ETIQUETA = "block text-xs font-bold uppercase tracking-wider text-muted mb-1";
@@ -108,10 +108,17 @@ export default function DialogoDiario({ pelicula, entrada = null, fechaInicial, 
 
         <div>
           <label htmlFor={`${id}-fecha`} className={ETIQUETA}>Fecha en que la viste</label>
-          <input
-            id={`${id}-fecha`} type="date" required value={fecha} max={hoyMadrid()}
-            onChange={(e) => setFecha(e.target.value)} className={CAMPO}
-          />
+          <div className="flex gap-2">
+            <input
+              id={`${id}-fecha`} type="date" required value={fecha} max={hoyMadrid()}
+              onChange={(e) => setFecha(e.target.value)} className={`${CAMPO} min-w-0`}
+            />
+            {[["Hoy", hoyMadrid()], ["Ayer", ayerMadrid()]].map(([etiqueta, valor]) => (
+              <button key={etiqueta} type="button" onClick={() => setFecha(valor)} aria-pressed={fecha === valor} className={`${BOTON_SECUNDARIO} aria-pressed:border-primary aria-pressed:text-primary`}>
+                {etiqueta}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-2">

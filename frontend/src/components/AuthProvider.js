@@ -18,16 +18,20 @@ export function useAuth() {
 export default function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null);
   const [cargando, setCargando] = useState(AUTH_DISPONIBLE);
-  // Petición de abrir el panel de inicio de sesión desde cualquier sitio (p. ej. "Añadir al diario"); la atiende BotonEntrar
+  // Petición de abrir el panel de inicio de sesión desde cualquier sitio (p. ej. "Añadir al diario"); la atiende PanelLogin
   const [peticionLogin, setPeticionLogin] = useState(null);
+  // Aviso para lectores de pantalla; aquí y no en la barra porque al salir desde /perfil la página cambia
+  const [aviso, setAviso] = useState("");
 
   useEffect(() => {
     const sb = supabase();
     if (!sb) return;
     // Emite INITIAL_SESSION al suscribirse, y SIGNED_IN al volver del magic link
-    const { data } = sb.auth.onAuthStateChange((_evento, sesion) => {
+    const { data } = sb.auth.onAuthStateChange((evento, sesion) => {
       setUsuario(sesion?.user ?? null);
       setCargando(false);
+      if (evento === "SIGNED_OUT") setAviso("Has cerrado sesión");
+      if (evento === "SIGNED_IN") setAviso("");
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -68,6 +72,7 @@ export default function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir, abrirLogin, peticionLogin }}>
       {children}
+      <p role="status" aria-live="polite" className="sr-only">{aviso}</p>
     </AuthContext.Provider>
   );
 }

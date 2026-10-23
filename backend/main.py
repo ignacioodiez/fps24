@@ -1,10 +1,12 @@
 import os
+import re
 import uvicorn
 from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import Session, SQLModel, or_, select
 from typing import List, Optional
 from datetime import date, datetime
+from sqlalchemy import case, func, nulls_last
 from sqlalchemy.orm import selectinload
 
 from app.database.engine import get_session
@@ -12,6 +14,7 @@ from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
 from app.services.destacadas import SEMANAS_MAX, leer_destacadas, leer_pagina, seleccionar_especiales, seleccionar_estrenos
 from app.services.cines import detalle_cine, listar_cines
+from app.services.gestor_peliculas import EXCLUIDOS
 from app.auth import Usuario, usuario_actual
 from app.diario import router as diario_router
 
@@ -147,6 +150,16 @@ class CineDetalle(CineSalida):
     dias: List[DiaCine]
     solo_hoy: bool  # tiene sesiones hoy y ninguna desde mañana
 
+# /peliculas/buscar
+class PeliculaBuscada(SQLModel):
+    id: int
+    titulo: str
+    titulo_original: Optional[str] = None  # solo si es distinto del título
+    anio: Optional[int] = None
+    director: Optional[str] = None
+    poster_url: Optional[str] = None
+    nota_tmdb: Optional[float] = None
+
 # --- SEGURIDAD ---
 
 ACTUALIZAR_SECRET = os.getenv("ACTUALIZAR_SECRET")
@@ -205,6 +218,36 @@ def leer_cine(slug: str, session: Session = Depends(get_session)):
     if cine is None:
         raise HTTPException(status_code=404, detail="Cine no encontrado")
     return cine
+
+# --- BUSCAR PELÍCULAS (para apuntarlas en el diario): título u original, sin mayúsculas ni tildes ---
+# Sin la extensión unaccent (no viene activada ni en local ni en Supabase): translate() con la misma tabla en SQL y en
+# Python. Se traduce antes de lower() para no depender del locale de la BD.
+CON_TILDE = "ÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑÇáàäâéèëêíìïîóòöôúùüûñç"
+SIN_TILDE = "AAAAEEEEIIIIOOOOUUUUNCaaaaeeeeiiiioooouuuunc"
+_SIN_TILDE = str.maketrans(CON_TILDE, SIN_TILDE)
+_EXCLUIDA = re.compile("|".join(EXCLUIDOS), re.IGNORECASE)  # BONO, TARJETA REGALO…: limpiar_peliculas ya las borra
+
+def _plano(columna):
+    return func.lower(func.translate(columna, CON_TILDE, SIN_TILDE))
+
+@app.get("/peliculas/buscar", response_model=List[PeliculaBuscada])
+def buscar_peliculas(q: str = "", limite: int = Query(20, ge=1, le=30), session: Session = Depends(get_session)):
+    consulta = " ".join(q.split()).translate(_SIN_TILDE).lower()
+    if len(consulta) < 2:
+        return []
+    patron = re.sub(r"[!%_]", lambda m: "!" + m.group(), consulta)  # !, % y _ literales en LIKE
+    titulo, original = _plano(Pelicula.titulo), _plano(func.coalesce(Pelicula.titulo_original, ""))
+    empieza = or_(titulo.like(f"{patron}%", escape="!"), original.like(f"{patron}%", escape="!"))
+    pelis = session.exec(
+        select(Pelicula)
+        .where(or_(titulo.like(f"%{patron}%", escape="!"), original.like(f"%{patron}%", escape="!")),
+               select(Pase.id).where(Pase.pelicula_id == Pelicula.id).exists())  # ha pasado por la cartelera
+        .order_by(case((empieza, 0), else_=1), nulls_last(Pelicula.votos.desc()),
+                  nulls_last(Pelicula.fecha_estreno.desc()), Pelicula.id)
+        .limit(limite + 10)  # margen por si alguna excluida sigue en la BD
+    ).all()
+    return [{**p.model_dump(), "titulo_original": p.titulo_original if p.titulo_original != p.titulo else None}
+            for p in pelis if not _EXCLUIDA.search(p.titulo or "")][:limite]
 
 # --- USUARIO: quién soy (JWT de Supabase Auth en Authorization: Bearer) ---
 @app.get("/me")

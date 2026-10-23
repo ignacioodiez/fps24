@@ -1,5 +1,4 @@
 import Logo from "@/components/Logo";
-import BotonEntrar from "@/components/BotonEntrar";
 import NavSecciones from "@/components/NavSecciones";
 
 // showTitle=false donde la página ya tiene su propio h1 (un solo h1 por página)
@@ -19,11 +18,6 @@ export default function Header({ backdrop, showTitle = true }) {
         <div className="bg-background rounded-xl px-2 py-1">
           {showTitle && <h1 className="sr-only">MadridFPS24</h1>}
           <Logo className="h-12 md:h-32" />
-        </div>
-
-        {/* --- DERECHA: BOTONES --- */}
-        <div className="flex flex-wrap items-center justify-center gap-2 max-w-full">
-        <BotonEntrar />
         </div>
 
       </div>

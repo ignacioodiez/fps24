@@ -48,9 +48,11 @@ export const entradasDePelicula = (peliculaId) => pedir(`/diario/pelicula/${peli
 // Públicos
 export const cinesDelDia = (peliculaId, fecha) => pedir(`/pelicula/${peliculaId}/cines?fecha=${fecha}`);
 export const todosLosCines = () => pedir("/cines");
+export const buscarPeliculas = (q, signal) => pedir(`/peliculas/buscar?q=${encodeURIComponent(q)}&limite=20`, { signal });
 
 // Hoy en Madrid ("YYYY-MM-DD"), el mismo límite que aplica el backend a fecha_vista
 export const hoyMadrid = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" });
+export const ayerMadrid = () => new Date(Date.parse(`${hoyMadrid()}T00:00Z`) - 864e5).toISOString().slice(0, 10);
 
 // Fecha por defecto al apuntar: el día elegido si es hoy o pasado; si no, hoy
 export const fechaPorDefecto = (dia) => {
