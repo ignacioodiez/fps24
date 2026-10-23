@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import TarjetaEstreno from "@/components/TarjetaEstreno";
 import MosaicoEspeciales from "@/components/MosaicoEspeciales";
 
@@ -26,11 +27,16 @@ const PESTANAS = [
 ];
 
 // Bloque de escritorio de alto fijo (los dos miden lo mismo). En móvil solo se ve el de la pestaña activa.
-function Bloque({ id, titulo, visibleEnMovil, children }) {
+function Bloque({ id, titulo, href, visibleEnMovil, children }) {
   return (
     <section id={`panel-${id}`} role="tabpanel" aria-labelledby={`titulo-${id}`}
              className={`${visibleEnMovil ? "block" : "hidden"} md:block min-w-0`}>
-      <h3 id={`titulo-${id}`} className="hidden md:block mb-2 text-xs font-bold uppercase tracking-wider text-muted">{titulo}</h3>
+      <div className="flex items-baseline justify-end md:justify-between gap-2 mb-2">
+        <h3 id={`titulo-${id}`} className="hidden md:block text-xs font-bold uppercase tracking-wider text-muted">{titulo}</h3>
+        <Link href={href} className="text-xs font-semibold text-muted hover:text-primary transition-colors rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          Ver todos<span className="sr-only"> los {titulo.toLowerCase()}</span> →
+        </Link>
+      </div>
       <div className="md:h-[400px]">{children}</div>
     </section>
   );
@@ -105,7 +111,7 @@ export default function SeccionDestacadas({ oculta = false }) {
 
       <div className={`grid gap-6 ${ambas ? "md:grid-cols-2" : ""}`}>
         {estrenos.length > 0 && (
-          <Bloque id="estrenos" titulo="Estrenos" visibleEnMovil={activa === "estrenos"}>
+          <Bloque id="estrenos" titulo="Estrenos" href="/estrenos" visibleEnMovil={activa === "estrenos"}>
             <ul className="grid grid-cols-2 md:grid-rows-2 md:h-full gap-3">
               {estrenos.map((estreno, i) => (
                 <TarjetaEstreno key={estreno.pelicula.id} estreno={estreno} className={celdas[i] || ""} />
@@ -114,7 +120,7 @@ export default function SeccionDestacadas({ oculta = false }) {
           </Bloque>
         )}
         {especiales.length > 0 && (
-          <Bloque id="especiales" titulo="Pases especiales" visibleEnMovil={activa === "especiales"}>
+          <Bloque id="especiales" titulo="Pases especiales" href="/especiales" visibleEnMovil={activa === "especiales"}>
             <MosaicoEspeciales especiales={especiales} />
           </Bloque>
         )}

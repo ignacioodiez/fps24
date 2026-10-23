@@ -8,7 +8,7 @@ const fechaDestacada = (fechaHora) => {
 };
 
 // El backdrop se guarda en tamaño "original" (varios MB): para una tarjeta basta w780
-const imagenDe = (pelicula) =>
+export const imagenDe = (pelicula) =>
   pelicula.backdrop_url?.replace("/t/p/original/", "/t/p/w780/") || pelicula.poster_url || null;
 
 function Entradas({ href, className }) {
@@ -24,15 +24,16 @@ function Entradas({ href, className }) {
 // solo fecha, título y cine. La tarjeta abre la vista rápida; el título, la página completa; "Entradas", la compra.
 export default function TarjetaEspecial({ especial, grande = false, amplia = false, className = "" }) {
   const { pelicula, pase, nota } = especial;
+  const href = `/pelicula/${pelicula.id}?dia=${pase.fecha_hora.slice(0, 10)}`; // abre en el día del pase
   const imagen = imagenDe(pelicula);
   const precio = pase.precio && pase.precio !== "Consultar" ? pase.precio : null;
   const idioma = pase.idioma && pase.idioma !== "Español" ? pase.idioma : null;
   // Título: <a> normal (navegación completa) a la página entera. El resto de la tarjeta abre la vista rápida.
   const enlace = (
-    <a href={`/pelicula/${pelicula.id}`} onClick={(e) => e.stopPropagation()} className="relative z-[2] hover:underline">{pelicula.titulo}</a>
+    <a href={href} onClick={(e) => e.stopPropagation()} className="relative z-[2] hover:underline">{pelicula.titulo}</a>
   );
   const capa = (
-    <Link href={`/pelicula/${pelicula.id}`} scroll={false} aria-label={`Vista rápida: ${pelicula.titulo}`} className="absolute inset-0 z-[1]" />
+    <Link href={href} scroll={false} aria-label={`Vista rápida: ${pelicula.titulo}`} className="absolute inset-0 z-[1]" />
   );
 
   if (grande) {

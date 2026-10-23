@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import LiteYouTubeEmbed from "react-lite-youtube-embed";
 import "react-lite-youtube-embed/dist/LiteYouTubeEmbed.css";
-import { SelectorAgrupacion, SesionesPorDias, claveDia, useAgrupacion } from "@/components/Sesiones";
+import { SelectorAgrupacion, SesionesPorDias, claveDia, diaConSesiones, useAgrupacion } from "@/components/Sesiones";
 import { ChipDato, ChipsGeneros, LineaDireccion, NotaPelicula, duracionTexto } from "@/components/FichaPelicula";
 import { diaGuardado } from "@/lib/diaSeleccionado";
 
@@ -14,10 +14,11 @@ const ENFOCABLES = 'a[href], button:not([disabled]), iframe, [tabindex]:not([tab
 // El backdrop se guarda en tamaño "original" (varios MB): para el modal basta w1280
 const backdropDe = (url) => url?.replace("/t/p/original/", "/t/p/w1280/");
 
-function Contenido({ movie, idTitulo }) {
+function Contenido({ movie, idTitulo, dia }) {
   const [verTrailer, setVerTrailer] = useState(false);
   const [modo, setModo] = useAgrupacion();
-  const elegido = claveDia(diaGuardado() || new Date());
+  // El día de la tarjeta (?dia=) manda; si no vale, el de la portada o hoy
+  const elegido = diaConSesiones(dia, movie.pases || []) ?? claveDia(diaGuardado() || new Date());
 
   return (
     <>
@@ -83,7 +84,7 @@ function Contenido({ movie, idTitulo }) {
 }
 
 // Vista rápida de una película sobre la portada. Cerrar = volver atrás en el historial (la URL vuelve a "/").
-export default function ModalPelicula({ id }) {
+export default function ModalPelicula({ id, dia = null }) {
   const router = useRouter();
   const panel = useRef(null);
   const cerrando = useRef(false);
@@ -179,7 +180,7 @@ export default function ModalPelicula({ id }) {
         </button>
 
         {movie ? (
-          <Contenido movie={movie} idTitulo={idTitulo} />
+          <Contenido movie={movie} idTitulo={idTitulo} dia={dia} />
         ) : fallo ? (
           <div className="p-10 text-center">
             <h2 id={idTitulo} className="text-lg font-bold text-foreground">No se pudo cargar la película</h2>

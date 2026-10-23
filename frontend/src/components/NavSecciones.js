@@ -8,12 +8,15 @@ import { useEffect, useRef } from "react";
 const SECCIONES = [
   { href: "/", etiqueta: "Inicio", tambien: ["/pelicula"] },
   { href: "/cines", etiqueta: "Cines" },
+  { href: "/estrenos", etiqueta: "Estrenos" },
+  { href: "/especiales", etiqueta: "Especiales" },
 ];
 
 // "/" solo coincide exacta; el resto, la ruta y sus subrutas
 const dentro = (ruta, base) => (base === "/" ? ruta === "/" : ruta === base || ruta.startsWith(base + "/"));
 
-const PILDORA = "block whitespace-nowrap px-5 py-2 rounded-full border text-sm font-bold uppercase tracking-wide transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+// Enlace de texto plano; la activa lleva una línea violeta de 3px abajo (sombra interior: no la recorta el overflow)
+const ENLACE = "flex items-center min-h-11 whitespace-nowrap px-3 md:px-4 text-xs md:text-[13px] font-semibold uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary";
 
 export default function NavSecciones() {
   const ruta = usePathname();
@@ -26,9 +29,10 @@ export default function NavSecciones() {
   }, [ruta]);
 
   return (
-    <nav aria-label="Secciones" className="max-w-9xl mx-auto w-full mt-4">
-      <div ref={fila} className="relative overflow-x-auto px-4 md:px-8 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <ul className="flex gap-2 w-max mx-auto xl:mx-0">
+    <nav aria-label="Secciones" className="w-full bg-surface border-y border-line">
+      {/* px resta el padding del primer enlace para que el texto se alinee con el contenido */}
+      <div ref={fila} className="relative max-w-9xl mx-auto overflow-x-auto px-1 md:px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ul className="flex w-max">
           {SECCIONES.map(({ href, etiqueta, tambien = [] }) => {
             const activa = [href, ...tambien].some((base) => dentro(ruta, base));
             return (
@@ -36,9 +40,9 @@ export default function NavSecciones() {
                 <Link
                   href={href}
                   aria-current={activa ? "page" : undefined}
-                  className={`${PILDORA} ${activa
-                    ? "border-primary bg-primary text-white"
-                    : "border-line bg-background text-foreground hover:border-primary hover:text-primary"}`}
+                  className={`${ENLACE} ${activa
+                    ? "text-primary shadow-[inset_0_-3px_0_var(--primary)]"
+                    : "text-muted hover:text-foreground"}`}
                 >
                   {etiqueta}
                 </Link>

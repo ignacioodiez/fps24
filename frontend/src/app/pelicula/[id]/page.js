@@ -6,10 +6,11 @@ import LiteYouTubeEmbed from 'react-lite-youtube-embed'; // <--- IMPORTANTE
 import 'react-lite-youtube-embed/dist/LiteYouTubeEmbed.css'; // <--- ESTILOS YOUTUBE
 // Mismos bloques que la vista rápida (modal) y la cartelera de la portada
 import { ChipDato, ChipsGeneros, LineaDireccion, NotaPelicula, duracionTexto } from "@/components/FichaPelicula";
-import { SelectorAgrupacion, SesionesPorDias, useAgrupacion } from "@/components/Sesiones";
+import { SelectorAgrupacion, SesionesPorDias, diaConSesiones, useAgrupacion } from "@/components/Sesiones";
 
-export default function MovieDetail({ params }) {
+export default function MovieDetail({ params, searchParams }) {
   const { id } = use(params);
+  const { dia } = use(searchParams); // de una tarjeta con sesión sugerida
   
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +129,7 @@ export default function MovieDetail({ params }) {
                 </div>
 
                 {/* Primer día con sesiones abierto y "Otros días" plegados, con los límites de la página completa */}
-                <SesionesPorDias pases={movie.pases} modo={modo} contexto="pagina" />
+                <SesionesPorDias pases={movie.pases} modo={modo} contexto="pagina" diaElegido={diaConSesiones(dia, movie.pases)} />
             </div>
         </div>
 

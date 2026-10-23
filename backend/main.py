@@ -1,6 +1,6 @@
 import os
 import uvicorn
-from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel, select
 from typing import List, Optional
@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database.engine import get_session
 from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
-from app.services.destacadas import leer_destacadas
+from app.services.destacadas import SEMANAS_MAX, leer_destacadas, leer_pagina, seleccionar_especiales, seleccionar_estrenos
 from app.services.cines import listar_cines
 from app.auth import Usuario, usuario_actual
 
@@ -79,6 +79,26 @@ class Destacadas(SQLModel):
     estrenos: List[Estreno]
     especiales: List[Especial]
 
+# /estrenos y /especiales
+class PeliculaSemana(PeliculaConId):
+    votos: Optional[int] = None
+    director: Optional[str] = None
+
+class EnLaSemana(SQLModel):
+    pelicula: PeliculaSemana
+    sin_nota: bool  # estrenos: sin nota o con pocos votos (van al final)
+    n_sesiones: int
+    n_cines: int
+    sesion: PaseConId  # estrenos: la primera; especiales: la elegida como en /destacadas
+
+class PaginaSemana(SQLModel):
+    semana: int
+    desde: date
+    hasta: date
+    hay_anterior: bool
+    hay_siguiente: bool
+    peliculas: List[EnLaSemana]
+
 class CineSalida(SQLModel):
     id: int
     slug: str
@@ -130,6 +150,15 @@ def leer_detalle_pelicula(pelicula_id: int, session: Session = Depends(get_sessi
 @app.get("/destacadas", response_model=Destacadas)
 def leer_destacadas_semana(session: Session = Depends(get_session)):
     return leer_destacadas(session)
+
+# --- PÁGINAS DE ESTRENOS Y ESPECIALES, por semanas (0 = la actual, lunes-domingo en Madrid) ---
+@app.get("/estrenos", response_model=PaginaSemana)
+def leer_estrenos(semana: int = Query(0, ge=0, le=SEMANAS_MAX), session: Session = Depends(get_session)):
+    return leer_pagina(session, seleccionar_estrenos, semana)
+
+@app.get("/especiales", response_model=PaginaSemana)
+def leer_especiales(semana: int = Query(0, ge=0, le=SEMANAS_MAX), session: Session = Depends(get_session)):
+    return leer_pagina(session, seleccionar_especiales, semana)
 
 # ---------------------------------------------
 
