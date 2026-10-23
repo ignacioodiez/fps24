@@ -19,6 +19,7 @@ const sesionCorta = (fechaHora) => {
 // ocupa todo el alto de su fila. className: celdas extra cuando hay menos de 4 estrenos.
 export default function TarjetaEstreno({ estreno, className = "" }) {
   const { pelicula, fecha_estreno, votos, cines, primera_sesion, sin_nota } = estreno;
+  const href = `/pelicula/${pelicula.id}?dia=${primera_sesion.fecha_hora.slice(0, 10)}`; // abre en el día de la primera sesión
   const nota = pelicula.nota_tmdb;
   const notaFiable = !sin_nota && nota != null && (votos ?? 0) >= VOTOS_MIN;
 
@@ -42,7 +43,7 @@ export default function TarjetaEstreno({ estreno, className = "" }) {
 
         <div className="min-w-0 flex flex-col gap-1 md:py-1">
           <h4 className="text-sm font-display font-bold leading-tight text-foreground line-clamp-2" title={pelicula.titulo}>
-            <a href={`/pelicula/${pelicula.id}`} onClick={(e) => e.stopPropagation()} className="relative z-[2] hover:text-primary transition-colors">
+            <a href={href} onClick={(e) => e.stopPropagation()} className="relative z-[2] hover:text-primary transition-colors">
               {pelicula.titulo}
             </a>
           </h4>
@@ -61,7 +62,7 @@ export default function TarjetaEstreno({ estreno, className = "" }) {
           </p>
         </div>
       {/* Capa sobre toda la celda: abre la vista rápida sin mover el scroll. El título (página completa) va encima */}
-      <Link href={`/pelicula/${pelicula.id}`} scroll={false} aria-label={`Vista rápida: ${pelicula.titulo}`} className="absolute inset-0 z-[1] rounded-2xl" />
+      <Link href={href} scroll={false} aria-label={`Vista rápida: ${pelicula.titulo}`} className="absolute inset-0 z-[1] rounded-2xl" />
     </li>
   );
 }

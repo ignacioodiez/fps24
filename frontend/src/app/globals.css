@@ -83,3 +83,11 @@ body {
 /* Leaflet pinta los enlaces en azul: los botones del popup mantienen el estilo de la web */
 .leaflet-container .leaflet-popup-content a { color: var(--foreground); }
 .leaflet-container .leaflet-popup-content a:hover { color: var(--primary); }
+
+/* --- MOSAICO DE /especiales (PaginaSemana.js) --- */
+/* Cada tarjeta mide su propia celda: póster si es vertical, fotograma si es horizontal */
+.celda-mosaico { container-type: size; }
+@container (orientation: portrait) { .celda-mosaico .solo-horizontal { display: none; } }
+@container (orientation: landscape) { .celda-mosaico .solo-vertical { display: none; } }
+/* En las celdas pequeñas (bajas y estrechas) solo lo esencial */
+@container (max-height: 16rem) and (max-width: 20rem) { .celda-mosaico .si-hay-sitio { display: none; } }

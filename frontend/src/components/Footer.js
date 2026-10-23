@@ -26,6 +26,21 @@ export default function Footer() {
                     </Link>
                 </li>
                 <li>
+                    <Link href="/cines" className="text-muted hover:text-primary transition-colors">
+                        Cines
+                    </Link>
+                </li>
+                <li>
+                    <Link href="/estrenos" className="text-muted hover:text-primary transition-colors">
+                        Estrenos
+                    </Link>
+                </li>
+                <li>
+                    <Link href="/especiales" className="text-muted hover:text-primary transition-colors">
+                        Especiales
+                    </Link>
+                </li>
+                <li>
                     <a href="mailto:ignacio.diez.vergara@gmail.com" className="text-muted hover:text-primary transition-colors">
                         Contacto
                     </a>

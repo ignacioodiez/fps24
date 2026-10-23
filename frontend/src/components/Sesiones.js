@@ -16,6 +16,9 @@ const HORAS_POR_CINE = 8; // horas visibles por cine en la ficha; el resto, tras
 
 // Clave de día en hora local ("YYYY-MM-DD"), como la cartelera
 export const claveDia = (fecha) => new Date(fecha).toLocaleDateString("sv-SE");
+// ?dia=YYYY-MM-DD de una tarjeta con sesión sugerida: vale solo si ese día tiene sesiones desde hoy; si no, null
+export const diaConSesiones = (dia, pases) =>
+  dia && dia >= claveDia(new Date()) && pases.some((p) => claveDia(p.fecha_hora) === dia) ? dia : null;
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 const nombreDia = (clave) =>
   capitalizar(new Date(`${clave}T00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }));
