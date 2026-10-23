@@ -6,6 +6,7 @@ import LiteYouTubeEmbed from "react-lite-youtube-embed";
 import "react-lite-youtube-embed/dist/LiteYouTubeEmbed.css";
 import { SelectorAgrupacion, SesionesPorDias, claveDia, diaConSesiones, useAgrupacion } from "@/components/Sesiones";
 import { ChipDato, ChipsGeneros, LineaDireccion, NotaPelicula, duracionTexto } from "@/components/FichaPelicula";
+import BotonDiario from "@/components/BotonDiario";
 import { diaGuardado } from "@/lib/diaSeleccionado";
 
 const DURACION_ANIMACION = 200; // ms, igual que duration-200
@@ -46,6 +47,7 @@ function Contenido({ movie, idTitulo, dia }) {
               {movie.duracion > 0 && <ChipDato>{duracionTexto(movie.duracion)}</ChipDato>}
               <NotaPelicula nota={movie.nota_tmdb} votos={movie.votos} />
             </div>
+            <BotonDiario pelicula={movie} dia={dia ?? (diaGuardado() && claveDia(diaGuardado()))} className="mt-3" />
           </div>
         </div>
 
@@ -132,9 +134,10 @@ export default function ModalPelicula({ id, dia = null }) {
     };
   }, []);
 
-  // Esc cierra; Tab no sale del panel
+  // Esc cierra; Tab no sale del panel. Con un <dialog> abierto encima (diario, iniciar sesión) manda el dialog.
   useEffect(() => {
     const alPulsar = (e) => {
+      if (document.querySelector("dialog[open]")) return;
       if (e.key === "Escape") {
         e.preventDefault();
         cerrar();

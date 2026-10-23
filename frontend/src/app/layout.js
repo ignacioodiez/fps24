@@ -4,6 +4,7 @@ import "./globals.css";
 // 👇 IMPORTANTE: Importamos el componente Footer
 import Footer from "@/components/Footer"; 
 import AuthProvider from "@/components/AuthProvider";
+import PanelLogin from "@/components/PanelLogin";
 
 
 // Si la nueva fuente no es variable, añade weight: ["400", "700", "900"]
@@ -32,6 +33,7 @@ export default function RootLayout({ children, modal }) {
             {children}
         </main>
         {modal}
+        <PanelLogin />
         </AuthProvider>
 
         {/* FOOTER: Siempre al final */}

@@ -51,13 +51,19 @@ export default function PrivacidadPage() {
                 Si inicias sesión con <strong className="text-foreground">Google</strong>, recibimos de tu cuenta de Google
                 solo tu email y tu nombre de perfil. Nada más: ni contactos, ni archivos, ni tu contraseña.
               </li>
+              <li>
+                Tu <strong className="text-foreground">diario</strong>: las películas que apuntes como vistas, con la fecha,
+                el cine, tu nota y tu comentario si los añades. Es privado: solo lo ves tú.
+              </li>
               <li>Próximamente, la lista de películas que marques como <strong className="text-foreground">&quot;quiero verla&quot;</strong>.</li>
             </ul>
           </Seccion>
 
           <Seccion titulo="Para qué">
             <p>
-              Solo para identificar tu cuenta y guardar tus listas. No vendemos tus datos ni los usamos para publicidad.
+              Solo para identificar tu cuenta y guardar tus listas y tu diario. El diario (película, fecha, cine, nota y
+              comentario) solo se usa para enseñártelo a ti en tu perfil: nadie más puede verlo. No vendemos tus datos ni
+              los usamos para publicidad.
             </p>
           </Seccion>
 
