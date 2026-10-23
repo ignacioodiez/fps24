@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import BotonEntrar from "@/components/BotonEntrar";
 
 // showTitle=false donde la página ya tiene su propio h1 (un solo h1 por página)
 export default function Header({ backdrop, showTitle = true }) {
@@ -20,7 +21,8 @@ export default function Header({ backdrop, showTitle = true }) {
           <Logo className="h-12 md:h-32" />
         </div>
 
-        {/* --- DERECHA: BOTÓN --- */}
+        {/* --- DERECHA: BOTONES --- */}
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-full">
         <Link 
           href="/cines" 
           className="flex items-center gap-2 px-5 py-2 rounded-full border border-line bg-background text-foreground hover:border-primary hover:text-primary transition-colors text-sm font-bold uppercase tracking-wide"
@@ -28,6 +30,8 @@ export default function Header({ backdrop, showTitle = true }) {
         
            Salas y Precios
         </Link>
+        <BotonEntrar />
+        </div>
 
       </div>
       </div>

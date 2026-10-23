@@ -12,6 +12,7 @@ from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
 from app.run_scrapers import lanzar_todo 
 from app.services.destacadas import leer_destacadas
 from app.services.cines import listar_cines
+from app.auth import Usuario, usuario_actual
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -136,6 +137,11 @@ def leer_destacadas_semana(session: Session = Depends(get_session)):
 @app.get("/cines", response_model=List[CineSalida])
 def leer_cines(session: Session = Depends(get_session)):
     return listar_cines(session)
+
+# --- USUARIO: quién soy (JWT de Supabase Auth en Authorization: Bearer) ---
+@app.get("/me")
+def leer_me(usuario: Usuario = Depends(usuario_actual)):
+    return {"id": usuario.id, "email": usuario.email}
 
 @app.post("/actualizar")
 def actualizar_todo(background_tasks: BackgroundTasks, _: None = Depends(verificar_secreto)):
