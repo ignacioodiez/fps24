@@ -79,10 +79,17 @@ export default function PrivacidadPage() {
               quien abra tu enlace. No vendemos tus datos ni los usamos para publicidad.
             </p>
             <p>
-              El administrador de FPS24 puede ver los nombres de usuario, también los de perfiles privados, solo para
-              mantener el servicio (por ejemplo, resolver problemas o retirar un nombre que suplante a otra persona).
-              La web no le da al administrador ninguna forma de ver tus entradas del diario: si lo haces público, las ve
-              como cualquier otra persona con tu enlace. Los perfiles públicos no se muestran en buscadores.
+              El administrador de FPS24 tiene un panel con <strong className="text-foreground">cifras agregadas</strong>{" "}
+              (cuántas cuentas, perfiles, entradas de diario y cines favoritos hay en total) y la lista de{" "}
+              <strong className="text-foreground">nombres de usuario</strong>, también los de perfiles privados, con si
+              el perfil y el diario son públicos, la fecha de alta y cuántas entradas y favoritos tiene cada uno (solo el
+              número). Lo usa solo para mantener el servicio (por ejemplo, resolver problemas o retirar un nombre que
+              suplante a otra persona). También puede ocultar películas de las destacadas, de Estrenos y de Especiales.
+            </p>
+            <p>
+              Desde la web, el administrador <strong className="text-foreground">no ve tus entradas del diario, tus notas
+              ni tus comentarios</strong>, ni tu email: si haces público tu diario, lo ve como cualquier otra persona con
+              tu enlace. Los perfiles públicos no se muestran en buscadores.
             </p>
           </Seccion>
 

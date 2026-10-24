@@ -147,3 +147,12 @@ class CineFavorito(SQLModel, table=True):
     user_id: uuid.UUID = Field(sa_column=Column(UUID(as_uuid=True), primary_key=True))  # sub del JWT, sin FK
     cine_id: int = Field(foreign_key="cine.id", primary_key=True, ondelete="CASCADE", index=True)
     creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+
+
+# 10. PELÍCULAS OCULTAS (migración 0014): el admin las quita de /destacadas, /estrenos y /especiales. Siguen en la
+# cartelera, en /pelicula/{id} y en la búsqueda.
+class PeliculaOculta(SQLModel, table=True):
+    __tablename__ = "pelicula_oculta"
+    pelicula_id: int = Field(foreign_key="pelicula.id", primary_key=True, ondelete="CASCADE")
+    motivo: Optional[str] = Field(default=None, sa_column=Column(Text))
+    creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

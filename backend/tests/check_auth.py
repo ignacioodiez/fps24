@@ -45,7 +45,7 @@ def estado(authorization):
         return e.status_code, e.detail
 
 
-assert estado(f"Bearer {token()}") == (200, {"id": "uuid-123", "email": "ana@example.com"})
+assert estado(f"Bearer {token()}") == (200, {"id": "uuid-123", "email": "ana@example.com", "es_admin": False})
 print("OK: token válido -> 200")
 
 casos = {

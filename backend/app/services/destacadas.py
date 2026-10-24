@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import contains_eager, selectinload
 from sqlmodel import Session, select
 
-from app.database.models import Pase, Pelicula
+from app.database.models import Pase, Pelicula, PeliculaOculta
 from app.services.gestor_peliculas import analizar_titulo
 from app.services.tiempo import ahora_madrid
 
@@ -44,13 +44,15 @@ def es_cine(pelicula: Pelicula) -> bool:
 
 
 def _pases_por_pelicula(session: Session, desde: datetime, lunes: date, domingo: date) -> dict:
-    """pelicula_id -> sus pases activos de `desde` al final del domingo, por fecha: estrenos de la semana y especiales."""
+    """pelicula_id -> sus pases activos de `desde` al final del domingo, por fecha: estrenos de la semana y especiales.
+    Sin las películas ocultas por el admin (pelicula_oculta)."""
     pases = session.exec(
         select(Pase).join(Pelicula)
         .options(contains_eager(Pase.pelicula), selectinload(Pase.cine_rel))
         .where(Pase.activo, Pase.fecha_hora >= desde,
                Pase.fecha_hora < datetime.combine(domingo + timedelta(days=1), time()),
-               or_(Pelicula.fecha_estreno.between(lunes, domingo), Pase.es_evento_especial))
+               or_(Pelicula.fecha_estreno.between(lunes, domingo), Pase.es_evento_especial),
+               ~select(PeliculaOculta.pelicula_id).where(PeliculaOculta.pelicula_id == Pelicula.id).exists())
         .order_by(Pase.fecha_hora, Pase.id)
     ).all()
     pases_de = defaultdict(list)  # pelicula_id -> sus pases, por fecha
@@ -126,7 +128,7 @@ def leer_destacadas(session: Session, ahora: datetime = None) -> dict:
 
 
 # --- Páginas /estrenos y /especiales. La consulta (_pases_por_pelicula) va separada de la selección
-# (seleccionar_*): ahí podrá un panel admin fijar u ocultar películas.
+# (seleccionar_*). Las ocultas por el admin ya no llegan a la selección.
 
 def _semana_n(n: int, ahora: datetime) -> tuple:
     """(lunes, domingo, desde) de la semana n (0 = la actual). En la actual solo cuenta lo que queda."""

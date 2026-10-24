@@ -11,7 +11,7 @@ export const AUTH_DISPONIBLE = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 );
 
-const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, salir: async () => {}, cerrarSesion: () => {}, abrirLogin: () => {}, peticionLogin: null, miPerfil: null, setMiPerfil: () => {} });
+const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, salir: async () => {}, cerrarSesion: () => {}, abrirLogin: () => {}, peticionLogin: null, miPerfil: null, setMiPerfil: () => {}, esAdmin: false });
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -59,6 +59,20 @@ export default function AuthProvider({ children }) {
   // undefined: aún no se sabe; null: sin sesión; si no, el perfil (usuario null = aún no lo ha creado)
   const miPerfil = !uid ? null : perfil.uid === uid ? perfil.datos : undefined;
   const setMiPerfil = (datos) => setPerfil({ uid, datos });
+
+  // es_admin de GET /me (lo decide el servidor con ADMIN_EMAILS). Solo enseña el enlace: /admin/* ya da 404 a los demás.
+  const [admin, setAdmin] = useState({ uid: null, es: false });
+  useEffect(() => {
+    if (!uid) return;
+    let vigente = true;
+    fetchConAuth("/me")
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((me) => vigente && setAdmin({ uid, es: me.es_admin === true }))
+      .catch(() => vigente && setAdmin({ uid, es: false }));
+    return () => { vigente = false; };
+  }, [uid]);
+  // Como miPerfil: undefined mientras no se sabe
+  const esAdmin = !uid ? false : admin.uid === uid ? admin.es : undefined;
 
   // Comprobación manual desde la consola del navegador: await comprobarMe()
   useEffect(() => {
@@ -112,7 +126,7 @@ export default function AuthProvider({ children }) {
   }, [aviso]);
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir, cerrarSesion, abrirLogin, peticionLogin, miPerfil, setMiPerfil }}>
+    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir, cerrarSesion, abrirLogin, peticionLogin, miPerfil, setMiPerfil, esAdmin }}>
       {children}
       <p role="status" aria-live="polite" className={aviso ? "fixed z-50 bottom-4 left-1/2 -translate-x-1/2 w-max max-w-[calc(100%-2rem)] bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg" : "sr-only"}>
         {aviso}
