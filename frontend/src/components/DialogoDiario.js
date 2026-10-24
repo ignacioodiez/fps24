@@ -6,8 +6,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { COMENTARIO_MAX, ayerMadrid, borrar, cinesDelDia, crear, editar, hoyMadrid, todosLosCines } from "@/lib/diario";
 
 const OTRO = "__otro";
-const ETIQUETA = "block text-xs font-bold uppercase tracking-wider text-muted mb-1";
-const CAMPO = "w-full border border-line bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none";
+export const ETIQUETA = "block text-xs font-bold uppercase tracking-wider text-muted mb-1";
+export const CAMPO = "w-full border border-line bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none";
 export const BOTON_PRIMARIO = "px-4 py-2 bg-primary text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60";
 export const BOTON_SECUNDARIO = "px-4 py-2 border border-line text-sm font-bold text-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-60";
 

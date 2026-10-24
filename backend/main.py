@@ -17,6 +17,7 @@ from app.services.cines import detalle_cine, listar_cines
 from app.services.gestor_peliculas import EXCLUIDOS
 from app.auth import Usuario, usuario_actual
 from app.diario import router as diario_router
+from app.perfil import router as perfil_router
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -34,6 +35,8 @@ app.add_middleware(
 
 # Diario del usuario (/diario...) y GET /pelicula/{id}/cines
 app.include_router(diario_router)
+# Perfil (/me/perfil, /usuarios/disponible) y perfil público (/u/{usuario})
+app.include_router(perfil_router)
 
 # --- ⚡ MODELOS DE RESPUESTA (AQUÍ ESTABA EL TAPÓN) ---
 

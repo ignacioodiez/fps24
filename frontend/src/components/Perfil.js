@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useId, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import DialogoDiario, { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import NotaEstrellas from "@/components/NotaEstrellas";
-import BuscadorPeliculas from "@/components/BuscadorPeliculas";
-import { borrar, hoyMadrid, listar } from "@/lib/diario";
+import TarjetaPerfilPublico from "@/components/TarjetaPerfilPublico";
+import { DIARIO_GUARDADO, borrar, listar } from "@/lib/diario";
 
 const POR_PAGINA = 20;
 const COMENTARIO_CORTO = 240; // más largo (o con más de 3 líneas) se recorta con "ver más"
@@ -34,6 +35,7 @@ function Comentario({ texto }) {
   );
 }
 
+// Sin onEditar/onBorrar (perfil de otra persona) es solo lectura
 function Entrada({ entrada, marcada, onEditar, onBorrar }) {
   const [confirmar, setConfirmar] = useState(false);
   const [borrando, setBorrando] = useState(false);
@@ -45,7 +47,7 @@ function Entrada({ entrada, marcada, onEditar, onBorrar }) {
   };
 
   return (
-    <li id={`entrada-${entrada.id}`} className={`flex gap-3 md:gap-4 py-4 border-b border-line transition-colors duration-700 ${marcada ? "bg-primary-soft" : ""}`}>
+    <li id={entrada.id ? `entrada-${entrada.id}` : undefined} className={`flex gap-3 md:gap-4 py-4 border-b border-line transition-colors duration-700 ${marcada ? "bg-primary-soft" : ""}`}>
       <div className="w-12 md:w-16 aspect-[2/3] shrink-0 overflow-hidden border border-line bg-surface">
         {pelicula.poster_url && <img src={pelicula.poster_url} alt="" className="w-full h-full object-cover" loading="lazy" />}
       </div>
@@ -67,41 +69,64 @@ function Entrada({ entrada, marcada, onEditar, onBorrar }) {
         {entrada.nota && <div className="mt-1"><NotaEstrellas valor={entrada.nota} soloLectura /></div>}
         {entrada.comentario && <Comentario texto={entrada.comentario} />}
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm font-bold">
-          {confirmar ? (
-            <>
-              <span className="font-normal text-foreground">¿Eliminar esta entrada?</span>
-              <button type="button" onClick={eliminar} disabled={borrando} className="text-red-600 hover:underline disabled:opacity-60">
-                {borrando ? "Eliminando…" : "Sí, eliminar"}
-              </button>
-              <button type="button" onClick={() => setConfirmar(false)} className="text-muted hover:text-foreground">No</button>
-            </>
-          ) : (
-            <>
-              <button type="button" aria-haspopup="dialog" onClick={() => onEditar(entrada)} className="text-primary hover:underline">
-                Editar<span className="sr-only"> {pelicula.titulo}</span>
-              </button>
-              <button type="button" onClick={() => setConfirmar(true)} className="text-muted hover:text-red-600">
-                Eliminar<span className="sr-only"> {pelicula.titulo}</span>
-              </button>
-            </>
-          )}
-        </div>
+        {onEditar && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm font-bold">
+            {confirmar ? (
+              <>
+                <span className="font-normal text-foreground">¿Eliminar esta entrada?</span>
+                <button type="button" onClick={eliminar} disabled={borrando} className="text-red-600 hover:underline disabled:opacity-60">
+                  {borrando ? "Eliminando…" : "Sí, eliminar"}
+                </button>
+                <button type="button" onClick={() => setConfirmar(false)} className="text-muted hover:text-foreground">No</button>
+              </>
+            ) : (
+              <>
+                <button type="button" aria-haspopup="dialog" onClick={() => onEditar(entrada)} className="text-primary hover:underline">
+                  Editar<span className="sr-only"> {pelicula.titulo}</span>
+                </button>
+                <button type="button" onClick={() => setConfirmar(true)} className="text-muted hover:text-red-600">
+                  Eliminar<span className="sr-only"> {pelicula.titulo}</span>
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );
 }
 
-// total: lo guarda Perfil, que lo enseña en la cabecera
-function PestanaDiario({ total, setTotal }) {
+// Entradas agrupadas por mes, en el orden de la lista. Las del perfil público no traen id: clave por posición.
+export function ListaDiario({ entradas, marcada, onEditar, onBorrar }) {
+  const meses = [];
+  for (const e of entradas) {
+    const clave = e.fecha_vista.slice(0, 7);
+    if (meses.at(-1)?.clave !== clave) meses.push({ clave, entradas: [] });
+    meses.at(-1).entradas.push(e);
+  }
+  return meses.map((m) => (
+    <section key={m.clave} aria-labelledby={`mes-${m.clave}`} className="mt-6">
+      <h3 id={`mes-${m.clave}`} className="text-xs font-bold uppercase tracking-wider text-muted border-b border-line pb-2">
+        {nombreMes(`${m.clave}-01`)}
+      </h3>
+      <ul>
+        {m.entradas.map((e, i) => (
+          <Entrada key={e.id ?? i} entrada={e} marcada={e.id && e.id === marcada} onEditar={onEditar} onBorrar={onBorrar} />
+        ))}
+      </ul>
+    </section>
+  ));
+}
+
+// Mi diario: editar y borrar. Para añadir está el "+" de la barra (BotonAnadirDiario), que avisa con DIARIO_GUARDADO.
+function MiDiario() {
   const [entradas, setEntradas] = useState([]);
+  const [total, setTotal] = useState(0);
   const [estado, setEstado] = useState("cargando"); // cargando | listo | error
   const [error, setError] = useState("");
   const [editando, setEditando] = useState(null);
   const [aviso, setAviso] = useState("");
-  const [nueva, setNueva] = useState(null); // película elegida en el buscador
   const [marcada, setMarcada] = useState(null); // id de la entrada recién añadida
-  const [buscador, setBuscador] = useState(0); // cambiar la key vacía el buscador
 
   // desplazamiento 0 = primera página; si no, se añade a lo cargado (sin repetir: un borrado mueve el desplazamiento)
   const pedirPagina = useCallback((desplazamiento) => {
@@ -118,16 +143,24 @@ function PestanaDiario({ total, setTotal }) {
         setError(err.message);
         setEstado("error");
       });
-  }, [setTotal]);
+  }, []);
 
   useEffect(() => pedirPagina(0), [pedirPagina]);
 
-  // La entrada recién añadida: a la vista, con el foco en su título y marcada un momento
+  useEffect(() => {
+    const anadida = ({ detail: guardada }) => {
+      setEntradas((previas) => ordenar([...previas, guardada]));
+      setTotal((t) => t + 1);
+      setMarcada(guardada.id);
+    };
+    window.addEventListener(DIARIO_GUARDADO, anadida);
+    return () => window.removeEventListener(DIARIO_GUARDADO, anadida);
+  }, []);
+
+  // La entrada recién añadida: a la vista y marcada un momento
   useEffect(() => {
     if (!marcada) return;
-    const li = document.getElementById(`entrada-${marcada}`);
-    li?.scrollIntoView({ block: "center" });
-    li?.querySelector("a")?.focus({ preventScroll: true });
+    document.getElementById(`entrada-${marcada}`)?.scrollIntoView({ block: "center" });
     const t = setTimeout(() => setMarcada(null), 2000);
     return () => clearTimeout(t);
   }, [marcada]);
@@ -154,19 +187,9 @@ function PestanaDiario({ total, setTotal }) {
     }
   };
 
-
-  // Agrupadas por mes, en el orden de la lista
-  const meses = [];
-  for (const e of entradas) {
-    const clave = e.fecha_vista.slice(0, 7);
-    if (meses.at(-1)?.clave !== clave) meses.push({ clave, entradas: [] });
-    meses.at(-1).entradas.push(e);
-  }
-
   return (
     <div>
-      <BuscadorPeliculas key={buscador} onElegir={setNueva} />
-      <p role="status" aria-live="polite" className="mt-2 text-sm font-semibold text-primary min-h-5">{aviso}</p>
+      <p role="status" aria-live="polite" className="text-sm font-semibold text-primary min-h-5">{aviso}</p>
 
       {estado === "cargando" && entradas.length === 0 ? (
         <Esqueleto />
@@ -174,23 +197,12 @@ function PestanaDiario({ total, setTotal }) {
         <p role="alert" className="py-8 text-red-600">{error}</p>
       ) : entradas.length === 0 ? (
         <p className="py-12 text-center text-lg text-foreground">
-          Tu diario está vacío. Busca arriba una película que hayas visto para añadirla.
+          Tu diario está vacío. Pulsa <strong>+</strong> en la barra de arriba para añadir una película que hayas visto.
         </p>
       ) : (
         <>
           <p className="text-sm text-muted">{total} {total === 1 ? "película apuntada" : "películas apuntadas"}</p>
-          {meses.map((m) => (
-            <section key={m.clave} aria-labelledby={`mes-${m.clave}`} className="mt-6">
-              <h3 id={`mes-${m.clave}`} className="text-xs font-bold uppercase tracking-wider text-muted border-b border-line pb-2">
-                {nombreMes(`${m.clave}-01`)}
-              </h3>
-              <ul>
-                {m.entradas.map((e) => (
-                  <Entrada key={e.id} entrada={e} marcada={e.id === marcada} onEditar={setEditando} onBorrar={borrarEntrada} />
-                ))}
-              </ul>
-            </section>
-          ))}
+          <ListaDiario entradas={entradas} marcada={marcada} onEditar={setEditando} onBorrar={borrarEntrada} />
           {entradas.length < total && (
             <div className="mt-6 text-center">
               <button type="button" onClick={cargarMas} disabled={estado === "cargando"} className={BOTON_SECUNDARIO}>
@@ -200,20 +212,6 @@ function PestanaDiario({ total, setTotal }) {
             </div>
           )}
         </>
-      )}
-
-      {nueva && (
-        <DialogoDiario
-          pelicula={nueva} fechaInicial={hoyMadrid()}
-          onCerrar={() => setNueva(null)}
-          onGuardado={(guardada) => {
-            setEntradas((previas) => ordenar([...previas, guardada]));
-            setTotal((t) => t + 1);
-            setAviso(`«${guardada.pelicula.titulo}» añadida a tu diario`);
-            setMarcada(guardada.id);
-            setBuscador((k) => k + 1);
-          }}
-        />
       )}
 
       {editando && (
@@ -234,12 +232,7 @@ function PestanaDiario({ total, setTotal }) {
   );
 }
 
-// Pestañas del perfil: añadir una ("Quiero verla", "Ajustes") es añadir una línea
-const PESTANAS = [
-  { id: "diario", etiqueta: "Diario", Contenido: PestanaDiario },
-];
-
-function Esqueleto() {
+export function Esqueleto() {
   return (
     <div aria-busy="true" aria-label="Cargando" className="space-y-4 py-4">
       {[0, 1, 2].map((i) => (
@@ -255,14 +248,71 @@ function Esqueleto() {
   );
 }
 
-// Estilo plano de la barra de secciones (NavSecciones): texto en mayúsculas y línea violeta en la activa
-const PESTANA = "flex items-center min-h-11 whitespace-nowrap px-3 md:px-4 text-xs md:text-[13px] font-semibold uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary";
+// Nombre y bio, igual en mi vista y en la pública
+export function CabeceraPerfil({ usuario, bio }) {
+  return (
+    <div className="text-center">
+      <h2 className="text-3xl md:text-5xl font-black font-display text-primary break-all">@{usuario}</h2>
+      {/* Texto plano con sus saltos de línea: nunca HTML */}
+      {bio && <p className="mt-4 text-lg text-foreground whitespace-pre-wrap break-words">{bio}</p>}
+    </div>
+  );
+}
 
-export default function Perfil() {
-  const { usuario, cargando, abrirLogin } = useAuth();
-  const [activa, setActiva] = useState(PESTANAS[0].id);
-  const [total, setTotal] = useState(null); // del GET /diario; null hasta que llega
-  const pestanas = useRef({});
+const TITULO_SECCION = "text-xl font-display font-bold uppercase text-foreground";
+
+// /u/<mi usuario>: mis datos (aunque sea privado), aviso de quién lo ve y gestión de mis entradas
+function MiPerfil({ perfil }) {
+  const publico = perfil.visibilidad === "publico";
+  const quienVe = !publico
+    ? "Quien abra tu enlace verá «Este perfil no existe o es privado»."
+    : perfil.diario_publico
+      ? "Cualquiera con tu enlace ve tu nombre de usuario, tu bio y tu diario, con tus notas."
+      : "Cualquiera con tu enlace ve tu nombre de usuario y tu bio. Tu diario no se muestra.";
+  return (
+    <div className="max-w-3xl mx-auto px-4 md:px-6 py-8">
+      <CabeceraPerfil usuario={perfil.usuario} bio={perfil.bio} />
+      <div className={`mt-6 flex flex-wrap items-center justify-between gap-3 border p-4 ${publico ? "border-primary bg-primary-soft" : "border-line bg-surface"}`}>
+        <div className="min-w-0">
+          <p className="font-bold text-foreground">{publico ? "Tu perfil es público" : "Solo tú ves este perfil"}</p>
+          <p className="text-sm text-muted">{quienVe}</p>
+        </div>
+        <Link href="/perfil/editar" className={BOTON_PRIMARIO}>Editar mi perfil</Link>
+      </div>
+      <h3 className={`mt-8 ${TITULO_SECCION}`}>Mi diario</h3>
+      <MiDiario />
+    </div>
+  );
+}
+
+const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
+
+// En /u/[usuario]: si el visitante es el dueño, su vista; si no, children (la pública o el "no existe o es privado").
+// esperar: mientras no se sabe, esqueleto en vez de children (en el 404, para no enseñarle al dueño "no existe").
+export function SiSoyYo({ esperar = false, children }) {
+  const { cargando, miPerfil } = useAuth();
+  const usuario = usuarioDeRuta(usePathname());
+  if (miPerfil?.usuario && miPerfil.usuario === usuario) return <MiPerfil perfil={miPerfil} />;
+  if (esperar && (cargando || miPerfil === undefined)) {
+    return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
+  }
+  return children;
+}
+
+// /perfil: a /u/<mi usuario> o, sin usuario (o sin sesión), a la edición
+export function IrAMiPerfil() {
+  const { cargando, miPerfil } = useAuth();
+  const router = useRouter();
+  useEffect(() => {
+    if (cargando || miPerfil === undefined) return;
+    router.replace(miPerfil?.usuario ? `/u/${miPerfil.usuario}` : "/perfil/editar");
+  }, [cargando, miPerfil, router]);
+  return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
+}
+
+// /perfil/editar: nombre, bio, visibilidad y diario público; debajo, mis entradas
+export default function EditarPerfil() {
+  const { usuario, cargando, abrirLogin, miPerfil } = useAuth();
   const id = useId();
 
   if (cargando) {
@@ -285,45 +335,22 @@ export default function Perfil() {
     );
   }
 
-  // Flechas, Inicio y Fin se mueven entre pestañas (patrón tabs de WAI-ARIA)
-  const tecla = (e) => {
-    const pos = PESTANAS.findIndex((p) => p.id === activa);
-    const destino = { ArrowRight: pos + 1, ArrowLeft: pos - 1, Home: 0, End: PESTANAS.length - 1 }[e.key];
-    if (destino === undefined) return;
-    e.preventDefault();
-    const nueva = PESTANAS[(destino + PESTANAS.length) % PESTANAS.length].id;
-    setActiva(nueva);
-    pestanas.current[nueva]?.focus();
-  };
-
-  const { Contenido } = PESTANAS.find((p) => p.id === activa);
-
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-6">
       <div className="mb-6">
-        <h2 className="text-3xl md:text-5xl font-black font-display uppercase text-primary">Mi perfil</h2>
+        <h2 className="text-3xl md:text-5xl font-black font-display uppercase text-primary">Editar mi perfil</h2>
         <p className="mt-1 text-muted">
           <span className="break-all">{usuario.email}</span>
-          {total !== null && <> · {total} {total === 1 ? "película" : "películas"} en tu diario</>}
+          {miPerfil?.usuario && <> · <Link href={`/u/${miPerfil.usuario}`} className="font-bold text-primary hover:underline">Ver mi perfil</Link></>}
         </p>
       </div>
 
-      <div role="tablist" aria-label="Secciones del perfil" onKeyDown={tecla} className="flex overflow-x-auto bg-surface border-y border-line">
-        {PESTANAS.map((p) => (
-          <button
-            key={p.id} ref={(el) => (pestanas.current[p.id] = el)} type="button" role="tab" id={`${id}-${p.id}`}
-            aria-selected={p.id === activa} aria-controls={`${id}-panel`} tabIndex={p.id === activa ? 0 : -1}
-            onClick={() => setActiva(p.id)}
-            className={`${PESTANA} ${p.id === activa ? "text-primary shadow-[inset_0_-3px_0_var(--primary)]" : "text-muted hover:text-foreground"}`}
-          >
-            {p.etiqueta}
-          </button>
-        ))}
-      </div>
+      <TarjetaPerfilPublico />
 
-      <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${activa}`} className="pt-4">
-        <Contenido total={total} setTotal={setTotal} />
-      </div>
+      <section aria-labelledby={`${id}-diario`}>
+        <h3 id={`${id}-diario`} className={TITULO_SECCION}>Mi diario</h3>
+        <MiDiario />
+      </section>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
+import BotonAnadirDiario from "@/components/BotonAnadirDiario";
 
 // Secciones de la barra: añadir una es añadir una línea. "tambien" = otras rutas en las que la pestaña cuenta como activa.
 const SECCIONES = [
@@ -24,21 +25,20 @@ const INACTIVA = "text-muted hover:text-foreground";
 // Cuenta, a la derecha. En móvil (<640px) baja a su propia línea para que el scroll de las secciones nunca la tape.
 // Mientras AuthProvider carga (servidor e hidratación) se reserva el hueco vacío: ni salto ni desajuste.
 function ZonaCuenta({ ruta }) {
-  const { usuario, cargando, salir, abrirLogin } = useAuth();
-  const router = useRouter();
+  // cerrarSesion lleva a la portada y cierra la sesión allí; el aviso "Has cerrado sesión" lo da AuthProvider
+  const { usuario, cargando, cerrarSesion, abrirLogin, miPerfil } = useAuth();
   if (!AUTH_DISPONIBLE) return null;
 
-  const cerrarSesion = async () => {
-    await salir(); // el aviso "Has cerrado sesión" lo da AuthProvider
-    if (dentro(ruta, "/perfil")) router.push("/");
-  };
-
-  const perfilActivo = dentro(ruta, "/perfil");
+  // Con usuario conocido, directo a /u/<usuario> (sin pasar por la redirección de /perfil)
+  const miRuta = miPerfil?.usuario ? `/u/${miPerfil.usuario}` : "/perfil";
+  const perfilActivo = dentro(ruta, "/perfil") || dentro(ruta.toLowerCase(), miRuta);
   return (
     <div className="flex items-stretch justify-end w-full sm:w-auto ml-auto border-t border-line sm:border-t-0 min-h-11">
       {cargando ? null : usuario ? (
         <>
-          <Link href="/perfil" aria-current={perfilActivo ? "page" : undefined} className={`${ENLACE} ${perfilActivo ? ACTIVA : INACTIVA}`}>
+          <BotonAnadirDiario />
+          <span aria-hidden="true" className="w-px h-4 self-center bg-line" />
+          <Link href={miRuta} aria-current={perfilActivo ? "page" : undefined} className={`${ENLACE} ${perfilActivo ? ACTIVA : INACTIVA}`}>
             Mi perfil
           </Link>
           <span aria-hidden="true" className="w-px h-4 self-center bg-line" />
