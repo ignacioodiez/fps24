@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import { Esqueleto } from "@/components/Perfil";
-import { buscarAdmin, leerOcultas, leerResumen, leerUsuarios, mostrar, ocultar } from "@/lib/admin";
+import { buscarAdmin, enviarPruebaNewsletter, leerOcultas, leerResumen, leerUsuarios, mostrar, ocultar, vistaPreviaNewsletter } from "@/lib/admin";
 
 const TITULO_SECCION = "text-xl font-display font-bold uppercase text-foreground";
 const ERROR = "No hemos podido cargarlo. Recarga la página.";
@@ -19,6 +19,7 @@ const CIFRAS = [
   ["diarios_publicos", "Diarios públicos"],
   ["entradas_diario", "Entradas de diario"],
   ["favoritos", "Cines favoritos"],
+  ["suscriptores_activos", "Suscriptores newsletter"],
 ];
 
 const fecha = (iso) => new Date(iso).toLocaleDateString("es-ES", { timeZone: "Europe/Madrid", day: "numeric", month: "short", year: "numeric" });
@@ -194,6 +195,54 @@ function Peliculas() {
   );
 }
 
+function Newsletter() {
+  const [html, setHtml] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+  const [aviso, setAviso] = useState("");
+
+  const verVistaPrevia = async () => {
+    setOcupado(true);
+    setAviso("Cargando la vista previa…");
+    try {
+      setHtml(await vistaPreviaNewsletter());
+      setAviso("Vista previa de la newsletter de esta semana.");
+    } catch {
+      setAviso("No hemos podido cargar la vista previa.");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const enviarPrueba = async () => {
+    setOcupado(true);
+    setAviso("Enviando la prueba…");
+    try {
+      const { enviado_a } = await enviarPruebaNewsletter();
+      setAviso(`Prueba enviada a ${enviado_a}.`);
+    } catch {
+      setAviso("No se ha podido enviar la prueba. ¿Está configurada RESEND_API_KEY?");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="admin-newsletter" className="space-y-4">
+      <h3 id="admin-newsletter" className={TITULO_SECCION}>Newsletter</h3>
+      <p className="text-sm text-muted">Sale sola los lunes a las 16:00. La prueba llega solo a tu email de admin.</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={ocupado} onClick={verVistaPrevia} className={`${BOTON_SECUNDARIO} min-h-11`}>Ver vista previa</button>
+        <button type="button" disabled={ocupado} onClick={enviarPrueba} className={`${BOTON_PRIMARIO} min-h-11`}>Enviarme una prueba</button>
+      </div>
+      <p role="status" aria-live="polite" className="text-sm text-muted">{aviso}</p>
+      {html && (
+        <iframe title="Vista previa de la newsletter" srcDoc={html} sandbox=""
+                className="w-full max-w-[640px] h-[80vh] border border-line bg-white" />
+      )}
+    </section>
+  );
+}
+
 // El enlace solo sale con es_admin, pero /admin se puede abrir a mano: sin ser admin, el 404 normal
 export default function PanelAdmin() {
   const { cargando, esAdmin } = useAuth();
@@ -206,6 +255,7 @@ export default function PanelAdmin() {
       <Resumen />
       <Usuarios />
       <Peliculas />
+      <Newsletter />
     </div>
   );
 }

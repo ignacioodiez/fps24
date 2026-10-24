@@ -3,17 +3,20 @@ responde el mismo 404 que una ruta inexistente: no revela que el panel existe. S
 usuario y recuentos: nunca contenido del diario, notas, comentarios, correos ni user_id."""
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Field, Session, SQLModel, delete, select
 
 from app.auth import Usuario, usuario_actual
 from app.database.engine import get_session
-from app.database.models import CineFavorito, DiarioEntrada, Pelicula, PeliculaOculta, Perfil
+from app.database.models import CineFavorito, DiarioEntrada, Pelicula, PeliculaOculta, Perfil, Suscriptor
+from app.newsletter import correo, plantilla
+from app.newsletter.contenido import datos_semana, momento_envio
 
 router = APIRouter(prefix="/admin")
 
@@ -64,6 +67,7 @@ class Resumen(SQLModel):
     entradas_diario: int
     favoritos: int
     peliculas_ocultas: int
+    suscriptores_activos: int  # newsletter, confirmados y sin baja
 
 
 def _puede_leer_auth(session: Session) -> bool:
@@ -101,6 +105,7 @@ def resumen(_: Usuario = Depends(admin_actual), session: Session = Depends(get_s
         entradas_diario=_contar(session, select(func.count()).select_from(DiarioEntrada)),
         favoritos=_contar(session, select(func.count()).select_from(CineFavorito)),
         peliculas_ocultas=_contar(session, select(func.count()).select_from(PeliculaOculta)),
+        suscriptores_activos=_contar(session, select(func.count()).where(Suscriptor.estado == "activo")),
     )
 
 
@@ -186,3 +191,32 @@ def mostrar(pelicula_id: int, _: Usuario = Depends(admin_actual), session: Sessi
     session.exec(delete(PeliculaOculta).where(PeliculaOculta.pelicula_id == pelicula_id))
     session.commit()
     return Response(status_code=204)
+
+
+# --- Newsletter: vista previa y prueba (el envío semanal es el cron app/newsletter/enviar.py) ---
+
+def _newsletter(session: Session, email: str, envio: datetime = None) -> tuple:
+    """(asunto, html, texto, token) de la newsletter de esta semana. Con el enlace de baja del admin si está suscrito;
+    si no, uno de muestra que no da de baja a nadie."""
+    token = session.exec(select(Suscriptor.token_baja).where(Suscriptor.email == email)).first()
+    return (*plantilla.semanal(datos_semana(session, envio), correo.url_baja(token or "vista-previa"), correo.contacto()), token)
+
+
+@router.get("/newsletter/vista-previa", response_class=HTMLResponse)
+def vista_previa(fecha: Optional[date] = Query(None, description="envío simulado ese día a las 16:00 (Madrid)"),
+                 usuario: Usuario = Depends(admin_actual), session: Session = Depends(get_session)):
+    envio = momento_envio(fecha) if fecha else None
+    return HTMLResponse(_newsletter(session, usuario.email.strip().lower(), envio)[1])
+
+
+@router.post("/newsletter/enviar-prueba")
+def enviar_prueba(usuario: Usuario = Depends(admin_actual), session: Session = Depends(get_session)):
+    """Solo al email del admin que la pide (el del token), nunca a otra dirección."""
+    email = usuario.email.strip().lower()
+    asunto, html, texto, token = _newsletter(session, email)
+    try:
+        correo.cliente().enviar(correo.mensaje(email, f"[Prueba] {asunto}", html, texto, token_baja=token))
+    except Exception:  # noqa: BLE001 — sin RESEND_API_KEY o Resend caído
+        log.exception("no se pudo enviar la newsletter de prueba")
+        raise HTTPException(status_code=502, detail="No se ha podido enviar la prueba")
+    return {"enviado_a": email}

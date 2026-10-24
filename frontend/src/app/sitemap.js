@@ -14,7 +14,7 @@ export default async function sitemap() {
     console.error("sitemap: error loading cines:", err);
   }
   return [
-    ...["", "/cines", "/estrenos", "/especiales", "/privacidad"].map((ruta) => ({ url: `${SITIO}${ruta}` })),
+    ...["", "/cines", "/estrenos", "/especiales", "/newsletter", "/privacidad"].map((ruta) => ({ url: `${SITIO}${ruta}` })),
     ...cines.map(({ slug }) => ({ url: `${SITIO}/cines/${slug}` })),
   ];
 }

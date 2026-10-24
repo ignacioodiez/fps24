@@ -156,3 +156,29 @@ class PeliculaOculta(SQLModel, table=True):
     pelicula_id: int = Field(foreign_key="pelicula.id", primary_key=True, ondelete="CASCADE")
     motivo: Optional[str] = Field(default=None, sa_column=Column(Text))
     creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+
+
+# 11. NEWSLETTER (migración 0015). suscriptor: doble opt-in; el email siempre en minúsculas. Nunca sale por la API.
+class Suscriptor(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(sa_column=Column(Text, nullable=False, unique=True))
+    estado: str = Field(default="pendiente", sa_column=Column(Text, nullable=False, server_default="pendiente"))  # pendiente/activo/baja
+    token_confirmacion: Optional[str] = Field(default=None, sa_column=Column(Text, unique=True))  # None al confirmar
+    token_baja: str = Field(sa_column=Column(Text, nullable=False, unique=True))  # va en cada correo semanal
+    confirmaciones_enviadas: int = Field(default=0, sa_column=Column(SmallInteger, nullable=False, server_default="0"))
+    confirmacion_enviada_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    user_id: Optional[uuid.UUID] = Field(default=None, sa_column=Column(UUID(as_uuid=True)))  # sin uso en la v1
+    creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    confirmado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    baja_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+
+
+# newsletter_envio: una fila por semana enviada ("2026-W44"); la unicidad hace idempotente el cron
+class NewsletterEnvio(SQLModel, table=True):
+    __tablename__ = "newsletter_envio"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    semana: str = Field(sa_column=Column(Text, nullable=False, unique=True))
+    enviado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    destinatarios: int = 0
+    ok: int = 0
+    errores: int = 0

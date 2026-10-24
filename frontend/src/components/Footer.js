@@ -1,4 +1,5 @@
 import Link from "next/link";
+import FormNewsletter from "@/components/FormNewsletter";
 
 export default function Footer() {
   return (
@@ -50,6 +51,11 @@ export default function Footer() {
                         Privacidad
                     </Link>
                 </li>
+                <li>
+                    <Link href="/newsletter" className="text-muted hover:text-primary transition-colors">
+                        Newsletter
+                    </Link>
+                </li>
                  {/* Aquí pondremos el Ko-fi luego */}
             </ul>
         </div>
@@ -66,6 +72,11 @@ export default function Footer() {
                     </a>
                 </li>
            
+        </div>
+
+        {/* 4. NEWSLETTER */}
+        <div className="w-full md:max-w-xs">
+            <FormNewsletter compacto />
         </div>
 
       </div>

@@ -68,6 +68,11 @@ export default function PrivacidadPage() {
                 Tus <strong className="text-foreground">cines favoritos</strong>, si marcas alguno con la ★: son privados y
                 solo los ves tú. Se usan para enseñarte primero sus sesiones; no aparecen en tu perfil público.
               </li>
+              <li>
+                Si te suscribes a la <strong className="text-foreground">newsletter</strong> «Esta semana en Madrid» (no
+                hace falta cuenta): solo tu <strong className="text-foreground">email</strong> y las fechas de alta,
+                confirmación y baja. Nada más: ni tu nombre ni qué abres o en qué pinchas.
+              </li>
               <li>Próximamente, la lista de películas que marques como <strong className="text-foreground">&quot;quiero verla&quot;</strong>.</li>
             </ul>
           </Seccion>
@@ -93,10 +98,26 @@ export default function PrivacidadPage() {
             </p>
           </Seccion>
 
+          <Seccion titulo="Newsletter">
+            <p>
+              Tu email se usa solo para enviarte, cada lunes, los estrenos y las sesiones especiales de la semana. Al
+              suscribirte te mandamos un correo para <strong className="text-foreground">confirmar</strong> que el
+              email es tuyo (doble confirmación): hasta que no pulses el enlace no recibes nada. Si no lo confirmas, no
+              te volveremos a escribir.
+            </p>
+            <p>
+              Puedes <strong className="text-foreground">darte de baja con un clic</strong> desde el enlace que va al
+              pie de cada correo (o desde el botón «Cancelar suscripción» de tu gestor de correo). La baja es inmediata.
+              Guardamos el email marcado como baja para no volver a escribirte; si quieres que lo borremos del todo,
+              escríbenos. Los correos se envían con <strong className="text-foreground">Resend</strong>.
+            </p>
+          </Seccion>
+
           <Seccion titulo="Base legal">
             <p>
               Tu consentimiento al crear la cuenta y la necesidad de tratar esos datos para darte el servicio que pides
-              (entrar y guardar tus listas).
+              (entrar y guardar tus listas). En la newsletter, tu consentimiento, que confirmas con el enlace del primer correo
+              y puedes retirar en cualquier momento con la baja.
             </p>
           </Seccion>
 
@@ -105,7 +126,7 @@ export default function PrivacidadPage() {
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-foreground">Supabase</strong>: gestiona las cuentas.</li>
               <li><strong className="text-foreground">Google</strong>: si eliges &quot;Continuar con Google&quot;, actúa como proveedor de inicio de sesión y nos confirma tu email y tu nombre. Para mostrar su botón, la web carga un script de Google <strong className="text-foreground">solo cuando abres el panel de inicio de sesión</strong>; desde ese momento Google puede saber que lo has abierto y usar sus propias cookies, según su política de privacidad.</li>
-              <li><strong className="text-foreground">Resend</strong>: envía los correos con el enlace de acceso.</li>
+              <li><strong className="text-foreground">Resend</strong>: envía los correos con el enlace de acceso y los de la newsletter (para eso recibe tu email).</li>
               <li><strong className="text-foreground">Vercel</strong> y <strong className="text-foreground">Render</strong>: alojan la web.</li>
             </ul>
             <p>No vendemos ni cedemos datos a terceros.</p>
@@ -113,6 +134,7 @@ export default function PrivacidadPage() {
 
           <Seccion titulo="Cuánto tiempo">
             <p>Mientras tengas cuenta. Si la eliminas, se borran tus datos.</p>
+            <p>El email de la newsletter, mientras sigas suscrito; tras la baja, solo marcado como baja hasta que pidas borrarlo.</p>
           </Seccion>
 
           <Seccion titulo="Tus derechos">
