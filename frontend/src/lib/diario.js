@@ -3,6 +3,8 @@ import { fetchConAuth } from "@/lib/api";
 // Diario del usuario (backend/app/diario.py). Nunca se manda user_id: el backend lo saca del token.
 
 export const COMENTARIO_MAX = 2000; // el mismo que en el backend
+// Evento de window al añadir una entrada desde el "+" de la barra; detail = la entrada guardada
+export const DIARIO_GUARDADO = "diario:guardado";
 
 const CAMPOS = { fecha_vista: "Fecha", cine_slug: "Cine", nota: "Nota", comentario: "Comentario", repeticion: "Repetición" };
 

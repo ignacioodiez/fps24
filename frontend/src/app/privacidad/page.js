@@ -2,7 +2,7 @@ import TodayHeader from "@/components/TodayHeader";
 
 // Email al que escribir para ejercer los derechos: cámbialo solo aquí
 const EMAIL_CONTACTO = "ignacio.diez.vergara@gmail.com";
-const ACTUALIZADA = "23 de octubre de 2026";
+const ACTUALIZADA = "24 de octubre de 2026";
 
 export const metadata = {
   title: "Privacidad - FPS24",
@@ -53,7 +53,16 @@ export default function PrivacidadPage() {
               </li>
               <li>
                 Tu <strong className="text-foreground">diario</strong>: las películas que apuntes como vistas, con la fecha,
-                el cine, tu nota y tu comentario si los añades. Es privado: solo lo ves tú.
+                el cine, tu nota y tu comentario si los añades. Es <strong className="text-foreground">privado por defecto</strong>:
+                solo lo ves tú, salvo que actives «Mostrar mi diario en mi perfil».
+              </li>
+              <li>
+                Tu <strong className="text-foreground">perfil</strong>, si decides crearlo (es opcional): un nombre de
+                usuario y una bio corta. Es <strong className="text-foreground">privado por defecto</strong>. Si lo haces
+                público, cualquiera con tu enlace (fps24.es/u/tu-usuario) verá tu nombre de usuario y tu bio, nunca tu email.
+                Si además activas «Mostrar mi diario en mi perfil» (está apagado por defecto), verá también todas las
+                entradas de tu diario, incluidas tus notas y comentarios. Puedes apagarlo o volver a hacer el perfil privado
+                cuando quieras y deja de verse al momento.
               </li>
               <li>Próximamente, la lista de películas que marques como <strong className="text-foreground">&quot;quiero verla&quot;</strong>.</li>
             </ul>
@@ -62,8 +71,14 @@ export default function PrivacidadPage() {
           <Seccion titulo="Para qué">
             <p>
               Solo para identificar tu cuenta y guardar tus listas y tu diario. El diario (película, fecha, cine, nota y
-              comentario) solo se usa para enseñártelo a ti en tu perfil: nadie más puede verlo. No vendemos tus datos ni
-              los usamos para publicidad.
+              comentario) se usa para enseñártelo a ti en tu perfil y, solo si tú lo activas y tu perfil es público, a
+              quien abra tu enlace. No vendemos tus datos ni los usamos para publicidad.
+            </p>
+            <p>
+              El administrador de FPS24 puede ver los nombres de usuario, también los de perfiles privados, solo para
+              mantener el servicio (por ejemplo, resolver problemas o retirar un nombre que suplante a otra persona).
+              La web no le da al administrador ninguna forma de ver tus entradas del diario: si lo haces público, las ve
+              como cualquier otra persona con tu enlace. Los perfiles públicos no se muestran en buscadores.
             </p>
           </Seccion>
 

@@ -1,15 +1,17 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { fetchConAuth } from "@/lib/api";
+import { leerPerfil } from "@/lib/perfil";
 
 // Se resuelve al compilar (NEXT_PUBLIC_*): igual en servidor y navegador, sin desajustes de hidratación
 export const AUTH_DISPONIBLE = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 );
 
-const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, salir: async () => {}, abrirLogin: () => {}, peticionLogin: null });
+const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, salir: async () => {}, cerrarSesion: () => {}, abrirLogin: () => {}, peticionLogin: null, miPerfil: null, setMiPerfil: () => {} });
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -20,8 +22,15 @@ export default function AuthProvider({ children }) {
   const [cargando, setCargando] = useState(AUTH_DISPONIBLE);
   // Petición de abrir el panel de inicio de sesión desde cualquier sitio (p. ej. "Añadir al diario"); la atiende PanelLogin
   const [peticionLogin, setPeticionLogin] = useState(null);
-  // Aviso para lectores de pantalla; aquí y no en la barra porque al salir desde /perfil la página cambia
+  // "Has cerrado sesión": aquí y no en la barra porque al salir la página cambia (a la portada)
   const [aviso, setAviso] = useState("");
+  // Cerrar sesión desde la barra: primero a la portada y, ya en ella, se cierra (ver cerrarSesion)
+  const [saliendo, setSaliendo] = useState(false);
+  const ruta = usePathname();
+  const router = useRouter();
+  // GET /me/perfil del usuario con sesión, guardado con su id (al cambiar de cuenta deja de valer)
+  const [perfil, setPerfil] = useState({ uid: null, datos: null });
+  const uid = usuario?.id;
 
   useEffect(() => {
     const sb = supabase();
@@ -30,11 +39,26 @@ export default function AuthProvider({ children }) {
     const { data } = sb.auth.onAuthStateChange((evento, sesion) => {
       setUsuario(sesion?.user ?? null);
       setCargando(false);
-      if (evento === "SIGNED_OUT") setAviso("Has cerrado sesión");
+      if (evento === "SIGNED_OUT") {
+        setAviso("Has cerrado sesión");
+        setPerfil({ uid: null, datos: null }); // que no quede nada del usuario anterior en memoria
+      }
       if (evento === "SIGNED_IN") setAviso("");
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    let vigente = true;
+    leerPerfil()
+      .then((datos) => vigente && setPerfil({ uid, datos }))
+      .catch(() => vigente && setPerfil({ uid, datos: { usuario: null } })); // sin poder leerlo, como si no tuviera
+    return () => { vigente = false; };
+  }, [uid]);
+  // undefined: aún no se sabe; null: sin sesión; si no, el perfil (usuario null = aún no lo ha creado)
+  const miPerfil = !uid ? null : perfil.uid === uid ? perfil.datos : undefined;
+  const setMiPerfil = (datos) => setPerfil({ uid, datos });
 
   // Comprobación manual desde la consola del navegador: await comprobarMe()
   useEffect(() => {
@@ -69,10 +93,30 @@ export default function AuthProvider({ children }) {
     await supabase()?.auth.signOut();
   };
 
+  // replace y no push: "atrás" no vuelve a la página privada. La sesión se cierra ya en "/", así la página
+  // anterior nunca se repinta sin sesión (ni con datos a medias) antes de irse.
+  const cerrarSesion = () => {
+    setSaliendo(true);
+    router.replace("/");
+  };
+  useEffect(() => {
+    if (!saliendo || ruta !== "/") return;
+    supabase()?.auth.signOut().finally(() => setSaliendo(false));
+  }, [saliendo, ruta]);
+
+  // El aviso se ve unos segundos en la portada; para lectores de pantalla basta con que se anuncie
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(""), 4000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
   return (
-    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir, abrirLogin, peticionLogin }}>
+    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir, cerrarSesion, abrirLogin, peticionLogin, miPerfil, setMiPerfil }}>
       {children}
-      <p role="status" aria-live="polite" className="sr-only">{aviso}</p>
+      <p role="status" aria-live="polite" className={aviso ? "fixed z-50 bottom-4 left-1/2 -translate-x-1/2 w-max max-w-[calc(100%-2rem)] bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg" : "sr-only"}>
+        {aviso}
+      </p>
     </AuthContext.Provider>
   );
 }

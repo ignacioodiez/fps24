@@ -116,3 +116,21 @@ class DiarioEntrada(SQLModel, table=True):
     actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     pelicula: Pelicula = Relationship()
     cine: Optional[Cine] = Relationship()
+
+
+# 8. PERFIL (migración 0011): nombre de usuario único (en minúsculas) y visibilidad. Privado por defecto.
+# diario_publico (0012): el diario se ve en /u/{usuario} solo si además el perfil es público.
+class Perfil(SQLModel, table=True):
+    __tablename__ = "perfil"
+    __table_args__ = (
+        Index("uq_perfil_usuario", text("lower(usuario)"), unique=True),
+        CheckConstraint("char_length(bio) <= 160", name="ck_perfil_bio"),
+        CheckConstraint("visibilidad IN ('privado', 'publico')", name="ck_perfil_visibilidad"),
+    )
+    user_id: uuid.UUID = Field(sa_column=Column(UUID(as_uuid=True), primary_key=True))  # sub del JWT, sin FK
+    usuario: str = Field(sa_column=Column(Text, nullable=False))
+    bio: Optional[str] = Field(default=None, sa_column=Column(Text))
+    visibilidad: str = Field(default="privado", sa_column=Column(Text, nullable=False, server_default="privado"))
+    diario_publico: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
