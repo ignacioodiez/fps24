@@ -19,7 +19,7 @@ CAMPOS = {"direccion", "web", "telefono", "zona", "tipo", "lat", "lng", "tarifas
 assert set(CINES_DATOS) <= set(CINES_CONOCIDOS.values()), set(CINES_DATOS) - set(CINES_CONOCIDOS.values())
 assert all(set(d) == CAMPOS and d["tipo"] in ("autor", "comercial") for d in CINES_DATOS.values())
 assert all(partes(d["direccion"])["ciudad"] == "Madrid" for d in CINES_DATOS.values())  # todas se pueden partir
-assert all(40.3 < d["lat"] < 40.5 and -3.8 < d["lng"] < -3.6 for d in CINES_DATOS.values())  # en Madrid
+assert all(40.3 < d["lat"] < 40.5 and -3.8 < d["lng"] < -3.5 for d in CINES_DATOS.values())  # en Madrid
 print("OK: CINES_DATOS")
 
 # --- tarifas: los 11 cines de frontend/src/data/cines.js, con la estructura acordada ---

@@ -74,16 +74,26 @@ def abrir_pagina(timeout_ms=15_000, navegacion_ms=60_000, **opciones_contexto):
 def obtener_json(url, timeout=15, pausa_reintento=2):
     """GET con User-Agent de navegador -> JSON decodificado. Un reintento si falla; si vuelve a fallar
     (red, timeout, 403/429/5xx u otro código de error, JSON inválido) lanza FuenteNoDisponible."""
+    return _pedir(url, {"User-Agent": USER_AGENT, "Accept": "application/json"}, lambda r: r.json(),
+                  timeout, pausa_reintento)
+
+
+def obtener_html(url, user_agent=USER_AGENT, timeout=15, pausa_reintento=2):
+    """Como obtener_json, pero devuelve el texto de la respuesta (HTML)."""
+    return _pedir(url, {"User-Agent": user_agent, "Accept": "text/html"}, lambda r: r.text,
+                  timeout, pausa_reintento)
+
+
+def _pedir(url, cabeceras, leer, timeout, pausa_reintento):
     for intento in (1, 2):
         try:
-            respuesta = requests.get(url, timeout=timeout,
-                                     headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+            respuesta = requests.get(url, timeout=timeout, headers=cabeceras)
             if respuesta.status_code in (403, 429):
                 motivo = f"HTTP {respuesta.status_code} (bloqueo o límite de peticiones)"
             elif respuesta.status_code >= 400:
                 motivo = f"HTTP {respuesta.status_code}"
             else:
-                return respuesta.json()
+                return leer(respuesta)
         except requests.exceptions.JSONDecodeError:
             motivo = "la respuesta no es JSON válido"
         except requests.RequestException as e:

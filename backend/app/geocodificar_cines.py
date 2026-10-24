@@ -20,9 +20,9 @@ _ARTICULOS = ("de las", "de los", "de la", "del", "de")
 
 
 def partes(direccion: str) -> dict:
-    """"[Lugar, ]Calle, Nº, CP Ciudad" -> {calle, numero, cp, ciudad}."""
+    """"[Lugar, ]Calle, Nº (o s/n), CP Ciudad" -> {calle, numero, cp, ciudad}."""
     trozos = direccion.split(", ")
-    i = next(i for i, t in enumerate(trozos) if t.isdigit())
+    i = next(i for i, t in enumerate(trozos) if t.isdigit() or t == "s/n")
     cp, ciudad = trozos[-1].split(" ", 1)
     return dict(calle=trozos[i - 1], numero=trozos[i], cp=cp, ciudad=ciudad)
 
