@@ -11,7 +11,7 @@ export const AUTH_DISPONIBLE = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 );
 
-const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, salir: async () => {}, cerrarSesion: () => {}, abrirLogin: () => {}, peticionLogin: null, miPerfil: null, setMiPerfil: () => {}, esAdmin: false });
+const AuthContext = createContext({ usuario: null, cargando: false, entrar: async () => {}, entrarConGoogle: async () => {}, entrarConTokenGoogle: async () => {}, salir: async () => {}, cerrarSesion: () => {}, abrirLogin: () => {}, peticionLogin: null, miPerfil: null, setMiPerfil: () => {}, esAdmin: false });
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -100,6 +100,13 @@ export default function AuthProvider({ children }) {
     if (error) throw error;
   };
 
+  // Botón oficial de Google (GIS): el ID token llega por callback, sin salir de la página. nonce va en claro
+  // (a Google se le pasó su SHA-256); si el email ya tenía cuenta, Supabase enlaza la identidad al mismo usuario.
+  const entrarConTokenGoogle = async (token, nonce) => {
+    const { error } = await supabase().auth.signInWithIdToken({ provider: "google", token, nonce });
+    if (error) throw error;
+  };
+
   // Objeto nuevo en cada llamada: dos peticiones seguidas con el mismo mensaje vuelven a abrir el panel
   const abrirLogin = (mensaje = "") => setPeticionLogin({ mensaje });
 
@@ -126,7 +133,7 @@ export default function AuthProvider({ children }) {
   }, [aviso]);
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, salir, cerrarSesion, abrirLogin, peticionLogin, miPerfil, setMiPerfil, esAdmin }}>
+    <AuthContext.Provider value={{ usuario, cargando, entrar, entrarConGoogle, entrarConTokenGoogle, salir, cerrarSesion, abrirLogin, peticionLogin, miPerfil, setMiPerfil, esAdmin }}>
       {children}
       <p role="status" aria-live="polite" className={aviso ? "fixed z-50 bottom-4 left-1/2 -translate-x-1/2 w-max max-w-[calc(100%-2rem)] bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg" : "sr-only"}>
         {aviso}
