@@ -14,3 +14,10 @@ export const buscarAdmin = (q) => pedir(`/admin/peliculas/buscar?q=${encodeURICo
 export const leerOcultas = () => pedir("/admin/peliculas/ocultas");
 export const ocultar = (id) => pedir(`/admin/peliculas/${id}/ocultar`, { method: "POST" });
 export const mostrar = (id) => pedir(`/admin/peliculas/${id}/ocultar`, { method: "DELETE" });
+// Newsletter: la vista previa es HTML, no JSON
+export async function vistaPreviaNewsletter() {
+  const res = await fetchConAuth("/admin/newsletter/vista-previa");
+  if (!res.ok) throw new Error(`vista previa: HTTP ${res.status}`);
+  return res.text();
+}
+export const enviarPruebaNewsletter = () => pedir("/admin/newsletter/enviar-prueba", { method: "POST" });

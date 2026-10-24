@@ -20,6 +20,7 @@ from app.diario import router as diario_router
 from app.perfil import router as perfil_router
 from app.favoritos import router as favoritos_router
 from app.admin import admin_actual, es_admin, router as admin_router
+from app.newsletter.rutas import router as newsletter_router
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -43,6 +44,8 @@ app.include_router(perfil_router)
 app.include_router(favoritos_router)
 # Panel de administración (/admin/...): 404 para quien no esté en ADMIN_EMAILS
 app.include_router(admin_router)
+# Newsletter semanal: /newsletter/suscribir, /newsletter/confirmar y /newsletter/baja
+app.include_router(newsletter_router)
 
 # --- ⚡ MODELOS DE RESPUESTA (AQUÍ ESTABA EL TAPÓN) ---
 
