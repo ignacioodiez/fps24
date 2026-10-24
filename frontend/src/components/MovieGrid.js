@@ -2,6 +2,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cleanCinemaName } from "@/utils/helpers";
 import { SesionesCine } from "@/components/Sesiones";
+import { useFavoritos } from "@/components/FavoritosProvider";
+import { favoritosPrimero } from "@/lib/favoritos";
 import { ChipDato } from "@/components/FichaPelicula";
 
 const PALETTE_AQUAMARINE = "#42E2B8";
@@ -13,6 +15,7 @@ export default function MovieGrid({
   selectedDate
 }) {
   const router = useRouter();
+  const { favoritos } = useFavoritos();
 
   // Clic en la tarjeta: vista rápida (ruta interceptada, sin mover el scroll); Ctrl/Cmd o botón central: página
   // completa en pestaña nueva. Los enlaces de dentro (título, horas, póster) gestionan su propio clic.
@@ -120,7 +123,8 @@ export default function MovieGrid({
 
             {/* CINES Y SESIONES (mismo bloque que la vista rápida y la página completa) */}
             <div className="space-y-3">
-              {Object.entries(movie.cines).map(([cinemaName, sessions]) => (
+              {/* Mis cines favoritos primero; el resto, en su orden (por primera sesión) */}
+              {favoritosPrimero(Object.entries(movie.cines), ([, sessions]) => sessions[0].cine_slug, favoritos).map(([cinemaName, sessions]) => (
                 <SesionesCine key={cinemaName} cine={cinemaName} pases={sessions} />
               ))}
             </div>

@@ -18,6 +18,7 @@ from app.services.gestor_peliculas import EXCLUIDOS
 from app.auth import Usuario, usuario_actual
 from app.diario import router as diario_router
 from app.perfil import router as perfil_router
+from app.favoritos import router as favoritos_router
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -37,6 +38,8 @@ app.add_middleware(
 app.include_router(diario_router)
 # Perfil (/me/perfil, /usuarios/disponible) y perfil público (/u/{usuario})
 app.include_router(perfil_router)
+# Cines favoritos (/me/cines-favoritos)
+app.include_router(favoritos_router)
 
 # --- ⚡ MODELOS DE RESPUESTA (AQUÍ ESTABA EL TAPÓN) ---
 
@@ -47,6 +50,7 @@ class PeliculaConId(PeliculaBase):
 # "cine" ya no es columna: sale de cine.nombre (propiedad Pase.cine)
 class PaseSalida(PaseBase):
     cine: str
+    cine_slug: str  # para ordenar por los cines favoritos en el front (propiedad Pase.cine_slug)
 
 class PaseConPelicula(PaseSalida):
     id: int
@@ -77,11 +81,13 @@ class Estreno(SQLModel):
     pases: int
     cines: int
     primera_sesion: PaseConId
+    alternativas: List[PaseConId] = []  # ver EnLaSemana.alternativas
     sin_nota: bool  # relleno por nº de cines: no llega a la nota/votos mínimos
 
 class Especial(SQLModel):
     pelicula: PeliculaConId
     pase: PaseConId
+    alternativas: List[PaseConId] = []  # ver EnLaSemana.alternativas
     nota: float
 
 class Destacadas(SQLModel):
@@ -100,6 +106,9 @@ class EnLaSemana(SQLModel):
     n_sesiones: int
     n_cines: int
     sesion: PaseConId  # estrenos: la primera; especiales: la elegida como en /destacadas
+    # El mismo día que `sesion`, la que se elegiría en cada uno de los otros cines (una por cine, por hora). El front
+    # sugiere la de un cine favorito si la hay; si no, `sesion`.
+    alternativas: List[PaseConId] = []
 
 class PaginaSemana(SQLModel):
     semana: int

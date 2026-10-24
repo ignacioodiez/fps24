@@ -5,6 +5,9 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { LocateFixed, X } from "lucide-react";
 import { ChipDato } from "@/components/FichaPelicula";
+import { useAuth } from "@/components/AuthProvider";
+import BotonFavorito from "@/components/BotonFavorito";
+import { useFavoritos } from "@/components/FavoritosProvider";
 
 // Leaflet usa window: solo en cliente
 const MapaCines = dynamic(() => import("@/components/MapaCines"), {
@@ -143,9 +146,12 @@ function TarjetaCine({ cine, hoy, activo, distancia, onActivar }) {
           activo ? "border-primary ring-2 ring-primary" : "border-line"}`}>
       <div className="min-w-0">
         {distancia != null && <p className="mb-1 text-xs font-bold text-primary">a {km(distancia)}</p>}
-        <h3 className="text-lg font-display font-bold uppercase leading-tight text-foreground">
-          <Link href={`/cines/${cine.slug}`} className="hover:text-primary transition-colors rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{cine.nombre}</Link>
-        </h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-lg font-display font-bold uppercase leading-tight text-foreground">
+            <Link href={`/cines/${cine.slug}`} className="hover:text-primary transition-colors rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{cine.nombre}</Link>
+          </h3>
+          <BotonFavorito slug={cine.slug} nombre={cine.nombre} className="-mt-1" />
+        </div>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {cine.zona && <ChipDato>{cine.zona}</ChipDato>}
           {cine.tipo === "autor" && (
@@ -186,6 +192,12 @@ export default function SalasYPrecios({ cines, diaHoy }) {
   const [orden, setOrden] = useState("zona");
   const [activo, setActivo] = useState(null);
   const [vista, setVista] = useVista();
+  const { usuario } = useAuth();
+  const { favoritos } = useFavoritos();
+  const [soloMios, setSoloMios] = useState(false);
+  // "Mis cines": con sesión y algún favorito; si se quita el último estando en él, sigue visible con el aviso
+  const conMios = Boolean(usuario) && (favoritos.size > 0 || soloMios);
+  const mios = conMios && soloMios;
   // Ubicación solo en este navegador: no se envía a ningún servidor
   const [posicion, setPosicion] = useState(null);
   const [geo, setGeo] = useState(null);  // null | "buscando" | mensaje de error
@@ -227,7 +239,8 @@ export default function SalasYPrecios({ cines, diaHoy }) {
   const sesionesHoy = cines.reduce((total, c) => total + c.sesiones_hoy, 0);
 
   const visibles = conHoy.filter(({ cine, hoy }) =>
-    (zona === "todas" || cine.zona === zona)
+    (!mios || favoritos.has(cine.slug))
+    && (zona === "todas" || cine.zona === zona)
     && (tipo === "todos" || cine.tipo === tipo)
     && (!soloEspectador || hoy?.tipo === "espectador"));
   if (orden === "precio") {
@@ -251,6 +264,17 @@ export default function SalasYPrecios({ cines, diaHoy }) {
 
       {/* Filtros y orden */}
       <div className="space-y-3 mb-8">
+        {conMios && (
+          <div role="radiogroup" aria-label="Qué cines ver" className="inline-flex p-0.5 rounded-full bg-surface border border-line text-sm font-semibold">
+            {[[false, "Todos"], [true, "★ Mis cines"]].map(([valor, texto]) => (
+              <button key={texto} type="button" role="radio" aria-checked={mios === valor} onClick={() => setSoloMios(valor)}
+                      className={`px-4 py-1.5 rounded-full transition-colors border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                        mios === valor ? "bg-background text-foreground border-line" : "text-muted hover:text-foreground border-transparent"}`}>
+                {texto}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2" role="group" aria-label="Zona">
           <ChipFiltro activo={zona === "todas"} onClick={() => setZona("todas")}>Todas</ChipFiltro>
           {zonas.map((z) => <ChipFiltro key={z} activo={zona === z} onClick={() => setZona(z)}>{z}</ChipFiltro>)}
@@ -321,7 +345,9 @@ export default function SalasYPrecios({ cines, diaHoy }) {
 
         <div className={`${vista === "lista" ? "block" : "hidden"} lg:block`}>
           {visibles.length === 0 ? (
-            <p className="text-center text-muted py-12 rounded-3xl border border-dashed border-line bg-surface">Ningún cine cumple esos filtros.</p>
+            <p className="text-center text-muted py-12 px-4 rounded-3xl border border-dashed border-line bg-surface">
+              {mios && favoritos.size === 0 ? "Aún no tienes cines favoritos. Pulsa la ★ en un cine para añadirlo." : "Ningún cine cumple esos filtros."}
+            </p>
           ) : (
             <div className="space-y-10">
               {grupos.map(([nombre, lista]) => (

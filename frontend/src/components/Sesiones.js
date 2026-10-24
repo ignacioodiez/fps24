@@ -2,6 +2,9 @@
 
 import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { cleanCinemaName, extractTime, isDiaEspectador, textoSala } from "@/utils/helpers";
+import BotonFavorito, { MarcaFavorito } from "@/components/BotonFavorito";
+import { useFavoritos } from "@/components/FavoritosProvider";
+import { favoritosPrimero } from "@/lib/favoritos";
 
 // Piezas de sesiones con el estilo de la cartelera de la portada. Las usan la portada (MovieGrid),
 // la vista rápida (ModalPelicula) y la página completa de película, para que se vean igual.
@@ -71,13 +74,19 @@ export function ChipIdioma({ idioma }) {
   );
 }
 
-// Cabecera de cine: verde (accent) si ese día es el del espectador en ese cine
-export function CabeceraCine({ nombre, fecha }) {
+// Cabecera de cine: verde (accent) si ese día es el del espectador en ese cine. Si es favorito, ★ delante;
+// conFavorito: además la estrella para marcarlo o quitarlo (modal y ficha).
+export function CabeceraCine({ nombre, fecha, slug, conFavorito = false }) {
   const espectador = isDiaEspectador(nombre, fecha);
   return (
-    <div className={`flex items-center px-2.5 py-1.5 rounded-lg border w-fit max-w-full ${
-      espectador ? "bg-accent text-foreground border-accent" : "bg-surface text-foreground border-line"}`}>
-      <h3 className="text-xs font-bold uppercase tracking-wide truncate">{cleanCinemaName(nombre)}</h3>
+    <div className="flex items-center gap-1 w-fit max-w-full">
+      <div className={`flex items-center min-w-0 px-2.5 py-1.5 rounded-lg border ${
+        espectador ? "bg-accent text-foreground border-accent" : "bg-surface text-foreground border-line"}`}>
+        <h3 className="text-xs font-bold uppercase tracking-wide truncate">
+          {!conFavorito && <MarcaFavorito slug={slug} />} {cleanCinemaName(nombre)}
+        </h3>
+      </div>
+      {conFavorito && <BotonFavorito pequeno slug={slug} nombre={cleanCinemaName(nombre)} />}
     </div>
   );
 }
@@ -120,14 +129,14 @@ export function ChipHora({ pase, cine, conPrecio = false, conSala = false }) {
 
 // Un cine con sus horas: cabecera + chips, como en la tarjeta de la cartelera.
 // maxHoras: en la ficha, horas visibles antes del chip "+N" (la portada no limita).
-export function SesionesCine({ cine, pases, conPrecio = false, conSala = false, maxHoras = Infinity }) {
+export function SesionesCine({ cine, pases, conPrecio = false, conSala = false, maxHoras = Infinity, conFavorito = false }) {
   const [abierto, setAbierto] = useState(false);
   const id = useId();
   const ocultas = pases.length - maxHoras;
   const visibles = abierto || ocultas <= 0 ? pases : pases.slice(0, maxHoras);
   return (
     <div className="flex flex-col gap-1.5">
-      <CabeceraCine nombre={cine} fecha={pases[0]?.fecha_hora} />
+      <CabeceraCine nombre={cine} fecha={pases[0]?.fecha_hora} slug={pases[0]?.cine_slug} conFavorito={conFavorito} />
       <div id={id} className="flex flex-wrap gap-2">
         {visibles.map((pase, i) => (
           <ChipHora key={pase.id ?? i} pase={pase} cine={cine} conPrecio={conPrecio} conSala={conSala} />
@@ -196,9 +205,10 @@ export function SelectorAgrupacion({ modo, onCambiar }) {
 }
 
 // Sesiones de un día. "cine": un bloque por cine, cines por su primera sesión y horas en orden.
-// "hora": lista cronológica plana, con el cine en cada fila. contexto: "modal" o "pagina" (límites de LIMITES).
+// "hora": lista cronológica plana, con el cine en cada fila (sin reordenar por favoritos: manda la hora). contexto: "modal" o "pagina" (límites de LIMITES).
 // Lo desplegado se queda abierto mientras la ficha esté montada (también al cambiar de vista y volver).
 export function SesionesDia({ pases, modo = "cine", contexto = "modal" }) {
+  const { favoritos } = useFavoritos();
   const limite = LIMITES[contexto];
   const [todosCines, setTodosCines] = useState(false);
   const [todasSesiones, setTodasSesiones] = useState(false);
@@ -214,7 +224,7 @@ export function SesionesDia({ pases, modo = "cine", contexto = "modal" }) {
           {visibles.map((pase, i) => (
             <li key={pase.id ?? i} className="flex flex-wrap items-center gap-2">
               <ChipHora pase={pase} cine={pase.cine} conPrecio conSala />
-              <span className="text-xs font-bold uppercase tracking-wide text-foreground">{cleanCinemaName(pase.cine)}</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-foreground"><MarcaFavorito slug={pase.cine_slug} /> {cleanCinemaName(pase.cine)}</span>
             </li>
           ))}
         </ul>
@@ -231,14 +241,15 @@ export function SesionesDia({ pases, modo = "cine", contexto = "modal" }) {
     if (!porCine.has(pase.cine)) porCine.set(pase.cine, []);
     porCine.get(pase.cine).push(pase);
   }
-  const cines = [...porCine];
+  // Mis cines favoritos primero (antes del límite de "Ver más"), cada grupo en su orden
+  const cines = favoritosPrimero([...porCine], ([, delCine]) => delCine[0].cine_slug, favoritos);
   const ocultos = cines.length - limite.cines;
   const visibles = todosCines || ocultos <= 0 ? cines : cines.slice(0, limite.cines);
   return (
     <div className="space-y-3">
       <div id={id} className="space-y-3">
         {visibles.map(([cine, delCine]) => (
-          <SesionesCine key={cine} cine={cine} pases={delCine} conPrecio conSala maxHoras={HORAS_POR_CINE} />
+          <SesionesCine key={cine} cine={cine} pases={delCine} conPrecio conSala maxHoras={HORAS_POR_CINE} conFavorito />
         ))}
       </div>
       {ocultos > 0 && (

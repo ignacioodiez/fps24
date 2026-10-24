@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import TarjetaEstreno from "@/components/TarjetaEstreno";
 import MosaicoEspeciales from "@/components/MosaicoEspeciales";
+import { useFavoritos } from "@/components/FavoritosProvider";
+import { sesionSugerida } from "@/lib/favoritos";
 
 // "19–25 oct" o, si cambia de mes, "26 oct – 1 nov". Las fechas vienen como "YYYY-MM-DD" (Madrid).
 const rangoSemana = ({ inicio, fin }) => {
@@ -60,6 +62,7 @@ export default function SeccionDestacadas({ oculta = false }) {
   const [datos, setDatos] = useState(null);
   const [fallo, setFallo] = useState(false);
   const [pestana, setPestana] = useState("estrenos");
+  const { favoritos } = useFavoritos();
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -78,8 +81,11 @@ export default function SeccionDestacadas({ oculta = false }) {
   if (oculta || fallo) return null;
   if (!datos) return <Esqueleto />;
 
-  const estrenos = (datos.estrenos || []).slice(0, 4);
-  const especiales = datos.especiales || [];  // por nota, como vienen: el mosaico depende de ese orden
+  // Misma selección y orden; solo la sesión sugerida pasa a la de un cine favorito si la hay ese día
+  const estrenos = (datos.estrenos || []).slice(0, 4)
+    .map((e) => ({ ...e, sugerida: sesionSugerida(e.primera_sesion, e.alternativas, favoritos) }));
+  const especiales = (datos.especiales || [])  // por nota, como vienen: el mosaico depende de ese orden
+    .map((e) => ({ ...e, pase: sesionSugerida(e.pase, e.alternativas, favoritos) }));
   if (estrenos.length === 0 && especiales.length === 0) return null;
   const ambas = estrenos.length > 0 && especiales.length > 0;
   // Con una sola lista no hay pestañas: se muestra la que hay

@@ -67,6 +67,11 @@ class Pase(PaseBase, table=True):
         """Nombre del cine, como el antiguo campo de texto: la API lo sigue devolviendo."""
         return self.cine_rel.nombre
 
+    @property
+    def cine_slug(self) -> str:
+        """Slug del cine: con él el front ordena por los cines favoritos del usuario."""
+        return self.cine_rel.slug
+
 # 5. TABLA CINE
 class Cine(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -134,3 +139,11 @@ class Perfil(SQLModel, table=True):
     diario_publico: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
     creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+
+
+# 9. CINES FAVORITOS (migración 0013): de cada usuario, sin límite. Privado: siempre se filtra por user_id.
+class CineFavorito(SQLModel, table=True):
+    __tablename__ = "cine_favorito"
+    user_id: uuid.UUID = Field(sa_column=Column(UUID(as_uuid=True), primary_key=True))  # sub del JWT, sin FK
+    cine_id: int = Field(foreign_key="cine.id", primary_key=True, ondelete="CASCADE", index=True)
+    creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

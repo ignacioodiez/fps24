@@ -7,7 +7,8 @@ import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import DialogoDiario, { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import NotaEstrellas from "@/components/NotaEstrellas";
 import TarjetaPerfilPublico from "@/components/TarjetaPerfilPublico";
-import { DIARIO_GUARDADO, borrar, listar } from "@/lib/diario";
+import { useFavoritos } from "@/components/FavoritosProvider";
+import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
 
 const POR_PAGINA = 20;
 const COMENTARIO_CORTO = 240; // más largo (o con más de 3 líneas) se recorta con "ver más"
@@ -261,7 +262,55 @@ export function CabeceraPerfil({ usuario, bio }) {
 
 const TITULO_SECCION = "text-xl font-display font-bold uppercase text-foreground";
 
-// /u/<mi usuario>: mis datos (aunque sea privado), aviso de quién lo ve y gestión de mis entradas
+// Mis cines favoritos (solo los ve su dueño): la lista, quitar y enlace a /cines para añadir más.
+// Los nombres salen de GET /cines (público); el orden, el de alta.
+function MisCines() {
+  const { favoritos, cargados, alternar } = useFavoritos();
+  const [cines, setCines] = useState(null);
+  const id = useId();
+
+  useEffect(() => {
+    todosLosCines().then(setCines).catch(() => setCines([]));
+  }, []);
+
+  const nombre = (slug) => cines?.find((c) => c.slug === slug)?.nombre ?? slug;
+
+  return (
+    <section aria-labelledby={`${id}-titulo`} className="mt-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id={`${id}-titulo`} className={TITULO_SECCION}>Mis cines</h3>
+        <Link href="/cines" className="text-sm font-bold text-primary hover:underline">Añadir más cines →</Link>
+      </div>
+      {!cargados || !cines ? (
+        <div aria-busy="true" aria-label="Cargando tus cines" className="mt-3 h-11 bg-surface animate-pulse" />
+      ) : favoritos.size === 0 ? (
+        <p className="mt-3 text-muted">
+          Aún no tienes cines favoritos. Pulsa la ★ en un cine de <Link href="/cines" className="font-bold text-primary hover:underline">Cines</Link> y
+          sus sesiones saldrán primero en toda la web.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. Solo tú ves esta lista.</p>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {[...favoritos].map((slug) => (
+              <li key={slug} className="flex items-center border border-line bg-surface">
+                <Link href={`/cines/${slug}`} className="px-3 py-2 text-sm font-bold text-foreground hover:text-primary">
+                  <span aria-hidden="true" className="text-primary">★</span> {nombre(slug)}
+                </Link>
+                <button type="button" onClick={() => alternar(slug, nombre(slug))} aria-label={`Quitar ${nombre(slug)} de mis cines`}
+                        className="self-stretch px-3 border-l border-line text-muted hover:text-red-600 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+// /u/<mi usuario>: mis datos (aunque sea privado), aviso de quién lo ve, mis cines y gestión de mis entradas
 function MiPerfil({ perfil }) {
   const publico = perfil.visibilidad === "publico";
   const quienVe = !publico
@@ -279,6 +328,7 @@ function MiPerfil({ perfil }) {
         </div>
         <Link href="/perfil/editar" className={BOTON_PRIMARIO}>Editar mi perfil</Link>
       </div>
+      <MisCines />
       <h3 className={`mt-8 ${TITULO_SECCION}`}>Mi diario</h3>
       <MiDiario />
     </div>
@@ -310,7 +360,7 @@ export function IrAMiPerfil() {
   return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
 }
 
-// /perfil/editar: nombre, bio, visibilidad y diario público; debajo, mis entradas
+// /perfil/editar: nombre, bio, visibilidad y diario público; debajo, mis cines y mis entradas
 export default function EditarPerfil() {
   const { usuario, cargando, abrirLogin, miPerfil } = useAuth();
   const id = useId();
@@ -347,7 +397,9 @@ export default function EditarPerfil() {
 
       <TarjetaPerfilPublico />
 
-      <section aria-labelledby={`${id}-diario`}>
+      <MisCines />
+
+      <section aria-labelledby={`${id}-diario`} className="mt-8">
         <h3 id={`${id}-diario`} className={TITULO_SECCION}>Mi diario</h3>
         <MiDiario />
       </section>

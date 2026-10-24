@@ -4,6 +4,7 @@ import TodayHeader from "@/components/TodayHeader";
 import CarteleraCine from "@/components/CarteleraCine";
 import { Boton } from "@/components/SalasYPrecios";
 import { ChipDato } from "@/components/FichaPelicula";
+import BotonFavorito from "@/components/BotonFavorito";
 
 // Como /cines: ISR de 5 minutos
 export const revalidate = 300;
@@ -72,7 +73,10 @@ export default async function CinePage({ params }) {
         </Link>
 
         <header className="space-y-3">
-          <h1 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground leading-none">{cine.nombre}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground leading-none">{cine.nombre}</h1>
+            <BotonFavorito slug={cine.slug} nombre={cine.nombre} />
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {cine.zona && <ChipDato>{cine.zona}</ChipDato>}
             {cine.tipo === "autor" && (

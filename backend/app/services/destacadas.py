@@ -67,6 +67,16 @@ def _cines(ps):
     return len({p.cine_id for p in ps})
 
 
+def _alternativas(elegido: Pase, ps: list) -> list:
+    """El mismo día que `elegido`, la primera sesión de cada uno de los otros cines entre `ps` (que va por fecha):
+    la que se sugeriría si el usuario prefiere ese cine."""
+    primeras = {}
+    for p in ps:
+        if p.fecha_hora.date() == elegido.fecha_hora.date() and p.cine_id != elegido.cine_id:
+            primeras.setdefault(p.cine_id, p)
+    return list(primeras.values())
+
+
 def _de_la_semana(pases_de: dict, lunes: date, domingo: date) -> list:
     return [ps for ps in pases_de.values() if lunes <= (ps[0].pelicula.fecha_estreno or date.min) <= domingo]
 
@@ -109,9 +119,9 @@ def leer_destacadas(session: Session, ahora: datetime = None) -> dict:
         semana=dict(inicio=lunes, fin=domingo),
         estrenos=[dict(pelicula=ps[0].pelicula, fecha_estreno=ps[0].pelicula.fecha_estreno,
                        votos=ps[0].pelicula.votos, pases=len(ps), cines=_cines(ps), primera_sesion=ps[0],
-                       sin_nota=sin_nota) for ps, sin_nota in estrenos],
-        especiales=[dict(pelicula=pase.pelicula, pase=pase, nota=pase.pelicula.nota_tmdb)
-                    for pase, _ in _elegir_especiales(pases_de, vetadas, MAX_ESPECIALES)],
+                       alternativas=_alternativas(ps[0], ps), sin_nota=sin_nota) for ps, sin_nota in estrenos],
+        especiales=[dict(pelicula=pase.pelicula, pase=pase, nota=pase.pelicula.nota_tmdb, alternativas=_alternativas(pase, ps))
+                    for pase, ps in _elegir_especiales(pases_de, vetadas, MAX_ESPECIALES)],
     )
 
 
@@ -149,5 +159,5 @@ def leer_pagina(session: Session, seleccionar, n: int = 0, ahora: datetime = Non
     return dict(
         semana=n, desde=lunes, hasta=domingo, hay_anterior=n > 0, hay_siguiente=n < SEMANAS_MAX,
         peliculas=[dict(pelicula=sesion.pelicula, sin_nota=sin_nota, n_sesiones=len(ps), n_cines=_cines(ps),
-                        sesion=sesion) for sesion, ps, sin_nota in seleccionar(pases_de, lunes, domingo)],
+                        sesion=sesion, alternativas=_alternativas(sesion, ps)) for sesion, ps, sin_nota in seleccionar(pases_de, lunes, domingo)],
     )
