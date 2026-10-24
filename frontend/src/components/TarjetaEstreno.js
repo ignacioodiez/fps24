@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MarcaFavorito } from "@/components/BotonFavorito";
 
 const VOTOS_MIN = 10;
 
@@ -19,6 +20,8 @@ const sesionCorta = (fechaHora) => {
 // ocupa todo el alto de su fila. className: celdas extra cuando hay menos de 4 estrenos.
 export default function TarjetaEstreno({ estreno, className = "" }) {
   const { pelicula, fecha_estreno, votos, cines, primera_sesion, sin_nota } = estreno;
+  // sugerida (SeccionDestacadas): la primera, o la de un cine favorito ese mismo día
+  const sugerida = estreno.sugerida ?? primera_sesion;
   const href = `/pelicula/${pelicula.id}?dia=${primera_sesion.fecha_hora.slice(0, 10)}`; // abre en el día de la primera sesión
   const nota = pelicula.nota_tmdb;
   const notaFiable = !sin_nota && nota != null && (votos ?? 0) >= VOTOS_MIN;
@@ -58,7 +61,9 @@ export default function TarjetaEstreno({ estreno, className = "" }) {
             </p>
           )}
           <p className="text-xs text-muted">
-            {cines} {cines === 1 ? "cine" : "cines"} · Primera: {sesionCorta(primera_sesion.fecha_hora)}
+            {cines} {cines === 1 ? "cine" : "cines"} · {sugerida === primera_sesion
+              ? <>Primera: {sesionCorta(primera_sesion.fecha_hora)}</>
+              : <><MarcaFavorito slug={sugerida.cine_slug} /> {sugerida.cine}, {sesionCorta(sugerida.fecha_hora)}</>}
           </p>
         </div>
       {/* Capa sobre toda la celda: abre la vista rápida sin mover el scroll. El título (página completa) va encima */}

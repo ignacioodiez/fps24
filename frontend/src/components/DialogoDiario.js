@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import NotaEstrellas from "@/components/NotaEstrellas";
 import { useAuth } from "@/components/AuthProvider";
+import { useFavoritos } from "@/components/FavoritosProvider";
+import { favoritosPrimero } from "@/lib/favoritos";
 import { COMENTARIO_MAX, ayerMadrid, borrar, cinesDelDia, crear, editar, hoyMadrid, todosLosCines } from "@/lib/diario";
 
 const OTRO = "__otro";
@@ -15,6 +17,7 @@ export const BOTON_SECUNDARIO = "px-4 py-2 border border-line text-sm font-bold 
 // queda dentro, Esc cierra y al cerrar vuelve al botón que lo abrió. Se monta abierto; cerrar = onCerrar().
 export default function DialogoDiario({ pelicula, entrada = null, fechaInicial, repeticionInicial = false, onCerrar, onGuardado, onBorrado }) {
   const { abrirLogin, salir } = useAuth();
+  const { favoritos } = useFavoritos();
   const dialogo = useRef(null);
   const id = useId();
   const [fecha, setFecha] = useState(entrada?.fecha_vista ?? fechaInicial);
@@ -124,7 +127,7 @@ export default function DialogoDiario({ pelicula, entrada = null, fechaInicial, 
         <div className="space-y-2">
           <label htmlFor={`${id}-cine`} className={ETIQUETA}>Cine</label>
           <select id={`${id}-cine`} value={enOtro ? OTRO : cine} onChange={(e) => elegirCine(e.target.value)} className={CAMPO}>
-            {delDia.map((c) => (
+            {favoritosPrimero(delDia, (c) => c.slug, favoritos).map((c) => (
               <option key={c.slug} value={c.slug}>{c.nombre} · {c.horas.join(", ")}</option>
             ))}
             <option value={OTRO}>Otro cine…</option>

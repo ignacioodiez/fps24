@@ -64,6 +64,10 @@ export default function PrivacidadPage() {
                 entradas de tu diario, incluidas tus notas y comentarios. Puedes apagarlo o volver a hacer el perfil privado
                 cuando quieras y deja de verse al momento.
               </li>
+              <li>
+                Tus <strong className="text-foreground">cines favoritos</strong>, si marcas alguno con la ★: son privados y
+                solo los ves tú. Se usan para enseñarte primero sus sesiones; no aparecen en tu perfil público.
+              </li>
               <li>Próximamente, la lista de películas que marques como <strong className="text-foreground">&quot;quiero verla&quot;</strong>.</li>
             </ul>
           </Seccion>
