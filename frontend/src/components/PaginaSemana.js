@@ -1,8 +1,13 @@
 import Link from "next/link";
 import TodayHeader from "@/components/TodayHeader";
 import { CeldaMosaico, Tarjeta } from "@/components/TarjetasSemana";
+import SelectorSemanas from "@/components/SelectorSemanas";
+import TarjetaSinSesiones from "@/components/TarjetaSinSesiones";
 import { clasesMosaico } from "@/lib/mosaico";
 import { comoUTC, formato } from "@/lib/fechasMadrid";
+
+// Última semana de cada página (la API rechaza las siguientes): /estrenos llega a la 8 con los estrenos de TMDB
+const SEMANAS_MAX = { estrenos: 8, especiales: 3 };
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -43,7 +48,7 @@ function Flecha({ semana, activa, children, etiqueta }) {
 // Página de /estrenos o /especiales (tipo = ruta de la API): una semana, con flechas a la anterior y la siguiente
 export default async function PaginaSemana({ tipo, titulo, acento, intro, vacio, searchParams }) {
   const pedida = Number((await searchParams).semana);
-  const semana = Number.isInteger(pedida) && pedida >= 0 && pedida <= 3 ? pedida : 0;
+  const semana = Number.isInteger(pedida) && pedida >= 0 && pedida <= SEMANAS_MAX[tipo] ? pedida : 0;
   const datos = await leerSemana(tipo, semana);
 
   return (
@@ -67,6 +72,7 @@ export default async function PaginaSemana({ tipo, titulo, acento, intro, vacio,
               </p>
               <Flecha semana={semana + 1} activa={datos.hay_siguiente} etiqueta="Semana siguiente">→</Flecha>
             </nav>
+            {tipo === "estrenos" && <SelectorSemanas semana={semana} desde={datos.desde} maxima={SEMANAS_MAX.estrenos} />}
 
             {datos.peliculas.length === 0 ? (
               <p className="text-center text-muted py-16">{vacio}</p>
@@ -80,10 +86,19 @@ export default async function PaginaSemana({ tipo, titulo, acento, intro, vacio,
               // dense: los huecos que dejan las 2 destacadas (2 columnas) los rellenan las siguientes. Con solo 2,
               // una: dos destacadas en 3 columnas dejarían la tercera vacía en ambas filas
               <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 grid-flow-row-dense gap-3 md:gap-5">
-                {datos.peliculas.map((item, i, lista) => (
+                {datos.peliculas.map((item, i, lista) => item.sin_sesiones ? (
+                  <TarjetaSinSesiones key={`tmdb-${item.pelicula.tmdb_id}`} item={item} />
+                ) : (
                   <Tarjeta key={item.pelicula.id} item={item} tipo={tipo} destacada={i < (lista.length === 2 ? 1 : 2)} />
                 ))}
               </ul>
+            )}
+            {datos.peliculas.some((item) => item.sin_sesiones) && (
+              <p className="mt-6 text-xs text-muted">
+                Los estrenos aún sin sesiones en Madrid, con su fecha, póster y sinopsis, vienen de{" "}
+                <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">TMDB</a>.
+                Las fechas pueden cambiar; «fecha prevista» indica que la de España aún no es firme.
+              </p>
             )}
           </>
         ) : (

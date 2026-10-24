@@ -182,3 +182,23 @@ class NewsletterEnvio(SQLModel, table=True):
     destinatarios: int = 0
     ok: int = 0
     errores: int = 0
+
+
+# 12. PRÓXIMOS ESTRENOS (migración 0016): de TMDB, los refresca a diario app.proximamente.actualizar. Sin FK a pelicula:
+# la mayoría aún no tiene sesiones; el enlace a la ficha sale de pelicula.tmdb_id al leer.
+class EstrenoProximo(SQLModel, table=True):
+    __tablename__ = "estreno_proximo"
+    tmdb_id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": False})
+    titulo: str = Field(sa_column=Column(Text, nullable=False))
+    titulo_original: Optional[str] = Field(default=None, sa_column=Column(Text))
+    fecha_es: date = Field(index=True)
+    fecha_confirmada: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    poster_path: str = Field(sa_column=Column(Text, nullable=False))  # "/abc.jpg"; sin póster no se guarda
+    sinopsis: Optional[str] = Field(default=None, sa_column=Column(Text))
+    popularidad: Optional[float] = None
+    votos: Optional[int] = None
+    generos: Optional[str] = Field(default=None, sa_column=Column(Text))  # "Drama, Comedia", como pelicula.generos
+    idioma_original: Optional[str] = Field(default=None, sa_column=Column(Text))
+    # 0017: el admin la quita de /estrenos (las que tienen ficha usan pelicula_oculta). El cron no la toca.
+    oculta: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

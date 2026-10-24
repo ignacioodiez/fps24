@@ -8,7 +8,7 @@ export const metadata = {
 export default function EstrenosPage({ searchParams }) {
   return (
     <PaginaSemana tipo="estrenos" titulo="Estrenos" acento="text-muted" searchParams={searchParams}
-                  intro="Las películas que llegan a los cines de Madrid esta semana, ordenadas por nota; las que aún no tienen valoraciones, por número de cines."
+                  intro="Las películas que llegan a los cines de Madrid esta semana, ordenadas por nota; las que aún no tienen valoraciones, por número de cines. Detrás, los estrenos anunciados en España que aún no tienen sesiones."
                   vacio="Esta semana no hay estrenos en cartelera. Prueba con la semana siguiente." />
   );
 }

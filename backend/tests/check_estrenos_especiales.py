@@ -11,6 +11,7 @@ from sqlmodel import Session
 
 from app.database.engine import engine
 from app.database.models import Pelicula
+from app.proximamente.estrenos import leer_estrenos
 from app.services import destacadas as d
 from app.services.tiempo import ahora_madrid
 from main import Destacadas, PaginaSemana
@@ -32,11 +33,17 @@ print("OK: es_cine")
 ahora = ahora_madrid()
 with Session(engine) as session:
     paginas = {}
-    for tipo, seleccionar in (("estrenos", d.seleccionar_estrenos), ("especiales", d.seleccionar_especiales)):
-        for n in range(d.SEMANAS_MAX + 1):
-            p = PaginaSemana.model_validate(d.leer_pagina(session, seleccionar, n, ahora))
+    # /estrenos de la 0 a la 8 (con los próximos estrenos sin sesiones detrás), /especiales de la 0 a la 3
+    for tipo, leer, maximo in (("estrenos", lambda n: leer_estrenos(session, n, ahora), d.SEMANAS_MAX_ESTRENOS),
+                               ("especiales", lambda n: d.leer_pagina(session, d.seleccionar_especiales, n, ahora), d.SEMANAS_MAX)):
+        for n in range(maximo + 1):
+            completa = PaginaSemana.model_validate(leer(n))
+            con = [x for x in completa.peliculas if not x.sin_sesiones]
+            assert completa.peliculas[:len(con)] == con, "las sin sesiones van detrás"
+            assert all(not x.sin_sesiones for x in con) and (tipo == "estrenos" or len(con) == len(completa.peliculas))
+            p = completa.model_copy(update={"peliculas": con})  # el resto de comprobaciones, sobre las de sesiones
             paginas[tipo, n] = p
-            assert (p.semana, p.hay_anterior, p.hay_siguiente) == (n, n > 0, n < d.SEMANAS_MAX), p
+            assert (p.semana, p.hay_anterior, p.hay_siguiente) == (n, n > 0, n < maximo), p
             assert p.desde == d.semana(ahora)[0] + timedelta(weeks=n) and p.desde.weekday() == 0
             assert p.hasta == p.desde + timedelta(days=6)
             desde = ahora if n == 0 else datetime.combine(p.desde, time())
@@ -44,7 +51,7 @@ with Session(engine) as session:
             for x in p.peliculas:
                 assert desde <= x.sesion.fecha_hora < datetime.combine(p.hasta + timedelta(days=1), time()), x
                 assert x.n_sesiones >= 1 and 1 <= x.n_cines <= x.n_sesiones, x
-    print("OK: semanas 0..3 (límites, hay_anterior/hay_siguiente, sesión dentro de la semana)")
+    print("OK: estrenos 0..8 y especiales 0..3 (límites, hay_anterior/hay_siguiente, sesión dentro de la semana)")
 
     for n in range(d.SEMANAS_MAX + 1):
         p = paginas["estrenos", n]

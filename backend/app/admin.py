@@ -14,7 +14,7 @@ from sqlmodel import Field, Session, SQLModel, delete, select
 
 from app.auth import Usuario, usuario_actual
 from app.database.engine import get_session
-from app.database.models import CineFavorito, DiarioEntrada, Pelicula, PeliculaOculta, Perfil, Suscriptor
+from app.database.models import CineFavorito, DiarioEntrada, EstrenoProximo, Pelicula, PeliculaOculta, Perfil, Suscriptor
 from app.newsletter import correo, plantilla
 from app.newsletter.contenido import datos_semana, momento_envio
 
@@ -150,12 +150,14 @@ def usuarios(pagina: int = Query(1, ge=1), _: Usuario = Depends(admin_actual), s
 # --- Películas ocultas de /destacadas, /estrenos y /especiales (GET /admin/peliculas/buscar está en main.py) ---
 
 class PeliculaOcultaSalida(SQLModel):
-    id: int
+    id: Optional[int] = None  # None si sin_ficha
+    tmdb_id: Optional[int] = None
     titulo: str
     anio: Optional[int] = None
     poster_url: Optional[str] = None
     motivo: Optional[str] = None
-    creado_en: datetime
+    creado_en: Optional[datetime] = None  # None si sin_ficha (estreno_proximo no guarda cuándo se ocultó)
+    sin_ficha: bool = False  # próximo estreno (estreno_proximo.oculta) que aún no está en pelicula
 
 
 class Ocultar(SQLModel):
@@ -168,8 +170,12 @@ def ocultas(_: Usuario = Depends(admin_actual), session: Session = Depends(get_s
         select(Pelicula, PeliculaOculta).join(PeliculaOculta, PeliculaOculta.pelicula_id == Pelicula.id)
         .order_by(PeliculaOculta.creado_en.desc(), Pelicula.id)
     ).all()
-    return [PeliculaOcultaSalida(id=p.id, titulo=p.titulo, anio=p.anio, poster_url=p.poster_url,
-                                 motivo=o.motivo, creado_en=o.creado_en) for p, o in filas]
+    proximos = session.exec(select(EstrenoProximo).where(EstrenoProximo.oculta)
+                            .order_by(EstrenoProximo.fecha_es, EstrenoProximo.tmdb_id)).all()
+    return [PeliculaOcultaSalida(id=p.id, tmdb_id=p.tmdb_id, titulo=p.titulo, anio=p.anio, poster_url=p.poster_url,
+                                 motivo=o.motivo, creado_en=o.creado_en) for p, o in filas] + [
+        PeliculaOcultaSalida(tmdb_id=e.tmdb_id, titulo=e.titulo, anio=e.fecha_es.year, sin_ficha=True,
+                             poster_url=f"https://image.tmdb.org/t/p/w342{e.poster_path}") for e in proximos]
 
 
 @router.post("/peliculas/{pelicula_id}/ocultar", status_code=204)
@@ -191,6 +197,26 @@ def mostrar(pelicula_id: int, _: Usuario = Depends(admin_actual), session: Sessi
     session.exec(delete(PeliculaOculta).where(PeliculaOculta.pelicula_id == pelicula_id))
     session.commit()
     return Response(status_code=204)
+
+
+# Próximos estrenos sin ficha (estreno_proximo): el cron diario no toca `oculta`. Idempotentes.
+def _estreno_oculto(session: Session, tmdb_id: int, oculta: bool) -> Response:
+    estreno = session.get(EstrenoProximo, tmdb_id)
+    if estreno is None:
+        raise HTTPException(status_code=404, detail="Estreno no encontrado")
+    estreno.oculta = oculta
+    session.commit()
+    return Response(status_code=204)
+
+
+@router.post("/estrenos-proximos/{tmdb_id}/ocultar", status_code=204)
+def ocultar_estreno(tmdb_id: int, _: Usuario = Depends(admin_actual), session: Session = Depends(get_session)):
+    return _estreno_oculto(session, tmdb_id, True)
+
+
+@router.delete("/estrenos-proximos/{tmdb_id}/ocultar", status_code=204)
+def mostrar_estreno(tmdb_id: int, _: Usuario = Depends(admin_actual), session: Session = Depends(get_session)):
+    return _estreno_oculto(session, tmdb_id, False)
 
 
 # --- Newsletter: vista previa y prueba (el envío semanal es el cron app/newsletter/enviar.py) ---
