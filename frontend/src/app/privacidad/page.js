@@ -104,7 +104,7 @@ export default function PrivacidadPage() {
             <p>Solo con los proveedores técnicos que hacen funcionar la web:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-foreground">Supabase</strong>: gestiona las cuentas.</li>
-              <li><strong className="text-foreground">Google</strong>: si eliges &quot;Continuar con Google&quot;, actúa como proveedor de inicio de sesión y nos confirma tu email y tu nombre.</li>
+              <li><strong className="text-foreground">Google</strong>: si eliges &quot;Continuar con Google&quot;, actúa como proveedor de inicio de sesión y nos confirma tu email y tu nombre. Para mostrar su botón, la web carga un script de Google <strong className="text-foreground">solo cuando abres el panel de inicio de sesión</strong>; desde ese momento Google puede saber que lo has abierto y usar sus propias cookies, según su política de privacidad.</li>
               <li><strong className="text-foreground">Resend</strong>: envía los correos con el enlace de acceso.</li>
               <li><strong className="text-foreground">Vercel</strong> y <strong className="text-foreground">Render</strong>: alojan la web.</li>
             </ul>
@@ -131,7 +131,7 @@ export default function PrivacidadPage() {
           <Seccion titulo="Analítica">
             <p>
               FPS24 <strong className="text-foreground">no usa cookies de analítica ni de seguimiento</strong>. Solo se
-              guarda en tu navegador lo necesario para mantener tu sesión iniciada; si no inicias sesión, no se guarda nada.
+              guarda en tu navegador lo necesario para mantener tu sesión iniciada; si no inicias sesión, no se guarda nada. El script de Google del botón de inicio de sesión solo se carga si abres ese panel.
             </p>
           </Seccion>
 

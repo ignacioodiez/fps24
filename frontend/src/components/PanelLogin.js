@@ -30,14 +30,55 @@ function errorOAuth() {
     : "No hemos podido iniciar sesión con Google. Inténtalo de nuevo o usa tu email.";
 }
 
+// Botón oficial de Google Identity Services: el popup muestra fps24.es y no el dominio de Supabase.
+// Sin Client ID, o si el script no carga, se usa el de redirección (signInWithOAuth).
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const ESPERA_GIS = 5000;
+let scriptGis; // promesa de carga del script, una vez por página
+let gisIniciado; // promesa de initialize() con su nonce; se rehace tras usar el nonce
+let alCredencial = () => {};
+
+function cargarScriptGis() {
+  scriptGis ??= new Promise((ok, mal) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.onload = () => (window.google?.accounts?.id ? ok() : mal());
+    s.onerror = mal;
+    document.head.append(s);
+    setTimeout(mal, ESPERA_GIS); // bloqueado o colgado: plan B
+  });
+  return scriptGis;
+}
+
+// Secuencia de nonce de Supabase: aleatorio, a Google su SHA-256 en hex y a signInWithIdToken el valor en claro
+function iniciarGis() {
+  gisIniciado ??= cargarScriptGis().then(async () => {
+    const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(nonce));
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      nonce: Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join(""),
+      callback: ({ credential }) => {
+        gisIniciado = null; // un nonce por intento
+        alCredencial(credential, nonce);
+      },
+    });
+  });
+  return gisIniciado;
+}
+
 // Panel de inicio de sesión (Google o magic link por email, Supabase Auth). Montado una vez en el layout; lo abre
 // abrirLogin() del contexto (p. ej. "Iniciar sesión" de la barra). Sin variables de Supabase no se pinta.
 export default function PanelLogin() {
-  const { usuario, cargando, entrar, entrarConGoogle, peticionLogin } = useAuth();
+  const { usuario, cargando, entrar, entrarConGoogle, entrarConTokenGoogle, peticionLogin } = useAuth();
   const dialogo = useRef(null);
   const [estado, setEstado] = useState("inicio"); // inicio | enviando | enviado
   const [error, setError] = useState("");
-  const [google, setGoogle] = useState("inicio"); // inicio | redirigiendo
+  const [google, setGoogle] = useState("inicio"); // inicio | redirigiendo | entrando
+  const [gis, setGis] = useState(GOOGLE_CLIENT_ID ? "cargando" : "fallo"); // botón oficial: cargando | listo | fallo
+  const [abierto, setAbierto] = useState(false);
+  const botonGis = useRef(null);
   const [errorGoogle, setErrorGoogle] = useState("");
   const [motivo, setMotivo] = useState(""); // por qué se abre el panel desde fuera ("Inicia sesión para guardar tu diario")
   const atendida = useRef(peticionLogin); // la de antes de montar (otra página) no se atiende
@@ -49,6 +90,7 @@ export default function PanelLogin() {
     if (!mensaje) return;
     setErrorGoogle(mensaje); // eslint-disable-line react-hooks/set-state-in-effect -- la URL solo se lee en el navegador
     dialogo.current?.showModal();
+    setAbierto(true);
   }, [cargando, usuario]);
 
   // abrirLogin() del contexto: abre el panel con su mensaje
@@ -57,8 +99,46 @@ export default function PanelLogin() {
     atendida.current = peticionLogin;
     setMotivo(peticionLogin.mensaje); // eslint-disable-line react-hooks/set-state-in-effect -- la petición llega por el contexto
     dialogo.current?.showModal();
+    setAbierto(true);
     dialogo.current?.querySelector("input")?.focus();
   }, [peticionLogin, usuario]);
+
+  // Al abrir el panel (no antes) se carga GIS y se pinta el botón oficial; si falla, queda el de redirección
+  // Callback de GIS (vive fuera de React): siempre apunta al render actual
+  useEffect(() => {
+    alCredencial = async (token, nonce) => {
+      setErrorGoogle("");
+      setGoogle("entrando");
+      try {
+        await entrarConTokenGoogle(token, nonce);
+        dialogo.current?.close(); // la sesión llega por onAuthStateChange, como con el magic link
+      } catch {
+        setGis("fallo");
+        setGoogle("inicio");
+        setErrorGoogle("No hemos podido iniciar sesión con Google desde aquí. Prueba con este botón o usa tu email.");
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (!abierto || gis === "fallo" || estado === "enviado") return;
+    let vigente = true;
+    iniciarGis()
+      .then(() => {
+        if (!vigente || !botonGis.current) return;
+        window.google.accounts.id.renderButton(botonGis.current, {
+          type: "standard", theme: "outline", size: "large", text: "continue_with", shape: "pill",
+          logo_alignment: "center", locale: "es", width: Math.min(400, botonGis.current.offsetWidth),
+        });
+        setGis("listo");
+      })
+      .catch(() => {
+        if (!vigente) return;
+        setGis("fallo");
+        setErrorGoogle("No se ha podido cargar el botón de Google (quizá lo impide un bloqueador). Usa este otro:");
+      });
+    return () => { vigente = false; };
+  }, [abierto, gis, estado]);
 
   if (!AUTH_DISPONIBLE || cargando || usuario) return null;
 
@@ -94,7 +174,7 @@ export default function PanelLogin() {
       <dialog
         ref={dialogo}
         aria-labelledby="titulo-entrar"
-        onClose={() => { setEstado("inicio"); setError(""); setErrorGoogle(""); setGoogle("inicio"); setMotivo(""); }}
+        onClose={() => { setAbierto(false); setEstado("inicio"); setError(""); setErrorGoogle(""); setGoogle("inicio"); setMotivo(""); }}
         onClick={(e) => e.target === e.currentTarget && cerrar()}
         className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-line bg-background text-foreground p-0 backdrop:bg-black/40"
       >
@@ -113,10 +193,21 @@ export default function PanelLogin() {
           ) : (
             <>
             <div className="mt-4 space-y-2">
-              <button type="button" onClick={conGoogle} disabled={google === "redirigiendo"} className={BOTON}>
-                {google === "redirigiendo" ? "Redirigiendo a Google…" : "Continuar con Google"}
-              </button>
+              {gis !== "fallo" && (
+                // min-h: el hueco del botón (44px) se reserva mientras carga, sin saltos
+                <div aria-busy={gis === "cargando"} className="flex min-h-11 w-full flex-col items-center justify-center">
+                  {gis === "cargando" && <span className="text-sm text-muted">Cargando Google…</span>}
+                  {/* GIS reescribe este div: React no le pone hijos */}
+                  <div ref={botonGis} className="flex w-full justify-center" />
+                </div>
+              )}
+              {google === "entrando" && <p role="status" className="text-sm text-muted text-center">Iniciando sesión con Google…</p>}
               {errorGoogle && <p role="alert" className="text-sm text-red-600">{errorGoogle}</p>}
+              {gis === "fallo" && (
+                <button type="button" onClick={conGoogle} disabled={google === "redirigiendo"} className={BOTON}>
+                  {google === "redirigiendo" ? "Redirigiendo a Google…" : "Continuar con Google"}
+                </button>
+              )}
             </div>
             <div className="my-4 flex items-center gap-3 text-xs font-bold text-muted" aria-hidden="true">
               <span className="h-px flex-1 bg-line" />o<span className="h-px flex-1 bg-line" />
