@@ -10,9 +10,9 @@ from sqlalchemy import case, func, nulls_last
 from sqlalchemy.orm import selectinload
 
 from app.database.engine import get_session
-from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase, PeliculaOculta
+from app.database.models import EstrenoProximo, Pase, Pelicula, PaseBase, PeliculaBase, PeliculaOculta
 from app.run_scrapers import lanzar_todo 
-from app.services.destacadas import SEMANAS_MAX, leer_destacadas, leer_pagina, seleccionar_especiales, seleccionar_estrenos
+from app.services.destacadas import SEMANAS_MAX, SEMANAS_MAX_ESTRENOS, leer_destacadas, leer_pagina, seleccionar_especiales
 from app.services.cines import detalle_cine, listar_cines
 from app.services.gestor_peliculas import EXCLUIDOS
 from app.auth import Usuario, usuario_actual
@@ -21,6 +21,7 @@ from app.perfil import router as perfil_router
 from app.favoritos import router as favoritos_router
 from app.admin import admin_actual, es_admin, router as admin_router
 from app.newsletter.rutas import router as newsletter_router
+from app.proximamente.estrenos import leer_estrenos as leer_estrenos_semana
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -103,18 +104,22 @@ class Destacadas(SQLModel):
 
 # /estrenos y /especiales
 class PeliculaSemana(PeliculaConId):
+    id: Optional[int] = None  # None en los próximos estrenos sin sesiones (aún sin ficha): se identifican por tmdb_id
     votos: Optional[int] = None
     director: Optional[str] = None
+    fecha_confirmada: Optional[bool] = None  # solo sin_sesiones: False = fecha prevista
 
 class EnLaSemana(SQLModel):
     pelicula: PeliculaSemana
     sin_nota: bool  # estrenos: sin nota o con pocos votos (van al final)
     n_sesiones: int
     n_cines: int
-    sesion: PaseConId  # estrenos: la primera; especiales: la elegida como en /destacadas
+    sesion: Optional[PaseConId] = None  # estrenos: la primera; especiales: la elegida como en /destacadas; None si sin_sesiones
     # El mismo día que `sesion`, la que se elegiría en cada uno de los otros cines (una por cine, por hora). El front
     # sugiere la de un cine favorito si la hay; si no, `sesion`.
     alternativas: List[PaseConId] = []
+    # /estrenos: próximo estreno de TMDB (estreno_proximo) sin sesiones en nuestra BD. Van detrás, con 0 sesiones y cines
+    sin_sesiones: bool = False
 
 class PaginaSemana(SQLModel):
     semana: int
@@ -179,7 +184,10 @@ class PeliculaBuscada(SQLModel):
     nota_tmdb: Optional[float] = None
 
 class PeliculaBuscadaAdmin(PeliculaBuscada):
-    oculta: bool  # fuera de /destacadas, /estrenos y /especiales (pelicula_oculta)
+    id: Optional[int] = None  # None si sin_ficha
+    tmdb_id: Optional[int] = None
+    oculta: bool  # fuera de /destacadas, /estrenos y /especiales (pelicula_oculta; si sin_ficha, estreno_proximo.oculta)
+    sin_ficha: bool = False  # próximo estreno de estreno_proximo que aún no está en pelicula: se oculta por tmdb_id
 
 # --- SEGURIDAD ---
 
@@ -219,8 +227,8 @@ def leer_destacadas_semana(session: Session = Depends(get_session)):
 
 # --- PÁGINAS DE ESTRENOS Y ESPECIALES, por semanas (0 = la actual, lunes-domingo en Madrid) ---
 @app.get("/estrenos", response_model=PaginaSemana)
-def leer_estrenos(semana: int = Query(0, ge=0, le=SEMANAS_MAX), session: Session = Depends(get_session)):
-    return leer_pagina(session, seleccionar_estrenos, semana)
+def leer_estrenos(semana: int = Query(0, ge=0, le=SEMANAS_MAX_ESTRENOS), session: Session = Depends(get_session)):
+    return leer_estrenos_semana(session, semana)
 
 @app.get("/especiales", response_model=PaginaSemana)
 def leer_especiales(semana: int = Query(0, ge=0, le=SEMANAS_MAX), session: Session = Depends(get_session)):
@@ -276,7 +284,18 @@ def admin_buscar_peliculas(q: str = "", _: Usuario = Depends(admin_actual), sess
     pelis = buscar_peliculas(q, 30, session)
     ocultas = set(session.exec(select(PeliculaOculta.pelicula_id)
                                .where(PeliculaOculta.pelicula_id.in_([p["id"] for p in pelis]))).all())
-    return [{**p, "oculta": p["id"] in ocultas} for p in pelis]
+    ya = {p["tmdb_id"] for p in pelis}
+    titulo, original = _plano(EstrenoProximo.titulo), _plano(func.coalesce(EstrenoProximo.titulo_original, ""))
+    patron = re.sub(r"[!%_]", lambda m: "!" + m.group(), " ".join(q.split()).translate(_SIN_TILDE).lower())
+    proximos = session.exec(
+        select(EstrenoProximo)
+        .where(or_(titulo.like(f"%{patron}%", escape="!"), original.like(f"%{patron}%", escape="!")))
+        .order_by(EstrenoProximo.fecha_es, EstrenoProximo.tmdb_id).limit(10)
+    ).all() if len(patron) >= 2 else []  # como buscar_peliculas: al menos 2 letras
+    return [{**p, "oculta": p["id"] in ocultas} for p in pelis] + [
+        dict(tmdb_id=e.tmdb_id, titulo=e.titulo, anio=e.fecha_es.year, poster_url=f"https://image.tmdb.org/t/p/w342{e.poster_path}",
+             titulo_original=e.titulo_original if e.titulo_original != e.titulo else None, oculta=e.oculta, sin_ficha=True)
+        for e in proximos if e.tmdb_id not in ya]
 
 # --- USUARIO: quién soy (JWT de Supabase Auth en Authorization: Bearer) ---
 @app.get("/me")

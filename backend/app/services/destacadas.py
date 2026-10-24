@@ -18,7 +18,8 @@ VOTOS_MIN_ESTRENO = 10
 VOTOS_MIN_ESPECIAL = 150
 CINES_MIN_RELLENO = 2        # estrenos sin nota suficiente que rellenan hasta MAX_ESTRENOS
 TIPO_CINE_ESPECIAL = "autor"  # especiales: solo pases de cines de este cine.tipo
-SEMANAS_MAX = 3               # /estrenos y /especiales: de la semana actual (0) a la 3
+SEMANAS_MAX = 3               # /especiales: de la semana actual (0) a la 3
+SEMANAS_MAX_ESTRENOS = 8      # /estrenos: hasta la 8, con los próximos estrenos de TMDB (app/proximamente)
 MAX_ESPECIALES_PAGINA = 30    # tope de seguridad de /especiales
 
 # /especiales: solo cine. Los eventos sin tmdb_id ya no entran; esto quita los que sí están en TMDB
@@ -154,12 +155,12 @@ def seleccionar_especiales(pases_de: dict, lunes: date, domingo: date) -> list:
     return [(pase, ps, False) for pase, ps in _elegir_especiales(pases_de, vetadas, MAX_ESPECIALES_PAGINA, es_cine)]
 
 
-def leer_pagina(session: Session, seleccionar, n: int = 0, ahora: datetime = None) -> dict:
-    """Semana n (0..SEMANAS_MAX) de /estrenos o /especiales; `seleccionar`: seleccionar_estrenos o seleccionar_especiales."""
+def leer_pagina(session: Session, seleccionar, n: int = 0, ahora: datetime = None, maximo: int = SEMANAS_MAX) -> dict:
+    """Semana n (0..maximo) de /estrenos o /especiales; `seleccionar`: seleccionar_estrenos o seleccionar_especiales."""
     lunes, domingo, desde = _semana_n(n, ahora or ahora_madrid())
     pases_de = _pases_por_pelicula(session, desde, lunes, domingo)
     return dict(
-        semana=n, desde=lunes, hasta=domingo, hay_anterior=n > 0, hay_siguiente=n < SEMANAS_MAX,
+        semana=n, desde=lunes, hasta=domingo, hay_anterior=n > 0, hay_siguiente=n < maximo,
         peliculas=[dict(pelicula=sesion.pelicula, sin_nota=sin_nota, n_sesiones=len(ps), n_cines=_cines(ps),
                         sesion=sesion, alternativas=_alternativas(sesion, ps)) for sesion, ps, sin_nota in seleccionar(pases_de, lunes, domingo)],
     )

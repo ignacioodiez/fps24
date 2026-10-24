@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import { Esqueleto } from "@/components/Perfil";
-import { buscarAdmin, enviarPruebaNewsletter, leerOcultas, leerResumen, leerUsuarios, mostrar, ocultar, vistaPreviaNewsletter } from "@/lib/admin";
+import { buscarAdmin, claveAdmin, enviarPruebaNewsletter, leerOcultas, leerResumen, leerUsuarios, mostrar, ocultar, vistaPreviaNewsletter } from "@/lib/admin";
 
 const TITULO_SECCION = "text-xl font-display font-bold uppercase text-foreground";
 const ERROR = "No hemos podido cargarlo. Recarga la página.";
@@ -108,7 +108,9 @@ function Usuarios() {
   );
 }
 
+// sin_ficha: próximo estreno sin sesiones; solo sale en Estrenos, así que se oculta de ahí
 function FilaPelicula({ pelicula, oculta, ocupada, onCambiar }) {
+  const donde = pelicula.sin_ficha ? "estrenos" : "destacadas";
   return (
     <li className="flex items-center gap-3 border border-line bg-surface p-2">
       <div className="w-10 aspect-[2/3] shrink-0 overflow-hidden border border-line bg-background">
@@ -116,12 +118,14 @@ function FilaPelicula({ pelicula, oculta, ocupada, onCambiar }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="font-bold text-foreground break-words">{pelicula.titulo}</p>
-        <p className="text-sm text-muted">{[pelicula.anio, oculta && "Oculta de destacadas"].filter(Boolean).join(" · ")}</p>
+        <p className="text-sm text-muted">
+          {[pelicula.anio, pelicula.sin_ficha && "Próximo estreno, sin ficha", oculta && `Oculta de ${donde}`].filter(Boolean).join(" · ")}
+        </p>
       </div>
       <button type="button" disabled={ocupada} onClick={onCambiar}
-              aria-label={`${oculta ? "Mostrar en destacadas" : "Ocultar de destacadas"}: ${pelicula.titulo}`}
+              aria-label={`${oculta ? `Mostrar en ${donde}` : `Ocultar de ${donde}`}: ${pelicula.titulo}`}
               className={`${oculta ? BOTON_PRIMARIO : BOTON_SECUNDARIO} shrink-0 min-h-11`}>
-        {oculta ? "Mostrar" : "Ocultar de destacadas"}
+        {oculta ? "Mostrar" : `Ocultar de ${donde}`}
       </button>
     </li>
   );
@@ -132,12 +136,12 @@ function Peliculas() {
   const [texto, setTexto] = useState("");
   const [resultados, setResultados] = useState(null);
   const [ocultas, setOcultas] = useState(null);
-  const [ocupada, setOcupada] = useState(null); // id de la película que se está cambiando
+  const [ocupada, setOcupada] = useState(null); // claveAdmin de la película que se está cambiando
   const [aviso, setAviso] = useState("");
 
   const recargarOcultas = () => leerOcultas().then(setOcultas, () => setAviso(ERROR));
   useEffect(() => { recargarOcultas(); }, []);
-  const idsOcultas = new Set((ocultas ?? []).map((p) => p.id));
+  const idsOcultas = new Set((ocultas ?? []).map(claveAdmin));
 
   const buscar = (e) => {
     e.preventDefault();
@@ -150,11 +154,12 @@ function Peliculas() {
   };
 
   const cambiar = async (pelicula, oculta) => {
-    setOcupada(pelicula.id);
+    setOcupada(claveAdmin(pelicula));
     try {
-      await (oculta ? mostrar : ocultar)(pelicula.id);
+      await (oculta ? mostrar : ocultar)(pelicula);
       await recargarOcultas();
-      setAviso(`«${pelicula.titulo}» ${oculta ? "vuelve a las destacadas" : "ya no sale en destacadas, estrenos ni especiales"}.`);
+      setAviso(`«${pelicula.titulo}» ${oculta ? `vuelve a ${pelicula.sin_ficha ? "estrenos" : "las destacadas"}`
+        : pelicula.sin_ficha ? "ya no sale en estrenos" : "ya no sale en destacadas, estrenos ni especiales"}.`);
     } catch {
       setAviso("No se ha podido guardar. Inténtalo de nuevo.");
     } finally {
@@ -165,7 +170,7 @@ function Peliculas() {
   return (
     <section aria-labelledby="admin-peliculas" className="space-y-4">
       <h3 id="admin-peliculas" className={TITULO_SECCION}>Películas ocultas</h3>
-      <p className="text-sm text-muted">Una película oculta no sale en las destacadas de la portada, en Estrenos ni en Especiales. Sigue en la cartelera, en su ficha y en la búsqueda.</p>
+      <p className="text-sm text-muted">Una película oculta no sale en las destacadas de la portada, en Estrenos ni en Especiales. Sigue en la cartelera, en su ficha y en la búsqueda. Los próximos estrenos aún sin ficha solo salen en Estrenos: ocultarlos los quita de ahí.</p>
       <form onSubmit={buscar} role="search" className="flex gap-2">
         <label htmlFor={`${id}-q`} className="sr-only">Buscar película</label>
         <input id={`${id}-q`} type="search" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Buscar película…"
@@ -176,8 +181,8 @@ function Peliculas() {
       {resultados?.length > 0 && (
         <ul aria-label="Resultados de la búsqueda" className="space-y-2">
           {resultados.map((p) => (
-            <FilaPelicula key={p.id} pelicula={p} oculta={idsOcultas.has(p.id)} ocupada={ocupada === p.id}
-                          onCambiar={() => cambiar(p, idsOcultas.has(p.id))} />
+            <FilaPelicula key={claveAdmin(p)} pelicula={p} oculta={idsOcultas.has(claveAdmin(p))} ocupada={ocupada === claveAdmin(p)}
+                          onCambiar={() => cambiar(p, idsOcultas.has(claveAdmin(p)))} />
           ))}
         </ul>
       )}
@@ -187,7 +192,7 @@ function Peliculas() {
       {!ocultas ? <Esqueleto /> : ocultas.length ? (
         <ul aria-label="Películas ocultas" className="space-y-2">
           {ocultas.map((p) => (
-            <FilaPelicula key={p.id} pelicula={p} oculta ocupada={ocupada === p.id} onCambiar={() => cambiar(p, true)} />
+            <FilaPelicula key={claveAdmin(p)} pelicula={p} oculta ocupada={ocupada === claveAdmin(p)} onCambiar={() => cambiar(p, true)} />
           ))}
         </ul>
       ) : <p className="text-muted">Ninguna.</p>}
