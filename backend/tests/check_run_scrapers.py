@@ -19,7 +19,9 @@ assert all(DESHABILITADOS.values())  # cada deshabilitado con su motivo
 todos = REGISTRO + (elegir(",".join(DESHABILITADOS)) if DESHABILITADOS else [])
 cines = [c for s in todos for c in s.cines]
 assert all(c in CINES_CONOCIDOS for c in cines), [c for c in cines if c not in CINES_CONOCIDOS]
-assert sorted(cines) == sorted(CINES_CONOCIDOS), set(CINES_CONOCIDOS) ^ set(cines)  # y cada cine una sola vez
+# Cada cine una sola vez en el registro; un deshabilitado puede cubrir un cine que ya lee otra fuente
+registrados = [c for s in REGISTRO for c in s.cines]
+assert sorted(registrados) == sorted(CINES_CONOCIDOS), set(CINES_CONOCIDOS) ^ set(registrados)
 assert all(s.funcion.__name__ == f"scrapear_{s.nombre}" for s in todos)
 print("OK: registro")
 

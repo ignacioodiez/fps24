@@ -36,6 +36,7 @@ CINES_CONOCIDOS = {
     "Renoir Retiro": "renoir-retiro",
     "Sala Equis": "equis",
     "Yelmo Cines Ideal": "yelmo-ideal",
+    "Yelmo Cines Plenilunio": "yelmo-plenilunio",
 }
 
 
@@ -85,6 +86,9 @@ CINES_DATOS = {
                                 telefono="910 52 43 80", zona="Chamartín", tipo="comercial", lat=40.4482811, lng=-3.6759879),
     "mk2-palacio-hielo": dict(direccion="Centro Comercial Palacio de Hielo, Calle de Silvano, 77, 28043 Madrid", web="https://www.mk2palaciodehielo.es/",
                               telefono=None, zona="Hortaleza", tipo="comercial", lat=40.4630376, lng=-3.6376566),
+    # Dirección y coordenadas de su ficha en eCartelera (cines/517)
+    "yelmo-plenilunio": dict(direccion="Centro Comercial Plenilunio, Glorieta de Eisenhower, s/n, 28022 Madrid", web="https://yelmocines.es/cartelera/madrid/plenilunio",
+                             telefono=None, zona="San Blas-Canillejas", tipo="comercial", lat=40.4341, lng=-3.57727),
 }
 
 # Tarifas (euros) de los 11 cines de frontend/src/data/cines.js (CINES_INFO), por slug. Solo las claves que

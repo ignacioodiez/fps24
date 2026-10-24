@@ -11,7 +11,8 @@ from sqlmodel import Session
 
 from app.database.engine import engine
 from app.scrapers.cines import (cine_estudio, cine_paz, cinesa, cineteca, dore, embajadores, equis, golem,
-                                mk2_palacio_hielo, renoir, sensacine, yelmo_ideal)
+                                mk2_palacio_hielo, renoir, sensacine, yelmo_ideal, yelmo_ideal_ecartelera,
+                                yelmo_plenilunio_ecartelera)
 from app.scrapers.comun import obtener_logger
 from app.services import tmdb
 from app.services.cines import sincronizar_cines
@@ -38,11 +39,12 @@ def _desde(modulo) -> Scraper:
 
 # En el orden de ejecución
 REGISTRO = [_desde(m) for m in (dore, cineteca, cine_estudio, equis, renoir, sensacine, golem, embajadores,
-                                cine_paz, mk2_palacio_hielo, yelmo_ideal, cinesa)]
+                                cine_paz, mk2_palacio_hielo, yelmo_ideal_ecartelera, yelmo_plenilunio_ecartelera,
+                                cinesa)]
 
 # Fuera de la ejecución normal (con el motivo); siguen funcionando con --solo
-DESHABILITADOS = {}  # {"nombre": "motivo"}
-_MODULOS_DESHABILITADOS = {}  # {"nombre": módulo}
+DESHABILITADOS = {"yelmo_ideal": "yelmocines.es responde 403 (Cloudflare) desde Render; lo sustituye yelmo_ideal_ecartelera"}
+_MODULOS_DESHABILITADOS = {"yelmo_ideal": yelmo_ideal}
 
 
 def elegir(solo: str = None) -> list:
