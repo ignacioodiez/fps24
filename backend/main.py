@@ -10,7 +10,7 @@ from sqlalchemy import case, func, nulls_last
 from sqlalchemy.orm import selectinload
 
 from app.database.engine import get_session
-from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase
+from app.database.models import Pase, Pelicula, PaseBase, PeliculaBase, PeliculaOculta
 from app.run_scrapers import lanzar_todo 
 from app.services.destacadas import SEMANAS_MAX, leer_destacadas, leer_pagina, seleccionar_especiales, seleccionar_estrenos
 from app.services.cines import detalle_cine, listar_cines
@@ -19,6 +19,7 @@ from app.auth import Usuario, usuario_actual
 from app.diario import router as diario_router
 from app.perfil import router as perfil_router
 from app.favoritos import router as favoritos_router
+from app.admin import admin_actual, es_admin, router as admin_router
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -40,6 +41,8 @@ app.include_router(diario_router)
 app.include_router(perfil_router)
 # Cines favoritos (/me/cines-favoritos)
 app.include_router(favoritos_router)
+# Panel de administración (/admin/...): 404 para quien no esté en ADMIN_EMAILS
+app.include_router(admin_router)
 
 # --- ⚡ MODELOS DE RESPUESTA (AQUÍ ESTABA EL TAPÓN) ---
 
@@ -172,6 +175,9 @@ class PeliculaBuscada(SQLModel):
     poster_url: Optional[str] = None
     nota_tmdb: Optional[float] = None
 
+class PeliculaBuscadaAdmin(PeliculaBuscada):
+    oculta: bool  # fuera de /destacadas, /estrenos y /especiales (pelicula_oculta)
+
 # --- SEGURIDAD ---
 
 ACTUALIZAR_SECRET = os.getenv("ACTUALIZAR_SECRET")
@@ -261,10 +267,18 @@ def buscar_peliculas(q: str = "", limite: int = Query(20, ge=1, le=30), session:
     return [{**p.model_dump(), "titulo_original": p.titulo_original if p.titulo_original != p.titulo else None}
             for p in pelis if not _EXCLUIDA.search(p.titulo or "")][:limite]
 
+# La misma búsqueda para el panel admin, con si cada una está oculta de las destacadas
+@app.get("/admin/peliculas/buscar", response_model=List[PeliculaBuscadaAdmin])
+def admin_buscar_peliculas(q: str = "", _: Usuario = Depends(admin_actual), session: Session = Depends(get_session)):
+    pelis = buscar_peliculas(q, 30, session)
+    ocultas = set(session.exec(select(PeliculaOculta.pelicula_id)
+                               .where(PeliculaOculta.pelicula_id.in_([p["id"] for p in pelis]))).all())
+    return [{**p, "oculta": p["id"] in ocultas} for p in pelis]
+
 # --- USUARIO: quién soy (JWT de Supabase Auth en Authorization: Bearer) ---
 @app.get("/me")
 def leer_me(usuario: Usuario = Depends(usuario_actual)):
-    return {"id": usuario.id, "email": usuario.email}
+    return {"id": usuario.id, "email": usuario.email, "es_admin": es_admin(usuario)}
 
 @app.post("/actualizar")
 def actualizar_todo(background_tasks: BackgroundTasks, _: None = Depends(verificar_secreto)):

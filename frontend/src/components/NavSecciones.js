@@ -26,7 +26,7 @@ const INACTIVA = "text-muted hover:text-foreground";
 // Mientras AuthProvider carga (servidor e hidratación) se reserva el hueco vacío: ni salto ni desajuste.
 function ZonaCuenta({ ruta }) {
   // cerrarSesion lleva a la portada y cierra la sesión allí; el aviso "Has cerrado sesión" lo da AuthProvider
-  const { usuario, cargando, cerrarSesion, abrirLogin, miPerfil } = useAuth();
+  const { usuario, cargando, cerrarSesion, abrirLogin, miPerfil, esAdmin } = useAuth();
   if (!AUTH_DISPONIBLE) return null;
 
   // Con usuario conocido, directo a /u/<usuario> (sin pasar por la redirección de /perfil)
@@ -42,6 +42,14 @@ function ZonaCuenta({ ruta }) {
             Mi perfil
           </Link>
           <span aria-hidden="true" className="w-px h-4 self-center bg-line" />
+          {esAdmin && (
+            <>
+              <Link href="/admin" aria-current={dentro(ruta, "/admin") ? "page" : undefined} className={`${ENLACE} ${dentro(ruta, "/admin") ? ACTIVA : INACTIVA}`}>
+                Admin
+              </Link>
+              <span aria-hidden="true" className="w-px h-4 self-center bg-line" />
+            </>
+          )}
           <button type="button" onClick={cerrarSesion} className={`${ENLACE} ${INACTIVA}`}>Cerrar sesión</button>
         </>
       ) : (
