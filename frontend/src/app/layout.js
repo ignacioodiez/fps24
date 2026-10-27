@@ -7,6 +7,7 @@ import AuthProvider from "@/components/AuthProvider";
 import PanelLogin from "@/components/PanelLogin";
 import FavoritosProvider from "@/components/FavoritosProvider";
 import SesionesGuardadasProvider from "@/components/SesionesGuardadasProvider";
+import { Analytics } from "@vercel/analytics/next";
 
 
 // Si la nueva fuente no es variable, añade weight: ["400", "700", "900"]
@@ -44,7 +45,7 @@ export default function RootLayout({ children, modal }) {
 
         {/* FOOTER: Siempre al final */}
         <Footer />
-        
+        <Analytics />
       </body>
     </html>
   );
