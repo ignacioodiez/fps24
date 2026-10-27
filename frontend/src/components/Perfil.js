@@ -202,7 +202,6 @@ function MiDiario() {
         </p>
       ) : (
         <>
-          <p className="text-sm text-muted">{total} {total === 1 ? "película apuntada" : "películas apuntadas"}</p>
           <ListaDiario entradas={entradas} marcada={marcada} onEditar={setEditando} onBorrar={borrarEntrada} />
           {entradas.length < total && (
             <div className="mt-6 text-center">

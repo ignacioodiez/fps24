@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { cleanCinemaName, extractTime, isDiaEspectador, textoSala } from "@/utils/helpers";
 import BotonFavorito, { MarcaFavorito } from "@/components/BotonFavorito";
 import { useFavoritos } from "@/components/FavoritosProvider";
@@ -64,38 +65,73 @@ function BotonVerMas({ abierto, onAlternar, texto, controla, chip = false, etiqu
   );
 }
 
-// Chip de idioma: "VO" para VOSE, el idioma tal cual para otros; nada si es en español
-export function ChipIdioma({ idioma }) {
-  if (!idioma || idioma === "Español") return null;
+// Minuto actual (ms) para apagar las horas pasadas; null en el servidor y al hidratar (sin desajuste)
+const MINUTO = 60000;
+const suscribirReloj = (aviso) => {
+  const t = setInterval(aviso, MINUTO);
+  return () => clearInterval(t);
+};
+const useAhora = () => useSyncExternalStore(suscribirReloj, () => Math.floor(Date.now() / MINUTO) * MINUTO, () => null);
+
+// Precio de una sesión salvo "Consultar"
+const precioDe = (pase) => (pase.precio && pase.precio !== "Consultar" ? pase.precio : null);
+
+// Nombre de un cine que lleva a su página; sin slug, texto normal. reemplazar: desde el modal, sustituye su
+// entrada del historial para que "atrás" vuelva a la portada y no reabra el modal.
+export function EnlaceCine({ slug, reemplazar = false, className = "", title, children }) {
+  if (!slug) return <span title={title} className={className}>{children}</span>;
   return (
-    <span className="text-[9px] bg-surface px-1 rounded font-medium text-muted border border-line">
-      {idioma === "VOSE" ? "VO" : idioma}
-    </span>
+    <Link href={`/cines/${slug}`} replace={reemplazar} title={title} className={`rounded focus-visible:outline-2 focus-visible:outline-offset-2 ${className}`}>
+      {children}
+    </Link>
   );
 }
 
-// Cabecera de cine: verde (accent) si ese día es el del espectador en ese cine. Si es favorito, ★ delante;
-// conFavorito: además la estrella para marcarlo o quitarlo (modal y ficha).
-export function CabeceraCine({ nombre, fecha, slug, conFavorito = false }) {
+// Chip de idioma: VOSE neutro y legible en cualquier chip (también el violeta de los especiales y su hover);
+// otros idiomas, discretos; nada si es en español
+export function ChipIdioma({ idioma }) {
+  if (!idioma || idioma === "Español") return null;
+  if (idioma === "VOSE") {
+    return <span className="text-[10px] leading-none px-1 py-0.5 rounded border border-muted bg-background text-foreground font-bold uppercase tracking-wide">VOSE</span>;
+  }
+  return <span className="text-[9px] bg-surface px-1 rounded font-medium text-muted border border-line">{idioma}</span>;
+}
+
+// Rejilla de cines dentro de la tarjeta de una película: 2 columnas si la tarjeta mide 440px o más (container query;
+// el padre lleva @container), por filas. Entre cines, una línea fina; la primera fila sin ella.
+export const REJILLA_CINES = "grid gap-x-6 gap-y-3 @[440px]:grid-cols-2 [&>*]:border-t [&>*]:border-line [&>*]:pt-3 [&>*:first-child]:border-t-0 [&>*:first-child]:pt-0 @[440px]:[&>*:nth-child(2)]:border-t-0 @[440px]:[&>*:nth-child(2)]:pt-0";
+
+// Cabecera de un cine: el nombre como texto, enlace a su página (★ delante si es favorito).
+// conFavorito: la estrella para marcarlo o quitarlo (modal y ficha). A la derecha, "Espectador" si ese día lo es
+// en ese cine y el precio del día.
+export function CabeceraCine({ nombre, fecha, slug, conFavorito = false, precio = null, reemplazar = false }) {
   const espectador = isDiaEspectador(nombre, fecha);
+  const texto = cleanCinemaName(nombre);
   return (
-    <div className="flex items-center gap-1 w-fit max-w-full">
-      <div className={`flex items-center min-w-0 px-2.5 py-1.5 rounded-lg border ${
-        espectador ? "bg-accent text-foreground border-accent" : "bg-surface text-foreground border-line"}`}>
-        <h3 className="text-xs font-bold uppercase tracking-wide truncate">
-          {!conFavorito && <MarcaFavorito slug={slug} />} {cleanCinemaName(nombre)}
-        </h3>
-      </div>
-      {conFavorito && <BotonFavorito pequeno slug={slug} nombre={cleanCinemaName(nombre)} />}
+    <div className="flex items-center gap-1.5 min-w-0">
+      <h3 className="flex min-w-0 text-xs font-bold uppercase tracking-wide text-foreground">
+        <EnlaceCine slug={slug} reemplazar={reemplazar}
+                    className={`truncate underline-offset-2 ${slug ? "hover:text-primary hover:underline focus-visible:underline focus-visible:outline-primary transition-colors" : ""}`}>
+          {!conFavorito && <MarcaFavorito slug={slug} />} {texto}
+        </EnlaceCine>
+      </h3>
+      {conFavorito && <BotonFavorito pequeno slug={slug} nombre={texto} />}
+      {(espectador || precio) && (
+        <span className="ml-auto shrink-0 flex items-center gap-1.5 text-xs font-bold text-foreground">
+          {espectador && <span className="px-1.5 py-0.5 rounded bg-accent">Espectador</span>}
+          {precio}
+        </span>
+      )}
     </div>
   );
 }
 
 // Chip de hora. Con link_compra es el botón de compra (pestaña nueva); sin él, apagado y no clicable.
 // conPrecio: el precio salvo "Consultar"; conSala: la sala ("Sala 9") si no repite el cine. La portada no usa ninguno.
-export function ChipHora({ pase, cine, conPrecio = false, conSala = false }) {
+// pasada: ya ha empezado (apagada).
+export function ChipHora({ pase, cine, conPrecio = false, conSala = false, pasada = false }) {
   const hora = pase.hora ?? extractTime(pase.fecha_hora); // hora: "HH:MM" ya formateada (/cines/{slug}, sin depender del locale)
-  const precio = conPrecio && pase.precio && pase.precio !== "Consultar" ? pase.precio : null;
+  const precio = conPrecio ? precioDe(pase) : null;
   const sala = conSala ? textoSala(pase.sala, cine) : null;
   const contenido = (
     <>
@@ -105,7 +141,7 @@ export function ChipHora({ pase, cine, conPrecio = false, conSala = false }) {
       {precio && <span className="text-[10px] font-medium opacity-80">{precio}</span>}
     </>
   );
-  const base = "px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-2 border";
+  const base = `px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-2 border ${pasada ? "opacity-50" : ""}`;
 
   if (!pase.link_compra) {
     return <span title={sala || undefined} className={`${base} bg-surface text-muted border-line opacity-60 cursor-default`}>{contenido}</span>;
@@ -116,7 +152,7 @@ export function ChipHora({ pase, cine, conPrecio = false, conSala = false }) {
       target="_blank"
       rel="noopener noreferrer"
       title={sala || undefined}
-      aria-label={`Comprar entrada para las ${hora} en ${cleanCinemaName(cine)}${sala ? `, ${sala}` : ""}`}
+      aria-label={`Comprar entrada para las ${hora} en ${cleanCinemaName(cine)}${sala ? `, ${sala}` : ""}${pase.idioma === "VOSE" ? ", VOSE" : ""}${pasada ? ", ya ha empezado" : ""}`}
       className={`${base} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
         pase.es_evento_especial
           ? "bg-primary-soft text-primary border-primary hover:bg-primary hover:text-white"
@@ -127,19 +163,23 @@ export function ChipHora({ pase, cine, conPrecio = false, conSala = false }) {
   );
 }
 
-// Un cine con sus horas: cabecera + chips, como en la tarjeta de la cartelera.
+// Un cine con sus horas: bloque con cabecera + chips (portada, vista rápida y ficha). pases en orden de hora.
 // maxHoras: en la ficha, horas visibles antes del chip "+N" (la portada no limita).
-export function SesionesCine({ cine, pases, conPrecio = false, conSala = false, maxHoras = Infinity, conFavorito = false }) {
+// El precio va en la cabecera si es el mismo todo el día; si cambia (según sala) y conPrecio, en cada hora.
+export function SesionesCine({ cine, pases, conPrecio = false, conSala = false, maxHoras = Infinity, conFavorito = false, reemplazar = false }) {
   const [abierto, setAbierto] = useState(false);
   const id = useId();
+  const ahora = useAhora();
   const ocultas = pases.length - maxHoras;
   const visibles = abierto || ocultas <= 0 ? pases : pases.slice(0, maxHoras);
+  const precios = new Set(pases.map(precioDe).filter(Boolean));
   return (
-    <div className="flex flex-col gap-1.5">
-      <CabeceraCine nombre={cine} fecha={pases[0]?.fecha_hora} slug={pases[0]?.cine_slug} conFavorito={conFavorito} />
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <CabeceraCine nombre={cine} fecha={pases[0]?.fecha_hora} slug={pases[0]?.cine_slug} conFavorito={conFavorito}
+                    precio={precios.size === 1 ? [...precios][0] : null} reemplazar={reemplazar} />
       <div id={id} className="flex flex-wrap gap-2">
         {visibles.map((pase, i) => (
-          <ChipHora key={pase.id ?? i} pase={pase} cine={cine} conPrecio={conPrecio} conSala={conSala} />
+          <ChipHora key={pase.id ?? i} pase={pase} cine={cine} conPrecio={conPrecio && precios.size > 1} conSala={conSala} pasada={ahora != null && new Date(pase.fecha_hora) < ahora} />
         ))}
         {ocultas > 0 && (
           <BotonVerMas chip abierto={abierto} onAlternar={() => setAbierto((a) => !a)} texto={`+${ocultas}`} controla={id}
@@ -214,6 +254,7 @@ export function SesionesDia({ pases, modo = "cine", contexto = "modal" }) {
   const [todasSesiones, setTodasSesiones] = useState(false);
   const id = useId();
   const ordenados = [...pases].sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora));
+  const reemplazar = contexto === "modal";
 
   if (modo === "hora") {
     const ocultas = ordenados.length - limite.sesiones;
@@ -224,7 +265,10 @@ export function SesionesDia({ pases, modo = "cine", contexto = "modal" }) {
           {visibles.map((pase, i) => (
             <li key={pase.id ?? i} className="flex flex-wrap items-center gap-2">
               <ChipHora pase={pase} cine={pase.cine} conPrecio conSala />
-              <span className="text-xs font-bold uppercase tracking-wide text-foreground"><MarcaFavorito slug={pase.cine_slug} /> {cleanCinemaName(pase.cine)}</span>
+              <EnlaceCine slug={pase.cine_slug} reemplazar={reemplazar}
+                          className="text-xs font-bold uppercase tracking-wide text-foreground hover:text-primary hover:underline focus-visible:outline-primary">
+                <MarcaFavorito slug={pase.cine_slug} /> {cleanCinemaName(pase.cine)}
+              </EnlaceCine>
             </li>
           ))}
         </ul>
@@ -246,10 +290,10 @@ export function SesionesDia({ pases, modo = "cine", contexto = "modal" }) {
   const ocultos = cines.length - limite.cines;
   const visibles = todosCines || ocultos <= 0 ? cines : cines.slice(0, limite.cines);
   return (
-    <div className="space-y-3">
-      <div id={id} className="space-y-3">
+    <div className="@container space-y-3">
+      <div id={id} className={REJILLA_CINES}>
         {visibles.map(([cine, delCine]) => (
-          <SesionesCine key={cine} cine={cine} pases={delCine} conPrecio conSala maxHoras={HORAS_POR_CINE} conFavorito />
+          <SesionesCine key={cine} cine={cine} pases={delCine} conPrecio conSala maxHoras={HORAS_POR_CINE} conFavorito reemplazar={reemplazar} />
         ))}
       </div>
       {ocultos > 0 && (

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { imagenDe } from "@/components/TarjetaEspecial";
 import { MarcaFavorito } from "@/components/BotonFavorito";
+import { EnlaceCine } from "@/components/Sesiones";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { comoUTC, formato, sesionCorta } from "@/lib/fechasMadrid";
 import { sesionSugerida } from "@/lib/favoritos";
@@ -95,7 +96,7 @@ export function Tarjeta({ item, tipo, destacada = false }) {
             <p className={`text-xs font-bold uppercase tracking-wide ${tipo === "especiales" ? "text-primary" : "text-foreground"}`}>
               {tipo === "estrenos" && sesion === item.sesion ? "Primera: " : ""}{sesionCorta(sesion.fecha_hora)}
             </p>
-            <p className="text-xs text-muted truncate" title={sesion.cine}><MarcaFavorito slug={sesion.cine_slug} /> {sesion.cine}</p>
+            <p className="text-xs text-muted truncate" title={sesion.cine}><EnlaceCine slug={sesion.cine_slug} className="relative z-[2] hover:text-primary hover:underline focus-visible:outline-primary"><MarcaFavorito slug={sesion.cine_slug} /> {sesion.cine}</EnlaceCine></p>
           </div>
           {sesion.link_compra && <Entradas href={sesion.link_compra} />}
         </div>
@@ -142,7 +143,7 @@ export function CeldaMosaico({ item, grande, className }) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/90">
           {notaFiableDe(item) && <span className="shrink-0 font-semibold">★ {pelicula.nota_tmdb.toFixed(1)}</span>}
           {/* Si no caben 6rem, el cine baja a su línea en vez de cortarse en dos letras */}
-          <span className="flex-[1_1_6rem] min-w-0 truncate" title={sesion.cine}><MarcaFavorito slug={sesion.cine_slug} /> {sesion.cine}</span>
+          <EnlaceCine slug={sesion.cine_slug} title={sesion.cine} className="flex-[1_1_6rem] min-w-0 truncate relative z-[2] hover:underline focus-visible:outline-white"><MarcaFavorito slug={sesion.cine_slug} /> {sesion.cine}</EnlaceCine>
           {sesion.link_compra && <Entradas href={sesion.link_compra} />}
         </div>
         {grande && (

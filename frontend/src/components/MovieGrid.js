@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cleanCinemaName } from "@/utils/helpers";
-import { SesionesCine } from "@/components/Sesiones";
+import { REJILLA_CINES, SesionesCine } from "@/components/Sesiones";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { favoritosPrimero } from "@/lib/favoritos";
 import { ChipDato } from "@/components/FichaPelicula";
@@ -122,11 +122,13 @@ export default function MovieGrid({
             </div>
 
             {/* CINES Y SESIONES (mismo bloque que la vista rápida y la página completa) */}
-            <div className="space-y-3">
-              {/* Mis cines favoritos primero; el resto, en su orden (por primera sesión) */}
-              {favoritosPrimero(Object.entries(movie.cines), ([, sessions]) => sessions[0].cine_slug, favoritos).map(([cinemaName, sessions]) => (
-                <SesionesCine key={cinemaName} cine={cinemaName} pases={sessions} />
-              ))}
+            <div className="@container">
+              <div className={REJILLA_CINES}>
+                {/* Mis cines favoritos primero; el resto, en su orden (por primera sesión) */}
+                {favoritosPrimero(Object.entries(movie.cines), ([, sessions]) => sessions[0].cine_slug, favoritos).map(([cinemaName, sessions]) => (
+                  <SesionesCine key={cinemaName} cine={cinemaName} pases={sessions} />
+                ))}
+              </div>
             </div>
 
           </div>

@@ -34,7 +34,6 @@ function Diario({ usuario, diario }) {
   const enlace = (n) => `/u/${usuario}${n > 1 ? `?pagina=${n}` : ""}`;
   return (
     <>
-      <p className="text-sm text-muted">{diario.total} {diario.total === 1 ? "película apuntada" : "películas apuntadas"}</p>
       {diario.entradas.length ? <ListaDiario entradas={diario.entradas} /> : <p className="mt-6 text-muted">No hay más entradas.</p>}
       {paginas > 1 && (
         <nav aria-label="Páginas del diario" className="mt-6 flex items-center justify-center gap-3 text-sm">
