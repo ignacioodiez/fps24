@@ -3,7 +3,7 @@ from sqlalchemy import CheckConstraint, Column, DateTime, Index, JSON, SmallInte
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from typing import Optional, List
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 
 # 1. ESQUELETO DE LA PELÍCULA
@@ -211,3 +211,28 @@ class EstrenoProximo(SQLModel, table=True):
     # 0017: el admin la quita de /estrenos (las que tienen ficha usan pelicula_oculta). El cron no la toca.
     oculta: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
     actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+
+
+# 13. SESIONES GUARDADAS (migración 0019): agenda privada de cada usuario. Copia de la sesión al guardarla, para que
+# sobreviva aunque el scraper retire el pase; pase_id solo sirve para casarla con la sesión viva de la cartelera.
+class SesionGuardada(SQLModel, table=True):
+    __tablename__ = "sesion_guardada"
+    __table_args__ = (
+        UniqueConstraint("user_id", "cine_nombre", "fecha", "hora", "titulo", name="uq_sesion_guardada_usuario_sesion"),
+        Index("ix_sesion_guardada_usuario_fecha", "user_id", "fecha", "hora"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: uuid.UUID = Field(sa_column=Column(UUID(as_uuid=True), nullable=False))  # sub del JWT, sin FK
+    pase_id: Optional[int] = Field(default=None, foreign_key="pase.id", ondelete="SET NULL", index=True)
+    pelicula_id: Optional[int] = Field(default=None, foreign_key="pelicula.id", ondelete="SET NULL")
+    titulo: str = Field(sa_column=Column(Text, nullable=False))
+    poster_url: Optional[str] = Field(default=None, sa_column=Column(Text))
+    cine_id: Optional[int] = Field(default=None, foreign_key="cine.id", ondelete="SET NULL")
+    cine_nombre: str = Field(sa_column=Column(Text, nullable=False))
+    cine_slug: str = Field(sa_column=Column(Text, nullable=False))
+    fecha: date  # hora local de Madrid, como pase.fecha_hora
+    hora: time
+    idioma: Optional[str] = Field(default=None, sa_column=Column(Text))  # tal cual pase.idioma ("VOSE", "Español"...)
+    link_compra: Optional[str] = Field(default=None, sa_column=Column(Text))
+    diario_entrada_id: Optional[int] = Field(default=None, foreign_key="diario_entrada.id", ondelete="SET NULL")  # "La vi"
+    creada_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

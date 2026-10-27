@@ -76,6 +76,11 @@ export default function PrivacidadPage() {
                 público y activas «Mostrar mis cines favoritos en mi perfil público» (está apagado por defecto).
               </li>
               <li>
+                Tus <strong className="text-foreground">sesiones guardadas</strong> («Mis sesiones»), si guardas alguna
+                desde la hora de una sesión: película, cine, día, hora, versión y enlace de compra. Son privadas: solo
+                las ves tú, nunca aparecen en tu perfil público, y se borran con tu cuenta.
+              </li>
+              <li>
                 Si te suscribes a la <strong className="text-foreground">newsletter</strong> «Esta semana en Madrid» (no
                 hace falta cuenta): solo tu <strong className="text-foreground">email</strong> y las fechas de alta,
                 confirmación y baja. Nada más: ni tu nombre ni qué abres o en qué pinchas.

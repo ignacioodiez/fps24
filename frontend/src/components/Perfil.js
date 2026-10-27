@@ -10,8 +10,10 @@ import {
   Ayuda, CabeceraPerfil, PestanaPerfil, PestanasPerfil, SoloTu, TarjetasCines, TITULO_SECCION, formato, nombreMes, porMes,
 } from "@/components/PerfilVistas";
 import TarjetaPerfilPublico from "@/components/TarjetaPerfilPublico";
+import MisSesiones from "@/components/MisSesiones";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
+import { listarSesiones } from "@/lib/sesiones";
 
 const POR_PAGINA = 20;
 const COMENTARIO_CORTO = 240; // más largo (o con más de 3 líneas) se recorta con "ver más"
@@ -291,12 +293,13 @@ function MisCines() {
   );
 }
 
-// /u/<mi usuario>[/diario|/cines]: mi vista, aunque el perfil sea privado. Ve todas las pestañas y las secciones
+// /u/<mi usuario>[/diario|/cines|/sesiones]: mi vista, aunque el perfil sea privado. Ve todas las pestañas y las secciones
 // vacías (con ayuda), y debajo de las que los demás no ven, "Solo tú ves...". Los datos salen de mis endpoints.
 function MiPerfil({ perfil, pestana }) {
   const { favoritos, cargados, alternar } = useFavoritos();
   const [todos, setTodos] = useState(null); // GET /cines, para nombre y zona de mis favoritos
   const [diario, setDiario] = useState(null); // GET /diario: { total, este_anio, entradas } o { error }
+  const [proximas, setProximas] = useState(0); // sesiones guardadas próximas, para el enlace de la pestaña Perfil
 
   useEffect(() => {
     todosLosCines().then(setTodos).catch(() => setTodos([]));
@@ -309,6 +312,11 @@ function MiPerfil({ perfil, pestana }) {
     cargar();
     window.addEventListener(DIARIO_GUARDADO, cargar);
     return () => window.removeEventListener(DIARIO_GUARDADO, cargar);
+  }, [pestana]);
+
+  useEffect(() => {
+    if (pestana !== "perfil") return;
+    listarSesiones().then((a) => setProximas(a.proximas.length)).catch(() => setProximas(0)); // sin enlace si falla
   }, [pestana]);
 
   const publico = perfil.visibilidad === "publico";
@@ -333,8 +341,15 @@ function MiPerfil({ perfil, pestana }) {
           <p className="text-sm text-muted">{quienVe}</p>
         </div>
       )}
-      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines"]} />
+      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines", "sesiones"]} />
 
+      {pestana === "perfil" && proximas > 0 && (
+        <p className="mt-4 text-sm">
+          <Link href={`/u/${perfil.usuario}/sesiones`} className="font-bold text-muted hover:text-primary hover:underline">
+            Mis sesiones · {proximas} {proximas === 1 ? "próxima" : "próximas"} →
+          </Link>
+        </p>
+      )}
       {pestana === "perfil" && (
         diario?.error ? <p role="alert" className="py-8 text-red-600">{diario.error}</p>
           : !diario || !cines ? <Esqueleto />
@@ -360,12 +375,19 @@ function MiPerfil({ perfil, pestana }) {
               : <Ayuda>Aún no tienes cines favoritos. Pulsa la ★ en un cine de <Link href="/cines" className="font-bold text-primary hover:underline">Cines</Link> y sus sesiones saldrán primero en toda la web.</Ayuda>}
         </section>
       )}
+      {pestana === "sesiones" && (
+        <section aria-labelledby="mis-sesiones" className="mt-8">
+          <h3 id="mis-sesiones" className={TITULO_SECCION}>Mis sesiones</h3>
+          <p className="mt-1 text-xs text-muted">Solo tú ves tus sesiones guardadas.</p>
+          <MisSesiones usuario={perfil.usuario} />
+        </section>
+      )}
     </div>
   );
 }
 
 const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
-const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines" })[ruta.split("/")[3]] ?? "perfil";
+const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones" })[ruta.split("/")[3]] ?? "perfil";
 
 // En /u/[usuario]: si el visitante es el dueño, su vista; si no, children (la pública o el "no existe o es privado").
 // esperar: mientras no se sabe, esqueleto en vez de children (en el 404, para no enseñarle al dueño "no existe").

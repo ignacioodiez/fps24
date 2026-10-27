@@ -78,7 +78,7 @@ function Contenido({ movie, idTitulo, dia }) {
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Sesiones</p>
             <SelectorAgrupacion modo={modo} onCambiar={setModo} />
           </div>
-          <SesionesPorDias pases={movie.pases || []} modo={modo} contexto="modal" diaElegido={elegido} />
+          <SesionesPorDias pases={movie.pases || []} pelicula={movie} modo={modo} contexto="modal" diaElegido={elegido} />
         </div>
       </div>
     </>

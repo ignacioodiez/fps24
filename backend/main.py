@@ -19,6 +19,7 @@ from app.auth import Usuario, usuario_actual
 from app.diario import router as diario_router
 from app.perfil import router as perfil_router
 from app.favoritos import router as favoritos_router
+from app.sesiones import router as sesiones_router
 from app.admin import admin_actual, es_admin, router as admin_router
 from app.newsletter.rutas import router as newsletter_router
 from app.proximamente.estrenos import leer_estrenos as leer_estrenos_semana
@@ -43,6 +44,8 @@ app.include_router(diario_router)
 app.include_router(perfil_router)
 # Cines favoritos (/me/cines-favoritos)
 app.include_router(favoritos_router)
+# Sesiones guardadas, la agenda privada (/me/sesiones...)
+app.include_router(sesiones_router)
 # Panel de administración (/admin/...): 404 para quien no esté en ADMIN_EMAILS
 app.include_router(admin_router)
 # Newsletter semanal: /newsletter/suscribir, /newsletter/confirmar y /newsletter/baja
@@ -63,6 +66,9 @@ class PaseConPelicula(PaseSalida):
     id: int
     pelicula: Optional[PeliculaConId] = None 
 
+class PaseConId(PaseSalida):
+    id: int
+
 # 👇 AQUÍ ES DONDE AÑADIMOS LOS CAMPOS NUEVOS PARA QUE PASEN EL FILTRO
 class PeliculaDetalle(PeliculaBase):
     id: int
@@ -72,10 +78,7 @@ class PeliculaDetalle(PeliculaBase):
     fecha_estreno: Optional[date] = None
     votos: Optional[int] = None  # para la vista rápida: nota apagada si hay pocos votos
     director: Optional[str] = None
-    pases: List[PaseSalida] = []
-
-class PaseConId(PaseSalida):
-    id: int
+    pases: List[PaseConId] = []  # con id: el que se manda a POST /me/sesiones para guardar la sesión
 
 class Semana(SQLModel):
     inicio: date
