@@ -98,7 +98,7 @@ try:
                                     ("an..a", 422, "dos puntos")]:
         assert detalle in ok(codigo, llamar("PUT", "/me/perfil", {"usuario": nombre}), f"nombre {nombre!r}")["detail"]
     assert "160" in ok(422, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "x" * 161}), "bio larga")["detail"]
-    ok(422, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": "amigos"}), "visibilidad desconocida")
+    ok(422, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": "todos"}), "visibilidad desconocida")
     creado = ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A.upper(), "bio": "  Cine de barrio  "}), "crear")
     assert creado["usuario"] == NOMBRE_A and creado["bio"] == "Cine de barrio" and creado["visibilidad"] == "privado"
     assert ok(200, llamar("GET", "/me/perfil"), "leer el mío")["usuario"] == NOMBRE_A
@@ -130,7 +130,7 @@ try:
     # ni user_id, ni email, ni fechas; sin diario ni cines mientras no se activen
     color = modulo.color_avatar(Perfil(usuario=NOMBRE_A))
     assert publico == {"usuario": NOMBRE_A, "bio": "Cine de barrio", "diario_publico": False, "diario": None, "cines": None, "cifras": None,
-                       "letterboxd_usuario": None, "avatar": {"tipo": "iniciales", "color": color,
+                       "restringido": False, "relacion": None, "letterboxd_usuario": None, "avatar": {"tipo": "iniciales", "color": color,
                                                               "fondo": modulo.PALETA_AVATAR[color], "poster_url": None}}, publico
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "Cine de barrio"}), "PUT sin visibilidad")
     assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # PUT sin visibilidad vuelve a privado
@@ -141,7 +141,7 @@ try:
     app.dependency_overrides[usuario_actual] = lambda: Usuario(id=str(actual["id"]), email="a@ejemplo.es")
     print("OK: sin sesión, solo /u/{usuario}")
 
-    # --- Diario en el perfil público: solo si el perfil es público Y diario_publico ---
+    # --- Diario en el perfil público (visto sin sesión): solo si el perfil y el diario son públicos ---
     with Session(engine) as session:
         peli = session.exec(select(Pelicula).order_by(Pelicula.id)).first()
         cine = session.exec(select(Cine).order_by(Cine.id)).first()
@@ -157,15 +157,16 @@ try:
 
     def poner(visibilidad, diario):
         mio = ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "Cine de barrio", "visibilidad": visibilidad,
-                                                   "diario_publico": diario}), f"{visibilidad}, diario_publico={diario}")
-        assert (mio["visibilidad"], mio["diario_publico"]) == (visibilidad, diario), mio
-        assert ok(200, llamar("GET", "/me/perfil"), "GET /me/perfil")["diario_publico"] is diario
+                                                   "diario_visibilidad": diario}), f"{visibilidad}, diario {diario}")
+        guardado = modulo.abierto(diario, visibilidad)  # nunca más abierto que el perfil
+        assert (mio["visibilidad"], mio["diario_visibilidad"]) == (visibilidad, guardado), mio
+        assert ok(200, llamar("GET", "/me/perfil"), "GET /me/perfil")["diario_visibilidad"] == guardado
 
-    poner("privado", True)
-    assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # privado: 404 aunque diario_publico
-    poner("publico", False)
+    poner("privado", "publico")
+    assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # privado: 404, y el diario se ha bajado a privado
+    poner("publico", "privado")
     assert ok(200, llamar("GET", f"/u/{NOMBRE_A}"), "público sin diario")["diario"] is None
-    poner("publico", True)
+    poner("publico", "publico")
     pagina1 = ok(200, llamar("GET", f"/u/{NOMBRE_A}"), "público con diario")
     diario = pagina1["diario"]
     assert pagina1["diario_publico"] is True and diario["total"] == 31 and diario["por_pagina"] == modulo.POR_PAGINA == 30
@@ -203,13 +204,15 @@ try:
         session.commit()
     print("OK: cifras (total y este año en Madrid) y póster/id en las entradas")
     # Al momento: apagarlo, o pasar a privado, lo oculta en la siguiente petición
-    poner("publico", False)
+    poner("publico", "privado")
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["diario"] is None
-    poner("publico", True)
-    poner("privado", True)
+    poner("publico", "amigos")
+    assert llamar("GET", f"/u/{NOMBRE_A}")[1]["diario"] is None  # solo amigos: sin sesión no se ve
+    poner("publico", "publico")
+    poner("privado", "publico")
     assert llamar("GET", f"/u/{NOMBRE_A}") == privado
     assert llamar("GET", f"/u/{NOMBRE_A}?pagina=2") == privado
-    ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": "publico"}), "PUT sin diario_publico")
+    ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": "publico"}), "PUT sin diario_visibilidad")
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["diario"] is None  # sin el campo, se apaga
     print("OK: diario en el perfil público (oculto si privado o apagado, paginado, sin campos internos, al momento)")
 
@@ -282,25 +285,26 @@ try:
     assert mio["avatar_pelicula_id"] is None and mio["avatar"]["tipo"] == "iniciales", mio
     print("OK: avatar de película (válida, sin póster, inexistente, borrada)")
 
-    # Cines: solo con el interruptor Y el perfil público; los de A, en su orden, sin los de B
-    guardar_a(cines_publicos=False)
+    # Cines: solo si son públicos (y el perfil también); los de A, en su orden, sin los de B
+    guardar_a(cines_visibilidad="privado")
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["cines"] is None
-    guardar_a(cines_publicos=True, letterboxd_usuario="Ana_Diez", avatar_tipo="pelicula", avatar_pelicula_id=con_poster_id)
+    guardar_a(cines_visibilidad="publico", letterboxd_usuario="Ana_Diez", avatar_tipo="pelicula", avatar_pelicula_id=con_poster_id)
     completo = ok(200, llamar("GET", f"/u/{NOMBRE_A}"), "público con cines")
     assert completo["cines"] == cines_a, completo["cines"]
-    assert guardar_a(visibilidad="privado", cines_publicos=True)["cines_publicos"] is True
-    assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # privado: 404 aunque cines_publicos
+    assert guardar_a(visibilidad="privado", cines_visibilidad="publico")["cines_visibilidad"] == "privado"  # se baja
+    assert llamar("GET", f"/u/{NOMBRE_A}") == privado
     guardar_a(visibilidad="publico")
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["cines"] is None  # PUT sin el campo: se apaga
     # Nada interno en el público
-    assert set(completo) == {"usuario", "bio", "avatar", "letterboxd_usuario", "diario_publico", "diario", "cines", "cifras"}, completo
+    assert set(completo) == {"usuario", "bio", "avatar", "letterboxd_usuario", "diario_publico", "diario", "cines", "cifras",
+                             "restringido", "relacion"}, completo
     assert completo["cifras"] is None and set(completo["cines"][0]) == {"slug", "nombre", "zona"}  # diario apagado: sin cifras
     assert set(completo["avatar"]) == {"tipo", "color", "fondo", "poster_url"}
     texto = json.dumps(completo)
-    for prohibido in (str(A), str(B), "a@ejemplo.es", "user_id", "email", "creado_en", "cines_publicos", "avatar_pelicula_id",
+    for prohibido in (str(A), str(B), "a@ejemplo.es", "user_id", "email", "creado_en", "cines_visibilidad", "avatar_pelicula_id",
                       "paleta", "visibilidad", f'"id": {con_poster_id}', f'"{slug_de_b}"'):
         assert prohibido not in texto, prohibido
-    print("OK: cines en el perfil público (solo con interruptor y perfil público) y sin campos internos")
+    print("OK: cines en el perfil público (solo si son públicos, y el perfil también) y sin campos internos")
     guardar_a(visibilidad="privado")
 
     # --- Cambiar de nombre libera el anterior ---
@@ -350,7 +354,10 @@ try:
     # --- La tabla: UNIQUE en minúsculas, CHECK y RLS/REVOKE ---
     for valores, restriccion in [(dict(usuario=NOMBRE_A.upper()), "uq_perfil_usuario"),
                                  (dict(usuario=f"chk_bio{sufijo}", bio="x" * 161), "ck_perfil_bio"),
-                                 (dict(usuario=f"chk_vis{sufijo}", visibilidad="amigos"), "ck_perfil_visibilidad"),
+                                 (dict(usuario=f"chk_vis{sufijo}", visibilidad="todos"), "ck_perfil_visibilidad"),
+                                 (dict(usuario=f"chk_dvi{sufijo}", visibilidad="amigos", diario_visibilidad="publico"),
+                                  "ck_perfil_diario_visibilidad_perfil"),
+                                 (dict(usuario=f"chk_cvi{sufijo}", cines_visibilidad="amigos"), "ck_perfil_cines_visibilidad_perfil"),
                                  (dict(usuario=f"chk_ava{sufijo}", avatar_tipo="foto"), "ck_perfil_avatar_tipo"),
                                  (dict(usuario=f"chk_lbx{sufijo}", letterboxd_usuario="ana diez"), "ck_perfil_letterboxd")]:
         with Session(engine) as session:

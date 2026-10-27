@@ -54,31 +54,38 @@ export default function PrivacidadPage() {
               <li>
                 Tu <strong className="text-foreground">diario</strong>: las películas que apuntes como vistas, con la fecha,
                 el cine, tu nota y tu comentario si los añades. Es <strong className="text-foreground">privado por defecto</strong>:
-                solo lo ves tú, salvo que actives «Mostrar mi diario en mi perfil».
+                solo lo ves tú, salvo que elijas «Solo amigos» o «Público» en «¿Quién ve tu diario?».
               </li>
               <li>
                 Tu <strong className="text-foreground">perfil</strong>, si decides crearlo (es opcional): un nombre de
-                usuario y una bio corta. Es <strong className="text-foreground">privado por defecto</strong>. Si lo haces
-                público, cualquiera con tu enlace (fps24.es/u/tu-usuario) verá tu nombre de usuario y tu bio, nunca tu email.
-                Si además activas «Mostrar mi diario en mi perfil» (está apagado por defecto), verá también todas las
-                entradas de tu diario, incluidas tus notas y comentarios. Puedes apagarlo o volver a hacer el perfil privado
-                cuando quieras y deja de verse al momento.
+                usuario y una bio corta. Para el perfil, el diario y los cines eliges entre tres niveles:{" "}
+                <strong className="text-foreground">Privado</strong> (por defecto: solo tú),{" "}
+                <strong className="text-foreground">Solo amigos</strong> y <strong className="text-foreground">Público</strong>{" "}
+                (cualquiera con tu enlace, fps24.es/u/tu-usuario). Nunca se ve tu email. El diario y los cines nunca pueden
+                ser más abiertos que el perfil: si lo cierras, se cierran con él. Si muestras tu diario, se ven todas sus
+                entradas, incluidas tus notas y comentarios. Puedes cambiarlo cuando quieras y deja de verse al momento.
               </li>
               <li>
                 Opcionalmente, un <strong className="text-foreground">avatar</strong> (tus iniciales sobre un color, o el
                 póster de una película de nuestro catálogo, que viene de TMDB) y tu{" "}
-                <strong className="text-foreground">usuario de Letterboxd</strong>. Solo se ven en tu perfil público, es
-                decir, si tú lo haces público; con el perfil privado no los ve nadie más que tú.
+                <strong className="text-foreground">usuario de Letterboxd</strong>. El avatar lo ve quien pueda ver tu
+                perfil (con «Solo amigos», también quien no es tu amigo, junto a tu nombre de usuario); el Letterboxd, solo
+                quien puede ver el perfil entero. Con el perfil privado no los ve nadie más que tú.
               </li>
               <li>
                 Tus <strong className="text-foreground">cines favoritos</strong>, si marcas alguno con la ★: son privados
-                por defecto y se usan para enseñarte primero sus sesiones. Solo aparecen en tu perfil público si lo haces
-                público y activas «Mostrar mis cines favoritos en mi perfil público» (está apagado por defecto).
+                por defecto y se usan para enseñarte primero sus sesiones. Solo aparecen en tu perfil si eliges «Solo
+                amigos» o «Público» en «¿Quién ve tus cines favoritos?».
               </li>
               <li>
                 Tus <strong className="text-foreground">sesiones guardadas</strong> («Mis sesiones»), si guardas alguna
                 desde la hora de una sesión: película, cine, día, hora, versión y enlace de compra. Son privadas: solo
-                las ves tú, nunca aparecen en tu perfil público, y se borran con tu cuenta.
+                las ves tú, nunca aparecen en tu perfil (ni para tus amigos), y se borran con tu cuenta.
+              </li>
+              <li>
+                Tus <strong className="text-foreground">amigos</strong>, si añades a alguien: a quién has enviado una
+                solicitud, quién te la ha enviado, a quién has aceptado y a quién has bloqueado, con la fecha. Lo ves solo
+                tú, en la pestaña Amigos de tu perfil, y se borra con tu cuenta.
               </li>
               <li>
                 Si te suscribes a la <strong className="text-foreground">newsletter</strong> «Esta semana en Madrid» (no
@@ -92,14 +99,14 @@ export default function PrivacidadPage() {
           <Seccion titulo="Para qué">
             <p>
               Solo para identificar tu cuenta y guardar tus listas y tu diario. El diario (película, fecha, cine, nota y
-              comentario) se usa para enseñártelo a ti en tu perfil y, solo si tú lo activas y tu perfil es público, a
-              quien abra tu enlace. No vendemos tus datos ni los usamos para publicidad.
+              comentario) se usa para enseñártelo a ti en tu perfil y, solo si tú lo eliges, a tus amigos o a quien abra
+              tu enlace. No vendemos tus datos ni los usamos para publicidad.
             </p>
             <p>
               El administrador de FPS24 tiene un panel con <strong className="text-foreground">cifras agregadas</strong>{" "}
               (cuántas cuentas, perfiles, entradas de diario y cines favoritos hay en total) y la lista de{" "}
-              <strong className="text-foreground">nombres de usuario</strong>, también los de perfiles privados, con si
-              el perfil y el diario son públicos, la fecha de alta y cuántas entradas y favoritos tiene cada uno (solo el
+              <strong className="text-foreground">nombres de usuario</strong>, también los de perfiles privados, con quién
+              puede ver el perfil y si el diario es público, la fecha de alta y cuántas entradas y favoritos tiene cada uno (solo el
               número). Lo usa solo para mantener el servicio (por ejemplo, resolver problemas o retirar un nombre que
               suplante a otra persona). También puede ocultar películas de las destacadas, de Estrenos y de Especiales.
             </p>
@@ -107,6 +114,27 @@ export default function PrivacidadPage() {
               Desde la web, el administrador <strong className="text-foreground">no ve tus entradas del diario, tus notas
               ni tus comentarios</strong>, ni tu email: si haces público tu diario, lo ve como cualquier otra persona con
               tu enlace. Los perfiles públicos no se muestran en buscadores.
+            </p>
+          </Seccion>
+
+          <Seccion titulo="Amigos y bloqueo">
+            <p>
+              Una <strong className="text-foreground">amistad</strong> en FPS24 es mutua: una persona envía la solicitud
+              (escribiendo tu nombre de usuario exacto) y la otra la acepta. Si las dos se la envían, queda aceptada sola.
+              Puedes rechazar una solicitud, cancelar una que hayas enviado o quitar a un amigo cuando quieras; nadie
+              recibe un aviso por ello. Al enviar una solicitud siempre ves el mismo mensaje, exista o no ese usuario.
+            </p>
+            <p>
+              Lo que pongas en <strong className="text-foreground">«Solo amigos»</strong> lo ven únicamente tus amigos
+              aceptados y con la sesión iniciada: nunca va en la página que se sirve sin sesión ni se guarda en cachés
+              compartidas. Si tu perfil es «Solo amigos», quien no sea tu amigo verá solo tu nombre de usuario y tu
+              avatar, con un botón para añadirte. Un perfil «Privado» no lo ven ni tus amigos.
+            </p>
+            <p>
+              Si <strong className="text-foreground">bloqueas</strong> a alguien, deja de ser tu amigo, se borran las
+              solicitudes entre los dos y ya no puede enviarte otras ni ver tu perfil: verá «Este perfil no existe o es
+              privado», como si no existiera, sin saber que le has bloqueado. Puedes desbloquear desde la pestaña Amigos.
+              Ten en cuenta que lo que tengas en «Público» se puede ver sin iniciar sesión.
             </p>
           </Seccion>
 

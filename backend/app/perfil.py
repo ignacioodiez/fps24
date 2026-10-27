@@ -1,7 +1,7 @@
 """Perfil: nombre de usuario único y visibilidad (privado por defecto). Lo edita solo su dueño (user_id del token);
-GET /u/{usuario} es público y solo enseña usuario, bio, avatar, Letterboxd y, si el dueño los activa, su diario y sus
-cines favoritos; con el mismo 404 para un perfil privado y uno inexistente. Nunca devuelve user_id, email ni ids de las
-entradas."""
+GET /u/{usuario} solo enseña usuario, bio, avatar, Letterboxd y, según lo que el dueño elija (privado, solo amigos o
+público), su diario y sus cines favoritos; con el mismo 404 para un perfil privado, uno inexistente y quien está
+bloqueado por el dueño. Nunca devuelve user_id, email ni ids de las entradas."""
 import re
 import time
 import zlib
@@ -9,16 +9,16 @@ from collections import defaultdict, deque
 from datetime import date, datetime
 from typing import Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, select
 
-from app.auth import Usuario, usuario_actual
+from app.auth import Usuario, usuario_actual, usuario_opcional
 from app.database.engine import get_session
-from app.database.models import Cine, CineFavorito, DiarioEntrada, Pelicula, Perfil
+from app.database.models import Amistad, Bloqueo, Cine, CineFavorito, DiarioEntrada, Pelicula, Perfil
 from app.diario import CineDiario, PeliculaDiario, _uid, cifras
 
 router = APIRouter()
@@ -47,7 +47,10 @@ LETTERBOXD_URL = re.compile(r"(?:https?://)?(?:www\.)?letterboxd\.com/([^/?#]*)"
 LETTERBOXD_NO_USUARIO = frozenset("film films list lists members search journal tag director actor settings activity".split())
 ERROR_LETTERBOXD = "Escribe tu usuario de Letterboxd (de 2 a 20 letras, números o _) o pega el enlace a tu perfil"
 
-PERFIL_INEXISTENTE =HTTPException(status_code=404, detail="Este perfil no existe o es privado")
+NIVELES = ("privado", "amigos", "publico")  # de más cerrado a más abierto
+Nivel = Literal["privado", "amigos", "publico"]
+SIN_CACHE = {"Cache-Control": "private, no-store"}  # /u depende de quién mira: nunca en una caché compartida
+PERFIL_INEXISTENTE = HTTPException(status_code=404, detail="Este perfil no existe o es privado", headers=SIN_CACHE)
 
 
 def validar_usuario(texto: str) -> tuple:
@@ -88,13 +91,13 @@ def color_avatar(perfil: Perfil) -> str:
 class PerfilGuardar(SQLModel):
     usuario: str
     bio: Optional[str] = None
-    visibilidad: Literal["privado", "publico"] = "privado"
-    diario_publico: bool = False
+    visibilidad: Nivel = "privado"
+    diario_visibilidad: Nivel = "privado"
     avatar_tipo: Literal["iniciales", "pelicula"] = "iniciales"
     avatar_color: Optional[str] = None  # None: el que sale del nombre
     avatar_pelicula_id: Optional[int] = None
     letterboxd_usuario: Optional[str] = None
-    cines_publicos: bool = False
+    cines_visibilidad: Nivel = "privado"
 
 
 class Avatar(SQLModel):
@@ -109,12 +112,12 @@ class PerfilSalida(SQLModel):
     usuario: Optional[str] = None  # None: aún no lo ha creado
     bio: Optional[str] = None
     visibilidad: str = "privado"
-    diario_publico: bool = False
+    diario_visibilidad: str = "privado"
     avatar_tipo: str = "iniciales"
     avatar_color: Optional[str] = None
     avatar_pelicula_id: Optional[int] = None
     letterboxd_usuario: Optional[str] = None
-    cines_publicos: bool = False
+    cines_visibilidad: str = "privado"
     avatar: Optional[Avatar] = None  # None: aún no hay usuario
     paleta_avatar: Dict[str, str] = PALETA_AVATAR
     creado_en: Optional[datetime] = None
@@ -150,10 +153,14 @@ class PerfilPublico(SQLModel):
     bio: Optional[str] = None
     avatar: Avatar
     letterboxd_usuario: Optional[str] = None
-    diario_publico: bool = False
-    cifras: Optional[Cifras] = None  # como el diario: solo si el perfil es público y diario_publico
-    diario: Optional[DiarioPublico] = None  # solo si el perfil es público y diario_publico
-    cines: Optional[List[CinePublico]] = None  # sus cines favoritos, solo si el perfil es público y cines_publicos
+    diario_publico: bool = False  # quien mira puede ver el diario
+    cifras: Optional[Cifras] = None  # como el diario: solo si quien mira puede verlo
+    diario: Optional[DiarioPublico] = None
+    cines: Optional[List[CinePublico]] = None  # sus cines favoritos, si quien mira puede verlos
+    # Perfil "amigos" visto por quien no es su amigo: solo usuario y avatar (lo demás va vacío)
+    restringido: bool = False
+    # Con sesión: ninguna | enviada | recibida | amigos | bloqueado (lo he bloqueado yo) | yo. Sin sesión, None.
+    relacion: Optional[str] = None
 
 
 class Disponible(SQLModel):
@@ -188,6 +195,11 @@ def _avatar(session: Session, perfil: Perfil) -> Avatar:
     return Avatar(tipo="iniciales", color=color, fondo=PALETA_AVATAR[color])
 
 
+def abierto(nivel: str, tope: str) -> str:
+    """El nivel, sin pasar del tope (el del perfil)."""
+    return min(nivel, tope, key=NIVELES.index)
+
+
 def _salida(session: Session, perfil: Optional[Perfil]) -> PerfilSalida:
     if perfil is None:
         return PerfilSalida()
@@ -219,9 +231,11 @@ def guardar_mi_perfil(datos: PerfilGuardar, usuario: Usuario = Depends(usuario_a
         if pelicula is None or not pelicula.poster_url:
             raise HTTPException(status_code=422, detail="Elige una película de nuestro catálogo que tenga póster")
         pelicula_id = pelicula.id
-    valores = dict(usuario=nombre, bio=bio, visibilidad=datos.visibilidad, diario_publico=datos.diario_publico,
+    # Una sección más abierta que el perfil baja a su nivel (como al bajar el perfil en el editor), nunca al revés
+    valores = dict(usuario=nombre, bio=bio, visibilidad=datos.visibilidad,
+                   diario_visibilidad=abierto(datos.diario_visibilidad, datos.visibilidad),
                    avatar_tipo=datos.avatar_tipo, avatar_color=datos.avatar_color, avatar_pelicula_id=pelicula_id,
-                   letterboxd_usuario=letterboxd, cines_publicos=datos.cines_publicos)
+                   letterboxd_usuario=letterboxd, cines_visibilidad=abierto(datos.cines_visibilidad, datos.visibilidad))
     # Un solo INSERT ... ON CONFLICT: sin SELECT previo, dos peticiones a la vez no pueden duplicar el perfil ni
     # el nombre (lo garantizan la clave primaria y uq_perfil_usuario)
     consulta = (insert(Perfil).values(user_id=_uid(usuario), **valores)
@@ -250,20 +264,48 @@ def usuario_disponible(u: str = Query(""), usuario: Usuario = Depends(usuario_ac
     return Disponible(disponible=True)
 
 
-# Público. Mismo 404 (y mismo cuerpo) si no existe, es privado o el nombre ni siquiera es válido.
+def relacion(session: Session, yo, otro) -> str:
+    """De yo hacia otro: ninguna | enviada | recibida | amigos | bloqueado (yo lo he bloqueado)."""
+    if session.get(Bloqueo, (yo, otro)):
+        return "bloqueado"
+    amistad = session.exec(select(Amistad).where(or_(
+        and_(Amistad.solicitante_id == yo, Amistad.destinatario_id == otro),
+        and_(Amistad.solicitante_id == otro, Amistad.destinatario_id == yo)))).first()
+    if amistad is None:
+        return "ninguna"
+    if amistad.estado == "aceptada":
+        return "amigos"
+    return "enviada" if amistad.solicitante_id == yo else "recibida"
+
+
+# Mismo 404 (y mismo cuerpo) si no existe, es privado, quien mira está bloqueado por el dueño o el nombre ni siquiera
+# es válido. Sesión opcional: lo "amigos" solo sale con el token de un amigo, y la respuesta nunca va a una caché.
 @router.get("/u/{usuario}", response_model=PerfilPublico)
-def leer_perfil_publico(usuario: str, pagina: int = Query(1, ge=1, le=10_000), session: Session = Depends(get_session)):
+def leer_perfil_publico(usuario: str, response: Response, pagina: int = Query(1, ge=1, le=10_000),
+                        visitante: Optional[Usuario] = Depends(usuario_opcional), session: Session = Depends(get_session)):
+    response.headers.update(SIN_CACHE)
     perfil = _por_nombre(session, usuario) if len(usuario) <= USUARIO_MAX else None
-    if perfil is None or perfil.visibilidad != "publico":
+    if perfil is None:
         raise PERFIL_INEXISTENTE
+    yo = _uid(visitante) if visitante else None
+    dueno = yo == perfil.user_id
+    if yo and not dueno and session.get(Bloqueo, (perfil.user_id, yo)):
+        raise PERFIL_INEXISTENTE
+    rel = "yo" if dueno else relacion(session, yo, perfil.user_id) if yo else None
+    ve = lambda nivel: dueno or nivel == "publico" or (nivel == "amigos" and rel == "amigos")
+    if not ve(perfil.visibilidad):
+        if perfil.visibilidad == "privado":
+            raise PERFIL_INEXISTENTE
+        return PerfilPublico(usuario=perfil.usuario, avatar=_avatar(session, perfil), restringido=True, relacion=rel)
     salida = PerfilPublico(usuario=perfil.usuario, bio=perfil.bio, avatar=_avatar(session, perfil),
-                           letterboxd_usuario=perfil.letterboxd_usuario, diario_publico=perfil.diario_publico)
-    if perfil.cines_publicos:  # y es público, como el diario
+                           letterboxd_usuario=perfil.letterboxd_usuario, diario_publico=ve(perfil.diario_visibilidad),
+                           relacion=rel)
+    if ve(perfil.cines_visibilidad):
         salida.cines = [CinePublico(slug=slug, nombre=nombre, zona=zona) for slug, nombre, zona in session.exec(
             select(Cine.slug, Cine.nombre, Cine.zona).join(CineFavorito, CineFavorito.cine_id == Cine.id)
             .where(CineFavorito.user_id == perfil.user_id).order_by(CineFavorito.creado_en, Cine.slug)
         ).all()]
-    if perfil.diario_publico:  # y es público: un perfil privado nunca llega aquí
+    if salida.diario_publico:
         suyas = DiarioEntrada.user_id == perfil.user_id
         total, este_anio = cifras(session, perfil.user_id)
         salida.cifras = Cifras(entradas=total, este_anio=este_anio)

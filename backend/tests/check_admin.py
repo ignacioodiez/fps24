@@ -92,7 +92,7 @@ logging.getLogger("uvicorn.error").setLevel(logging.INFO)  # como lo deja uvicor
 lunes = d.semana(ahora_madrid())[0] + timedelta(weeks=1)
 ahora_lunes = datetime.combine(lunes, time(0, 1))
 with Session(engine) as session:
-    cine = Cine(slug=f"chk-adm-{sufijo}", nombre=f"Cine admin {sufijo}", tipo=d.TIPO_CINE_ESPECIAL)
+    cine = Cine(slug=f"chk-adm-{sufijo}", nombre=f"Cine admin {sufijo}", tipo="autor")
     session.add(cine)
     estreno = Pelicula(titulo=f"Chkadmin {sufijo} estreno", tmdb_id=-int(uuid.uuid4().int % 10**9) - 1, generos="Drama",
                        nota_tmdb=9.99, votos=10**7, fecha_estreno=lunes + timedelta(days=2))
@@ -105,7 +105,7 @@ with Session(engine) as session:
         Pase(pelicula_id=especial.id, cine_id=cine.id, fecha_hora=datetime.combine(lunes + timedelta(days=3), time(20)),
              es_evento_especial=True),
         Perfil(user_id=NORMAL, usuario=f"chk_adm_{sufijo}_n", visibilidad="privado"),
-        Perfil(user_id=PUBLICO, usuario=f"chk_adm_{sufijo}_p", visibilidad="publico", diario_publico=True),
+        Perfil(user_id=PUBLICO, usuario=f"chk_adm_{sufijo}_p", visibilidad="publico", diario_visibilidad="publico"),
         DiarioEntrada(user_id=PUBLICO, pelicula_id=estreno.id, fecha_vista=date.today(), nota=8, comentario=SECRETO),
         CineFavorito(user_id=PUBLICO, cine_id=cine.id),
     ])
@@ -178,7 +178,7 @@ try:
         assert resumen["entradas_diario"] == session.exec(text("SELECT count(*) FROM diario_entrada")).scalar()
         assert resumen["favoritos"] == session.exec(text("SELECT count(*) FROM cine_favorito")).scalar()
         assert resumen["diarios_publicos"] == session.exec(text(
-            "SELECT count(*) FROM perfil WHERE visibilidad = 'publico' AND diario_publico")).scalar()
+            "SELECT count(*) FROM perfil WHERE visibilidad = 'publico' AND diario_visibilidad = 'publico'")).scalar()
     assert resumen["perfiles_publicos"] >= 1 and resumen["diarios_publicos"] >= 1
     if resumen["fuente_usuarios"] == "perfil":
         assert resumen["usuarios_totales"] == perfiles and resumen["altas_7_dias"] >= 2

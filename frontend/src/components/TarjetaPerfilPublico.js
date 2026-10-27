@@ -10,22 +10,34 @@ import { BIO_MAX, comprobarUsuario, guardarPerfil, leerPerfil } from "@/lib/perf
 
 const ESPERA_MS = 400; // debounce de la comprobación de disponibilidad
 
-// Interruptor (role="switch") con su título y su explicación
-function Interruptor({ id, activo, onCambiar, disabled = false, titulo, children }) {
+const NIVELES = [["privado", "Privado"], ["amigos", "Solo amigos"], ["publico", "Público"]]; // de más cerrado a más abierto
+const orden = (nivel) => NIVELES.findIndex(([n]) => n === nivel);
+// Una sección nunca más abierta que el perfil (la misma regla que el backend)
+const sinPasar = (nivel, tope) => (orden(nivel) > orden(tope) ? tope : nivel);
+
+// Privado / Solo amigos / Público: radios nativos (teclado y lector de pantalla) con aspecto de botones.
+// tope: las opciones más abiertas se deshabilitan. explicaciones: una línea por nivel, se ve la del elegido.
+function SelectorNivel({ id, titulo, valor, onCambiar, tope = "publico", explicaciones }) {
+  const limitado = orden(tope) < NIVELES.length - 1;
   return (
-    <div className="flex items-start gap-3">
-      <button
-        type="button" role="switch" aria-checked={activo} onClick={onCambiar} disabled={disabled}
-        aria-labelledby={`${id}-titulo`} aria-describedby={`${id}-explicacion`}
-        className={`relative mt-0.5 h-6 w-11 shrink-0 border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed ${activo ? "bg-primary border-primary" : "bg-background border-line"}`}
-      >
-        <span aria-hidden="true" className={`absolute top-0.5 h-4 w-4 transition-all ${activo ? "left-6 bg-white" : "left-0.5 bg-muted"}`} />
-      </button>
-      <div>
-        <p id={`${id}-titulo`} className={`text-sm font-bold ${disabled ? "text-muted" : "text-foreground"}`}>{titulo}</p>
-        <div id={`${id}-explicacion`} className="text-sm text-muted">{children}</div>
+    <fieldset aria-describedby={`${id}-explicacion`} className="border border-line bg-background p-3">
+      <legend className="px-1 text-sm font-bold text-foreground">{titulo}</legend>
+      <div className="flex flex-wrap gap-2">
+        {NIVELES.map(([nivel, etiqueta], i) => (
+          <label key={nivel} className={i > orden(tope) ? "cursor-not-allowed" : "cursor-pointer"}>
+            <input type="radio" name={id} value={nivel} checked={valor === nivel} disabled={i > orden(tope)}
+                   onChange={() => onCambiar(nivel)} className="peer sr-only" />
+            <span className="flex items-center min-h-11 px-3 border border-line text-sm font-bold text-foreground peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white peer-disabled:opacity-40 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary">
+              {etiqueta}
+            </span>
+          </label>
+        ))}
       </div>
-    </div>
+      <p id={`${id}-explicacion`} className="mt-2 text-sm text-muted">
+        {explicaciones[valor]}
+        {limitado && <span className="block mt-1 font-semibold text-foreground">No puede ser más abierto que tu perfil.</span>}
+      </p>
+    </fieldset>
   );
 }
 
@@ -43,16 +55,16 @@ function Muestra({ nombre, valor, elegido, onElegir, etiqueta, children, style }
   );
 }
 
-// Nombre de usuario, bio, avatar, Letterboxd, visibilidad (privado por defecto) y diario y cines en el perfil (apagados).
+// Nombre de usuario, bio, avatar, Letterboxd y quién ve el perfil, el diario y los cines (todo privado por defecto).
 // Se guarda todo junto con "Guardar perfil".
 export default function TarjetaPerfilPublico() {
   const { setMiPerfil } = useAuth();
   const [guardado, setGuardado] = useState(null); // el de GET /me/perfil; null mientras carga
   const [usuario, setUsuario] = useState("");
   const [bio, setBio] = useState("");
-  const [publico, setPublico] = useState(false);
-  const [diario, setDiario] = useState(false);
-  const [cines, setCines] = useState(false);
+  const [visibilidad, setVisibilidad] = useState("privado");
+  const [diarioElegido, setDiario] = useState("privado");
+  const [cinesElegido, setCines] = useState("privado");
   const [avatarTipo, setAvatarTipo] = useState("iniciales");
   const [avatarColor, setAvatarColor] = useState(null); // null: el que sale del nombre
   const [peliAvatar, setPeliAvatar] = useState(null); // { id, poster_url, titulo? }
@@ -70,9 +82,9 @@ export default function TarjetaPerfilPublico() {
     setGuardado(p);
     setUsuario(p.usuario ?? "");
     setBio(p.bio ?? "");
-    setPublico(p.visibilidad === "publico");
-    setDiario(p.diario_publico);
-    setCines(p.cines_publicos);
+    setVisibilidad(p.visibilidad ?? "privado");
+    setDiario(p.diario_visibilidad ?? "privado");
+    setCines(p.cines_visibilidad ?? "privado");
     setAvatarTipo(p.avatar_tipo ?? "iniciales");
     setAvatarColor(p.avatar_color ?? null);
     setPeliAvatar(p.avatar?.tipo === "pelicula" ? { id: p.avatar_pelicula_id, poster_url: p.avatar.poster_url } : null);
@@ -119,9 +131,10 @@ export default function TarjetaPerfilPublico() {
     setError("");
     setAviso("");
     try {
-      // Con el perfil privado se guardan apagados: al volver a hacerlo público, el diario y los cines no reaparecen sin pedirlo
+      // Se guardan bajadas al nivel del perfil: al volver a abrirlo, el diario y los cines no se abren sin pedirlo
       const p = await guardarPerfil({
-        usuario, bio, visibilidad: publico ? "publico" : "privado", diario_publico: publico && diario, cines_publicos: publico && cines,
+        usuario, bio, visibilidad,
+        diario_visibilidad: sinPasar(diarioElegido, visibilidad), cines_visibilidad: sinPasar(cinesElegido, visibilidad),
         avatar_tipo: avatarTipo, avatar_color: avatarColor, avatar_pelicula_id: avatarTipo === "pelicula" ? peliAvatar?.id ?? null : null,
         letterboxd_usuario: letterboxd,
       });
@@ -148,6 +161,8 @@ export default function TarjetaPerfilPublico() {
     return <div aria-busy="true" aria-label="Cargando tu perfil público" className="h-48 mb-6 bg-surface animate-pulse" />;
   }
 
+  const diario = sinPasar(diarioElegido, visibilidad);
+  const cines = sinPasar(cinesElegido, visibilidad);
   const paleta = guardado.paleta_avatar ?? {};
   const vistaPrevia = avatarTipo === "pelicula" && peliAvatar
     ? { tipo: "pelicula", poster_url: peliAvatar.poster_url }
@@ -246,39 +261,30 @@ export default function TarjetaPerfilPublico() {
           </p>
         </div>
 
-        <Interruptor id={`${id}-visibilidad`} activo={publico} onCambiar={() => setPublico((v) => !v)} titulo={`Perfil ${publico ? "público" : "privado"}`}>
-          Privado: solo tú lo ves. Público: cualquiera con tu enlace puede ver tu nombre de usuario, tu avatar, tu bio y tu Letterboxd.
-        </Interruptor>
+        <SelectorNivel id={`${id}-visibilidad`} titulo="¿Quién ve tu perfil?" valor={visibilidad} onCambiar={setVisibilidad} explicaciones={{
+          privado: "Solo tú. Los demás, también tus amigos, verán «Este perfil no existe o es privado».",
+          amigos: "Tus amigos ven tu nombre de usuario, tu avatar, tu bio y tu Letterboxd; los demás, solo tu nombre y tu avatar, para poder añadirte.",
+          publico: "Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd.",
+        }} />
 
-        <div className="border border-line bg-background p-3">
-          <Interruptor
-            id={`${id}-diario`} activo={publico && diario} onCambiar={() => setDiario((v) => !v)} disabled={!publico}
-            titulo="Mostrar mi diario en mi perfil"
-          >
-            <p>
-              Si lo activas, cualquiera con tu enlace podrá ver todas tus entradas, incluidas tus notas. Solo se muestra
-              si tu perfil también es público.
-            </p>
-            {!publico && <p className="mt-1 font-semibold text-foreground">Tu perfil es privado: hazlo público para poder activarlo.</p>}
-          </Interruptor>
-        </div>
+        <SelectorNivel id={`${id}-diario`} titulo="¿Quién ve tu diario?" valor={diario} onCambiar={setDiario} tope={visibilidad} explicaciones={{
+          privado: "Solo tú.",
+          amigos: "Tus amigos ven todas tus entradas, incluidas tus notas.",
+          publico: "Cualquiera con tu enlace ve todas tus entradas, incluidas tus notas.",
+        }} />
 
-        <div className="border border-line bg-background p-3">
-          <Interruptor
-            id={`${id}-cines`} activo={publico && cines} onCambiar={() => setCines((v) => !v)} disabled={!publico}
-            titulo="Mostrar mis cines favoritos en mi perfil público"
-          >
-            <p>Si lo activas, cualquiera con tu enlace verá la lista de los cines que has marcado con la ★.</p>
-            {!publico && <p className="mt-1 font-semibold text-foreground">Tu perfil es privado: hazlo público para poder activarlo.</p>}
-          </Interruptor>
-        </div>
+        <SelectorNivel id={`${id}-cines`} titulo="¿Quién ve tus cines favoritos?" valor={cines} onCambiar={setCines} tope={visibilidad} explicaciones={{
+          privado: "Solo tú.",
+          amigos: "Tus amigos ven la lista de los cines que has marcado con la ★.",
+          publico: "Cualquiera con tu enlace ve la lista de los cines que has marcado con la ★.",
+        }} />
 
         {guardado.usuario && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted">Tu enlace:</span>
             <a href={`/u/${guardado.usuario}`} className="font-bold text-primary hover:underline break-all">fps24.es/u/{guardado.usuario}</a>
             <button type="button" onClick={copiar} className={BOTON_SECUNDARIO}>Copiar enlace</button>
-            {guardado.visibilidad !== "publico" && (
+            {guardado.visibilidad === "privado" && (
               <p className="w-full text-xs text-muted">Mientras sea privado, quien abra el enlace verá «Este perfil no existe o es privado».</p>
             )}
           </div>

@@ -11,6 +11,8 @@ import {
 } from "@/components/PerfilVistas";
 import TarjetaPerfilPublico from "@/components/TarjetaPerfilPublico";
 import MisSesiones from "@/components/MisSesiones";
+import MisAmigos from "@/components/MisAmigos";
+import { listarAmigos } from "@/lib/amigos";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
 import { listarSesiones } from "@/lib/sesiones";
@@ -248,7 +250,7 @@ export function Esqueleto() {
 function MisCines() {
   const { favoritos, cargados, alternar } = useFavoritos();
   const { miPerfil } = useAuth();
-  const visibles = miPerfil?.visibilidad === "publico" && miPerfil?.cines_publicos;
+  const quien = { publico: "También se ven en tu perfil público.", amigos: "También los ven tus amigos en tu perfil." }[miPerfil?.cines_visibilidad] ?? "Solo tú ves esta lista.";
   const [cines, setCines] = useState(null);
   const id = useId();
 
@@ -273,7 +275,7 @@ function MisCines() {
         </p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. {visibles ? "También se ven en tu perfil público." : "Solo tú ves esta lista."}</p>
+          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. {quien}</p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {[...favoritos].map((slug) => (
               <li key={slug} className="flex items-center border border-line bg-surface">
@@ -300,9 +302,11 @@ function MiPerfil({ perfil, pestana }) {
   const [todos, setTodos] = useState(null); // GET /cines, para nombre y zona de mis favoritos
   const [diario, setDiario] = useState(null); // GET /diario: { total, este_anio, entradas } o { error }
   const [proximas, setProximas] = useState(0); // sesiones guardadas próximas, para el enlace de la pestaña Perfil
+  const [recibidas, setRecibidas] = useState(0); // solicitudes de amistad pendientes: contador y enlace
 
   useEffect(() => {
     todosLosCines().then(setTodos).catch(() => setTodos([]));
+    listarAmigos().then((a) => setRecibidas(a.recibidas.length)).catch(() => setRecibidas(0)); // sin contador si falla
   }, []);
 
   // Las últimas entradas para la pestaña Perfil; se recargan al añadir una desde el "+" de la barra
@@ -319,15 +323,21 @@ function MiPerfil({ perfil, pestana }) {
     listarSesiones().then((a) => setProximas(a.proximas.length)).catch(() => setProximas(0)); // sin enlace si falla
   }, [pestana]);
 
-  const publico = perfil.visibilidad === "publico";
-  const diarioSoloTu = !(publico && perfil.diario_publico);
-  const cinesSoloTu = !(publico && perfil.cines_publicos);
+  const { visibilidad, diario_visibilidad: nivelDiario, cines_visibilidad: nivelCines } = perfil;
+  const publico = visibilidad === "publico";
+  // Para SoloTu: el nivel si no lo ve todo el mundo; si no, nada
+  const diarioSoloTu = nivelDiario !== "publico" && nivelDiario;
+  const cinesSoloTu = nivelCines !== "publico" && nivelCines;
   const cines = cargados && todos ? [...favoritos].map((slug) => todos.find((c) => c.slug === slug) ?? { slug, nombre: slug }) : null;
-  const quienVe = !publico
-    ? "Quien abra tu enlace verá «Este perfil no existe o es privado». Hazlo público en «Editar mi perfil» para compartirlo."
-    : `Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd. ${
-      perfil.diario_publico ? "También tu diario, con tus notas." : "Tu diario no se muestra."} ${
-      perfil.cines_publicos ? "También tus cines favoritos." : "Tus cines favoritos no se muestran."}`;
+  const seccion = (nivel, que) => ({ publico: `${que}: todo el mundo.`, amigos: `${que}: solo tus amigos.` })[nivel] ?? `${que}: solo tú.`;
+  const quienVe = {
+    privado: "Quien abra tu enlace verá «Este perfil no existe o es privado», también tus amigos. Cámbialo en «Editar mi perfil» para compartirlo.",
+    amigos: `Tus amigos ven tu nombre de usuario, tu avatar, tu bio y tu Letterboxd; los demás, solo tu nombre y tu avatar, con el botón de añadirte. ${
+      seccion(nivelDiario, "Tu diario")} ${seccion(nivelCines, "Tus cines")}`,
+    publico: `Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd. ${
+      seccion(nivelDiario, "Tu diario, con tus notas")} ${seccion(nivelCines, "Tus cines favoritos")}`,
+  }[visibilidad];
+  const titulo = { privado: "Tu perfil es privado: solo tú lo ves", amigos: "Tu perfil es solo para amigos", publico: "Tu perfil es público" }[visibilidad];
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
@@ -337,11 +347,20 @@ function MiPerfil({ perfil, pestana }) {
       />
       {(!publico || pestana === "perfil") && (
         <div role={publico ? undefined : "note"} className={`mt-6 border p-4 ${publico ? "border-line bg-surface" : "border-primary bg-primary-soft"}`}>
-          <p className="font-bold text-foreground">{publico ? "Tu perfil es público" : "Tu perfil es privado: solo tú lo ves"}</p>
+          <p className="font-bold text-foreground">{titulo}</p>
           <p className="text-sm text-muted">{quienVe}</p>
         </div>
       )}
-      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines", "sesiones"]} />
+      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines", "sesiones", "amigos"]}
+                      contadores={{ amigos: recibidas }} />
+
+      {pestana === "perfil" && recibidas > 0 && (
+        <p className="mt-4 text-sm">
+          <Link href={`/u/${perfil.usuario}/amigos`} className="font-bold text-primary hover:underline">
+            {recibidas === 1 ? "1 solicitud de amistad pendiente" : `${recibidas} solicitudes de amistad pendientes`} →
+          </Link>
+        </p>
+      )}
 
       {pestana === "perfil" && proximas > 0 && (
         <p className="mt-4 text-sm">
@@ -359,7 +378,7 @@ function MiPerfil({ perfil, pestana }) {
       {pestana === "diario" && (
         <section aria-labelledby="mi-diario" className="mt-8">
           <h3 id="mi-diario" className={TITULO_SECCION}>Mi diario</h3>
-          {diarioSoloTu && <SoloTu que="tu diario" />}
+          {diarioSoloTu && <SoloTu que="tu diario" nivel={diarioSoloTu} />}
           <MiDiario />
         </section>
       )}
@@ -369,7 +388,7 @@ function MiPerfil({ perfil, pestana }) {
             <h3 id="mis-cines" className={TITULO_SECCION}>Mis cines</h3>
             <Link href="/cines" className="text-sm font-bold text-primary hover:underline">Añadir más cines →</Link>
           </div>
-          {cinesSoloTu && <SoloTu que="tus cines" />}
+          {cinesSoloTu && <SoloTu que="tus cines" nivel={cinesSoloTu} />}
           {!cines ? <div aria-busy="true" aria-label="Cargando tus cines" className="mt-6 h-20 bg-surface animate-pulse" />
             : cines.length ? <TarjetasCines cines={cines} onQuitar={(c) => alternar(c.slug, c.nombre)} />
               : <Ayuda>Aún no tienes cines favoritos. Pulsa la ★ en un cine de <Link href="/cines" className="font-bold text-primary hover:underline">Cines</Link> y sus sesiones saldrán primero en toda la web.</Ayuda>}
@@ -382,12 +401,19 @@ function MiPerfil({ perfil, pestana }) {
           <MisSesiones usuario={perfil.usuario} />
         </section>
       )}
+      {pestana === "amigos" && (
+        <section aria-labelledby="mis-amigos" className="mt-8">
+          <h3 id="mis-amigos" className={TITULO_SECCION}>Amigos</h3>
+          <p className="mt-1 text-xs text-muted">Solo tú ves esta pestaña. Tus amigos ven lo que tengas en «Solo amigos».</p>
+          <MisAmigos onRecibidas={setRecibidas} />
+        </section>
+      )}
     </div>
   );
 }
 
 const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
-const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones" })[ruta.split("/")[3]] ?? "perfil";
+const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones", amigos: "amigos" })[ruta.split("/")[3]] ?? "perfil";
 
 // En /u/[usuario]: si el visitante es el dueño, su vista; si no, children (la pública o el "no existe o es privado").
 // esperar: mientras no se sabe, esqueleto en vez de children (en el 404, para no enseñarle al dueño "no existe").

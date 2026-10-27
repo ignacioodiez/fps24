@@ -101,7 +101,7 @@ def resumen(_: Usuario = Depends(admin_actual), session: Session = Depends(get_s
         usuarios_totales=totales, altas_7_dias=altas_7, altas_30_dias=altas_30, fuente_usuarios=fuente,
         perfiles_con_usuario=_contar(session, select(func.count()).select_from(Perfil)),
         perfiles_publicos=_contar(session, select(func.count()).where(publico)),
-        diarios_publicos=_contar(session, select(func.count()).where(publico, Perfil.diario_publico)),
+        diarios_publicos=_contar(session, select(func.count()).where(publico, Perfil.diario_visibilidad == "publico")),
         entradas_diario=_contar(session, select(func.count()).select_from(DiarioEntrada)),
         favoritos=_contar(session, select(func.count()).select_from(CineFavorito)),
         peliculas_ocultas=_contar(session, select(func.count()).select_from(PeliculaOculta)),
@@ -135,7 +135,7 @@ def usuarios(pagina: int = Query(1, ge=1), _: Usuario = Depends(admin_actual), s
     favoritos = (select(func.count()).where(CineFavorito.user_id == Perfil.user_id)
                  .correlate(Perfil).scalar_subquery())
     filas = session.exec(
-        select(Perfil.usuario, Perfil.visibilidad, Perfil.diario_publico, Perfil.creado_en, entradas, favoritos)
+        select(Perfil.usuario, Perfil.visibilidad, Perfil.diario_visibilidad == "publico", Perfil.creado_en, entradas, favoritos)
         .order_by(Perfil.creado_en.desc(), Perfil.usuario)
         .offset((pagina - 1) * POR_PAGINA).limit(POR_PAGINA)
     ).all()

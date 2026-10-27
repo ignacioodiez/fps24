@@ -121,7 +121,7 @@ try:
     # --- Ventana: el día de envío y los 6 siguientes, por nota, sin ocultas; las páginas siguen en semana natural ---
     dia = lambda n: date(2031, 1, 6) + timedelta(days=n)  # dia(0) = lunes 6/1/2031
     with Session(engine) as session:
-        cine = Cine(slug=f"chk-nl-{sufijo}", nombre=f"Cine newsletter {sufijo}", tipo=d.TIPO_CINE_ESPECIAL)
+        cine = Cine(slug=f"chk-nl-{sufijo}", nombre=f"Cine newsletter {sufijo}", tipo="autor")
         session.add(cine)
         session.flush()
         cine_ventana = cine.id

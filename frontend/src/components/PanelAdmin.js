@@ -84,7 +84,7 @@ function Usuarios() {
                 {datos.usuarios.map((u) => (
                   <tr key={u.usuario} className="border-t border-line">
                     <th scope="row" className="px-3 py-2 text-left font-bold text-foreground break-all">@{u.usuario}</th>
-                    <td className="px-3 py-2">{u.visibilidad === "publico" ? "Público" : "Privado"}</td>
+                    <td className="px-3 py-2">{{ publico: "Público", amigos: "Solo amigos" }[u.visibilidad] ?? "Privado"}</td>
                     <td className="px-3 py-2">{u.diario_publico ? "Visible" : "Oculto"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{fecha(u.alta)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{u.entradas}</td>
