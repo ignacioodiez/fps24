@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MarcaFavorito } from "@/components/BotonFavorito";
+import { EnlaceCine } from "@/components/Sesiones";
 
 const VOTOS_MIN = 10;
 
@@ -63,7 +64,7 @@ export default function TarjetaEstreno({ estreno, className = "" }) {
           <p className="text-xs text-muted">
             {cines} {cines === 1 ? "cine" : "cines"} · {sugerida === primera_sesion
               ? <>Primera: {sesionCorta(primera_sesion.fecha_hora)}</>
-              : <><MarcaFavorito slug={sugerida.cine_slug} /> {sugerida.cine}, {sesionCorta(sugerida.fecha_hora)}</>}
+              : <><EnlaceCine slug={sugerida.cine_slug} className="relative z-[2] hover:text-primary hover:underline focus-visible:outline-primary"><MarcaFavorito slug={sugerida.cine_slug} /> {sugerida.cine}</EnlaceCine>, {sesionCorta(sugerida.fecha_hora)}</>}
           </p>
         </div>
       {/* Capa sobre toda la celda: abre la vista rápida sin mover el scroll. El título (página completa) va encima */}

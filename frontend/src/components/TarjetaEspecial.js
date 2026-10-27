@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MarcaFavorito } from "@/components/BotonFavorito";
+import { EnlaceCine } from "@/components/Sesiones";
 
 // "SÁB 24 · 22:00"
 const fechaDestacada = (fechaHora) => {
@@ -59,7 +60,7 @@ export default function TarjetaEspecial({ especial, grande = false, amplia = fal
           </h4>
           {amplia && pelicula.sinopsis && <p className="mt-1 text-sm text-white/80 line-clamp-2">{pelicula.sinopsis}</p>}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/90">
-            <span className="truncate min-w-0"><MarcaFavorito slug={pase.cine_slug} /> {pase.cine}</span>
+            <EnlaceCine slug={pase.cine_slug} className="truncate min-w-0 relative z-[2] hover:underline focus-visible:outline-white"><MarcaFavorito slug={pase.cine_slug} /> {pase.cine}</EnlaceCine>
             {idioma && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20">{idioma}</span>}
             {nota != null && <span className="font-semibold">★ {nota.toFixed(1)}</span>}
             {precio && <span>{precio}</span>}
@@ -91,7 +92,7 @@ export default function TarjetaEspecial({ especial, grande = false, amplia = fal
         </h4>
         {/* En móvil el cine va en su propia línea para que no se corte */}
         <p className="flex flex-wrap md:flex-nowrap items-center gap-x-1 text-[11px] text-muted min-w-0">
-          <span className="truncate basis-full md:basis-auto" title={pase.cine}><MarcaFavorito slug={pase.cine_slug} /> {pase.cine}</span>
+          <EnlaceCine slug={pase.cine_slug} title={pase.cine} className="truncate basis-full md:basis-auto relative z-[2] hover:text-primary hover:underline focus-visible:outline-primary"><MarcaFavorito slug={pase.cine_slug} /> {pase.cine}</EnlaceCine>
           {nota != null && <span className="shrink-0 font-semibold text-foreground">★ {nota.toFixed(1)}</span>}
           {idioma && <span className="shrink-0">· {idioma}</span>}
         </p>
