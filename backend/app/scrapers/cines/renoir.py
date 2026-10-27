@@ -1,5 +1,6 @@
 """Lee: https://www.cinesrenoir.com/cine/<sede>/cartelera/?fecha=AAAA-MM-DD, una página por sede (Princesa, Plaza de España, Retiro) y día.
-Extrae: la vista de escritorio .my-account-content.d-none.d-lg-block, una > .row por película con título en .col-4 a, versión en .col-4 small y un .col-7 .text-center por pase (span "sala 01" y a.btn-primary "HH:MM" con enlace de compra).
+Extrae: la vista de escritorio .my-account-content.d-none.d-lg-block, una > .row por película con título en .col-4 a, versión en .col-4 small y un .col-7 .text-center por pase (span "sala 01" y a.btn "HH:MM" con enlace de compra: btn-primary normal, btn-evento especial; "+info" va sin clase).
+Ciclos: la etiqueta final entre corchetes ("[WILDER CINEMA]") se quita del título y marca el pase como especial.
 Se rompe si: cambian las clases, el parámetro ?fecha= o los slugs de las sedes; si falla una sede se siguen las demás y al final se lanza la excepción."""
 import re
 from datetime import datetime, timedelta
@@ -21,6 +22,8 @@ SLUGS = {
 }
 PRECIO = "Consultar"
 DIAS_A_ESCANEAR = 7
+BOTON = "a.btn"  # btn-primary (normal) y btn-evento (pase especial); "+info" no tiene clase
+_CICLO = re.compile(r"^(.+?)\s*\[([^\[\]]+)\]$")
 
 log = obtener_logger(__name__)
 
@@ -38,6 +41,12 @@ def sala_de(texto, cine):
     return f"{cine} (Sala {texto.replace('sala', '').strip()})"
 
 
+def separar_ciclo(titulo):
+    """'LOS PARAGUAS DE CHERBURGO [WILDER CINEMA]' -> ('LOS PARAGUAS DE CHERBURGO', 'WILDER CINEMA'); sin corchetes, (titulo, None)."""
+    match = _CICLO.match(titulo.strip())
+    return (match.group(1), match.group(2).strip()) if match else (titulo, None)
+
+
 def _leer_fila(session, fila, fecha, cine, contadores):
     titulo_elem = fila.locator(".col-4 a").first
     if not titulo_elem.count():
@@ -45,17 +54,24 @@ def _leer_fila(session, fila, fecha, cine, contadores):
         contadores["descartado"] += 1
         return
     titulo_raw = titulo_elem.inner_text().strip()
-    bloques = [b for b in fila.locator(".col-7 .text-center").all() if b.locator("a.btn-primary").count()]
+    todos = fila.locator(".col-7 .text-center").all()
+    bloques = [b for b in todos if b.locator(BOTON).count()]
     if not bloques:
+        if todos:
+            log.warning("%s: %r tiene pases sin botón reconocible el %s", cine, titulo_raw, fecha)
+            contadores["descartado"] += 1
         return
-    pelicula_id, es_especial = resolver_pelicula(session, titulo_raw, cine)
+    # Excepción al contrato (solo Renoir): el ciclo entre corchetes no es parte del título
+    titulo, ciclo = separar_ciclo(titulo_raw)
+    pelicula_id, es_especial = resolver_pelicula(session, titulo, cine)
     if pelicula_id is None:
         contadores["descartado"] += 1
         return
+    es_especial = es_especial or ciclo is not None
     idioma = idioma_de(fila.locator(".col-4 small").all_inner_texts())
 
     for bloque in bloques:
-        boton = bloque.locator("a.btn-primary").first
+        boton = bloque.locator(BOTON).first
         hora_txt = boton.inner_text().strip()
         try:
             match = re.search(r"(\d{2}):(\d{2})", hora_txt)
