@@ -9,7 +9,8 @@ import BotonFavorito from "@/components/BotonFavorito";
 // Como /cines: ISR de 5 minutos
 export const revalidate = 300;
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Solo en el servidor: API_URL_INTERNA (Docker) si existe; si no, la pública
+const API = process.env.API_URL_INTERNA || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const SITIO = "https://fps24.es";
 
 // notFound() solo con un 404 de la API. Cualquier otro fallo se lanza: Next no cachea la página y, en una

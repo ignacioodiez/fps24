@@ -9,7 +9,8 @@ export const metadata = {
 // Se regenera cada 5 minutos (ISR): HTML con los cines para buscadores, datos de hoy casi al día
 export const revalidate = 300;
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Solo en el servidor: API_URL_INTERNA (Docker) si existe; si no, la pública
+const API = process.env.API_URL_INTERNA || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function leerCines() {
   try {

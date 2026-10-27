@@ -40,6 +40,9 @@ services:
     environment:
       # El navegador (tu PC) llama a la API, por eso es localhost y no "api".
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # El servidor de Next (dentro del contenedor) llama a la API por la red de Docker.
+      # Sin NEXT_PUBLIC_: nunca llega al navegador.
+      API_URL_INTERNA: http://api:8000
       # Necesario para que el hot-reload funcione con volúmenes en Windows.
       WATCHPACK_POLLING: "true"
     ports:
