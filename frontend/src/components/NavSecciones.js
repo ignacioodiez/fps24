@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
+import Avatar from "@/components/Avatar";
 import BotonAnadirDiario from "@/components/BotonAnadirDiario";
 
 // Secciones de la barra: añadir una es añadir una línea. "tambien" = otras rutas en las que la pestaña cuenta como activa.
@@ -38,7 +39,9 @@ function ZonaCuenta({ ruta }) {
         <>
           <BotonAnadirDiario />
           <span aria-hidden="true" className="w-px h-4 self-center bg-line" />
-          <Link href={miRuta} aria-current={perfilActivo ? "page" : undefined} className={`${ENLACE} ${perfilActivo ? ACTIVA : INACTIVA}`}>
+          <Link href={miRuta} aria-current={perfilActivo ? "page" : undefined} className={`${ENLACE} gap-2 ${perfilActivo ? ACTIVA : INACTIVA}`}>
+            {/* Decorativo: el texto "Mi perfil" ya lo nombra */}
+            {miPerfil?.usuario && <Avatar usuario={miPerfil.usuario} avatar={miPerfil.avatar} etiqueta={null} className="w-6 h-6 text-[10px] normal-case tracking-normal" />}
             Mi perfil
           </Link>
           <span aria-hidden="true" className="w-px h-4 self-center bg-line" />

@@ -1,11 +1,13 @@
 """Perfil: nombre de usuario único y visibilidad (privado por defecto). Lo edita solo su dueño (user_id del token);
-GET /u/{usuario} es público y solo enseña usuario, bio y, si el dueño lo activa, su diario; con el mismo 404 para un
-perfil privado y uno inexistente. Nunca devuelve user_id, email ni ids de las entradas."""
+GET /u/{usuario} es público y solo enseña usuario, bio, avatar, Letterboxd y, si el dueño los activa, su diario y sus
+cines favoritos; con el mismo 404 para un perfil privado y uno inexistente. Nunca devuelve user_id, email ni ids de las
+entradas."""
 import re
 import time
+import zlib
 from collections import defaultdict, deque
 from datetime import date, datetime
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -16,8 +18,8 @@ from sqlmodel import Session, SQLModel, select
 
 from app.auth import Usuario, usuario_actual
 from app.database.engine import get_session
-from app.database.models import DiarioEntrada, Perfil
-from app.diario import CineDiario, PeliculaDiario, _uid
+from app.database.models import Cine, CineFavorito, DiarioEntrada, Pelicula, Perfil
+from app.diario import CineDiario, PeliculaDiario, _uid, cifras
 
 router = APIRouter()
 
@@ -34,7 +36,18 @@ RESERVADOS = frozenset("""
     null undefined none nil nan true false anonimo anonymous test prueba
 """.split())
 
-PERFIL_INEXISTENTE = HTTPException(status_code=404, detail="Este perfil no existe o es privado")
+# Colores del avatar de iniciales: la única lista (el front la recibe en GET /me/perfil). Todos con contraste >= 4.5:1
+# con texto blanco (lo comprueba tests/check_perfil.py).
+PALETA_AVATAR = {
+    "rojo": "#B91C1C", "naranja": "#C2410C", "mostaza": "#A16207", "verde": "#15803D",
+    "turquesa": "#0F766E", "azul": "#1D4ED8", "violeta": "#6D28D9", "rosa": "#BE185D",
+}
+LETTERBOXD_URL = re.compile(r"(?:https?://)?(?:www\.)?letterboxd\.com/([^/?#]*)", re.IGNORECASE)
+# Primeras partes de rutas de letterboxd.com que no son perfiles (un enlace a una película no da un usuario)
+LETTERBOXD_NO_USUARIO = frozenset("film films list lists members search journal tag director actor settings activity".split())
+ERROR_LETTERBOXD = "Escribe tu usuario de Letterboxd (de 2 a 20 letras, números o _) o pega el enlace a tu perfil"
+
+PERFIL_INEXISTENTE =HTTPException(status_code=404, detail="Este perfil no existe o es privado")
 
 
 def validar_usuario(texto: str) -> tuple:
@@ -53,11 +66,43 @@ def validar_usuario(texto: str) -> tuple:
     return usuario, None
 
 
+def validar_letterboxd(texto: Optional[str]) -> tuple:
+    """Usuario de Letterboxd, o la URL de su perfil -> (usuario tal cual o None si vacío, motivo del rechazo o None)."""
+    valor = (texto or "").strip()
+    if not valor:
+        return None, None
+    url = LETTERBOXD_URL.match(valor)
+    valor = (url.group(1) if url else valor).removeprefix("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{2,20}", valor) or valor.lower() in LETTERBOXD_NO_USUARIO:
+        return None, ERROR_LETTERBOXD
+    return valor, None
+
+
+def color_avatar(perfil: Perfil) -> str:
+    """El elegido o, si no hay, uno fijo sacado del nombre (siempre el mismo para el mismo usuario)."""
+    if perfil.avatar_color in PALETA_AVATAR:
+        return perfil.avatar_color
+    return list(PALETA_AVATAR)[zlib.crc32(perfil.usuario.lower().encode()) % len(PALETA_AVATAR)]
+
+
 class PerfilGuardar(SQLModel):
     usuario: str
     bio: Optional[str] = None
     visibilidad: Literal["privado", "publico"] = "privado"
     diario_publico: bool = False
+    avatar_tipo: Literal["iniciales", "pelicula"] = "iniciales"
+    avatar_color: Optional[str] = None  # None: el que sale del nombre
+    avatar_pelicula_id: Optional[int] = None
+    letterboxd_usuario: Optional[str] = None
+    cines_publicos: bool = False
+
+
+class Avatar(SQLModel):
+    """Ya resuelto: tipo "pelicula" solo si la película sigue existiendo y tiene póster; si no, iniciales."""
+    tipo: str
+    color: str  # id de PALETA_AVATAR
+    fondo: str  # su hex
+    poster_url: Optional[str] = None
 
 
 class PerfilSalida(SQLModel):
@@ -65,6 +110,13 @@ class PerfilSalida(SQLModel):
     bio: Optional[str] = None
     visibilidad: str = "privado"
     diario_publico: bool = False
+    avatar_tipo: str = "iniciales"
+    avatar_color: Optional[str] = None
+    avatar_pelicula_id: Optional[int] = None
+    letterboxd_usuario: Optional[str] = None
+    cines_publicos: bool = False
+    avatar: Optional[Avatar] = None  # None: aún no hay usuario
+    paleta_avatar: Dict[str, str] = PALETA_AVATAR
     creado_en: Optional[datetime] = None
     actualizado_en: Optional[datetime] = None
 
@@ -84,11 +136,24 @@ class DiarioPublico(SQLModel):
     entradas: List[EntradaPublica]
 
 
+class Cifras(SQLModel):
+    entradas: int
+    este_anio: int  # año en curso en Madrid
+
+
+class CinePublico(CineDiario):
+    zona: Optional[str] = None
+
+
 class PerfilPublico(SQLModel):
     usuario: str
     bio: Optional[str] = None
+    avatar: Avatar
+    letterboxd_usuario: Optional[str] = None
     diario_publico: bool = False
+    cifras: Optional[Cifras] = None  # como el diario: solo si el perfil es público y diario_publico
     diario: Optional[DiarioPublico] = None  # solo si el perfil es público y diario_publico
+    cines: Optional[List[CinePublico]] = None  # sus cines favoritos, solo si el perfil es público y cines_publicos
 
 
 class Disponible(SQLModel):
@@ -115,10 +180,23 @@ def _por_nombre(session: Session, usuario: str) -> Optional[Perfil]:
     return session.exec(select(Perfil).where(func.lower(Perfil.usuario) == usuario.lower())).first()
 
 
+def _avatar(session: Session, perfil: Perfil) -> Avatar:
+    color = color_avatar(perfil)
+    pelicula = session.get(Pelicula, perfil.avatar_pelicula_id) if perfil.avatar_tipo == "pelicula" and perfil.avatar_pelicula_id else None
+    if pelicula and pelicula.poster_url:
+        return Avatar(tipo="pelicula", color=color, fondo=PALETA_AVATAR[color], poster_url=pelicula.poster_url)
+    return Avatar(tipo="iniciales", color=color, fondo=PALETA_AVATAR[color])
+
+
+def _salida(session: Session, perfil: Optional[Perfil]) -> PerfilSalida:
+    if perfil is None:
+        return PerfilSalida()
+    return PerfilSalida.model_validate(perfil, update={"avatar": _avatar(session, perfil)})
+
+
 @router.get("/me/perfil", response_model=PerfilSalida)
 def leer_mi_perfil(usuario: Usuario = Depends(usuario_actual), session: Session = Depends(get_session)):
-    perfil = session.get(Perfil, _uid(usuario))
-    return PerfilSalida.model_validate(perfil) if perfil else PerfilSalida()
+    return _salida(session, session.get(Perfil, _uid(usuario)))
 
 
 @router.put("/me/perfil", response_model=PerfilSalida)
@@ -130,7 +208,20 @@ def guardar_mi_perfil(datos: PerfilGuardar, usuario: Usuario = Depends(usuario_a
     bio = (datos.bio or "").strip() or None
     if bio and len(bio) > BIO_MAX:
         raise HTTPException(status_code=422, detail=f"La bio no puede pasar de {BIO_MAX} caracteres")
-    valores = dict(usuario=nombre, bio=bio, visibilidad=datos.visibilidad, diario_publico=datos.diario_publico)
+    letterboxd, motivo = validar_letterboxd(datos.letterboxd_usuario)
+    if motivo:
+        raise HTTPException(status_code=422, detail=motivo)
+    if datos.avatar_color is not None and datos.avatar_color not in PALETA_AVATAR:
+        raise HTTPException(status_code=422, detail="Ese color no está en la paleta")
+    pelicula_id = None
+    if datos.avatar_tipo == "pelicula":
+        pelicula = session.get(Pelicula, datos.avatar_pelicula_id) if datos.avatar_pelicula_id else None
+        if pelicula is None or not pelicula.poster_url:
+            raise HTTPException(status_code=422, detail="Elige una película de nuestro catálogo que tenga póster")
+        pelicula_id = pelicula.id
+    valores = dict(usuario=nombre, bio=bio, visibilidad=datos.visibilidad, diario_publico=datos.diario_publico,
+                   avatar_tipo=datos.avatar_tipo, avatar_color=datos.avatar_color, avatar_pelicula_id=pelicula_id,
+                   letterboxd_usuario=letterboxd, cines_publicos=datos.cines_publicos)
     # Un solo INSERT ... ON CONFLICT: sin SELECT previo, dos peticiones a la vez no pueden duplicar el perfil ni
     # el nombre (lo garantizan la clave primaria y uq_perfil_usuario)
     consulta = (insert(Perfil).values(user_id=_uid(usuario), **valores)
@@ -143,7 +234,7 @@ def guardar_mi_perfil(datos: PerfilGuardar, usuario: Usuario = Depends(usuario_a
         if "uq_perfil_usuario" in str(e.orig):
             raise HTTPException(status_code=409, detail="Ese nombre de usuario ya está en uso")
         raise
-    return PerfilSalida.model_validate(session.get(Perfil, _uid(usuario)))
+    return _salida(session, session.get(Perfil, _uid(usuario)))
 
 
 @router.get("/usuarios/disponible", response_model=Disponible)
@@ -165,10 +256,17 @@ def leer_perfil_publico(usuario: str, pagina: int = Query(1, ge=1, le=10_000), s
     perfil = _por_nombre(session, usuario) if len(usuario) <= USUARIO_MAX else None
     if perfil is None or perfil.visibilidad != "publico":
         raise PERFIL_INEXISTENTE
-    salida = PerfilPublico(usuario=perfil.usuario, bio=perfil.bio, diario_publico=perfil.diario_publico)
+    salida = PerfilPublico(usuario=perfil.usuario, bio=perfil.bio, avatar=_avatar(session, perfil),
+                           letterboxd_usuario=perfil.letterboxd_usuario, diario_publico=perfil.diario_publico)
+    if perfil.cines_publicos:  # y es público, como el diario
+        salida.cines = [CinePublico(slug=slug, nombre=nombre, zona=zona) for slug, nombre, zona in session.exec(
+            select(Cine.slug, Cine.nombre, Cine.zona).join(CineFavorito, CineFavorito.cine_id == Cine.id)
+            .where(CineFavorito.user_id == perfil.user_id).order_by(CineFavorito.creado_en, Cine.slug)
+        ).all()]
     if perfil.diario_publico:  # y es público: un perfil privado nunca llega aquí
         suyas = DiarioEntrada.user_id == perfil.user_id
-        total = session.exec(select(func.count()).select_from(DiarioEntrada).where(suyas)).one()
+        total, este_anio = cifras(session, perfil.user_id)
+        salida.cifras = Cifras(entradas=total, este_anio=este_anio)
         entradas = session.exec(
             select(DiarioEntrada).options(selectinload(DiarioEntrada.pelicula), selectinload(DiarioEntrada.cine))
             .where(suyas)

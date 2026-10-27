@@ -6,6 +6,9 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import DialogoDiario, { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import NotaEstrellas from "@/components/NotaEstrellas";
+import {
+  Ayuda, CabeceraPerfil, PestanaPerfil, PestanasPerfil, SoloTu, TarjetasCines, TITULO_SECCION, formato, nombreMes, porMes,
+} from "@/components/PerfilVistas";
 import TarjetaPerfilPublico from "@/components/TarjetaPerfilPublico";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
@@ -13,10 +16,6 @@ import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
 const POR_PAGINA = 20;
 const COMENTARIO_CORTO = 240; // más largo (o con más de 3 líneas) se recorta con "ver más"
 
-// Fechas "YYYY-MM-DD" de la API: en UTC para que el huso del navegador no las mueva (como en CarteleraCine)
-const formato = (fecha, opciones) => new Date(`${fecha}T00:00Z`).toLocaleDateString("es-ES", { timeZone: "UTC", ...opciones });
-const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
-const nombreMes = (fecha) => capitalizar(formato(fecha, { month: "long", year: "numeric" }).replace(" de ", " "));
 // Mismo orden que el backend: fecha vista y, a igual fecha, la última apuntada primero
 const ordenar = (lista) => [...lista].sort((a, b) => b.fecha_vista.localeCompare(a.fecha_vista) || b.creado_en.localeCompare(a.creado_en) || b.id - a.id);
 
@@ -99,13 +98,7 @@ function Entrada({ entrada, marcada, onEditar, onBorrar }) {
 
 // Entradas agrupadas por mes, en el orden de la lista. Las del perfil público no traen id: clave por posición.
 export function ListaDiario({ entradas, marcada, onEditar, onBorrar }) {
-  const meses = [];
-  for (const e of entradas) {
-    const clave = e.fecha_vista.slice(0, 7);
-    if (meses.at(-1)?.clave !== clave) meses.push({ clave, entradas: [] });
-    meses.at(-1).entradas.push(e);
-  }
-  return meses.map((m) => (
+  return porMes(entradas).map((m) => (
     <section key={m.clave} aria-labelledby={`mes-${m.clave}`} className="mt-6">
       <h3 id={`mes-${m.clave}`} className="text-xs font-bold uppercase tracking-wider text-muted border-b border-line pb-2">
         {nombreMes(`${m.clave}-01`)}
@@ -248,23 +241,12 @@ export function Esqueleto() {
   );
 }
 
-// Nombre y bio, igual en mi vista y en la pública
-export function CabeceraPerfil({ usuario, bio }) {
-  return (
-    <div className="text-center">
-      <h2 className="text-3xl md:text-5xl font-black font-display text-primary break-all">@{usuario}</h2>
-      {/* Texto plano con sus saltos de línea: nunca HTML */}
-      {bio && <p className="mt-4 text-lg text-foreground whitespace-pre-wrap break-words">{bio}</p>}
-    </div>
-  );
-}
-
-const TITULO_SECCION = "text-xl font-display font-bold uppercase text-foreground";
-
 // Mis cines favoritos (solo los ve su dueño): la lista, quitar y enlace a /cines para añadir más.
 // Los nombres salen de GET /cines (público); el orden, el de alta.
 function MisCines() {
   const { favoritos, cargados, alternar } = useFavoritos();
+  const { miPerfil } = useAuth();
+  const visibles = miPerfil?.visibilidad === "publico" && miPerfil?.cines_publicos;
   const [cines, setCines] = useState(null);
   const id = useId();
 
@@ -289,7 +271,7 @@ function MisCines() {
         </p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. Solo tú ves esta lista.</p>
+          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. {visibles ? "También se ven en tu perfil público." : "Solo tú ves esta lista."}</p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {[...favoritos].map((slug) => (
               <li key={slug} className="flex items-center border border-line bg-surface">
@@ -309,39 +291,88 @@ function MisCines() {
   );
 }
 
-// /u/<mi usuario>: mis datos (aunque sea privado), aviso de quién lo ve, mis cines y gestión de mis entradas
-function MiPerfil({ perfil }) {
+// /u/<mi usuario>[/diario|/cines]: mi vista, aunque el perfil sea privado. Ve todas las pestañas y las secciones
+// vacías (con ayuda), y debajo de las que los demás no ven, "Solo tú ves...". Los datos salen de mis endpoints.
+function MiPerfil({ perfil, pestana }) {
+  const { favoritos, cargados, alternar } = useFavoritos();
+  const [todos, setTodos] = useState(null); // GET /cines, para nombre y zona de mis favoritos
+  const [diario, setDiario] = useState(null); // GET /diario: { total, este_anio, entradas } o { error }
+
+  useEffect(() => {
+    todosLosCines().then(setTodos).catch(() => setTodos([]));
+  }, []);
+
+  // Las últimas entradas para la pestaña Perfil; se recargan al añadir una desde el "+" de la barra
+  useEffect(() => {
+    if (pestana !== "perfil") return;
+    const cargar = () => listar(30, 0).then(setDiario).catch((err) => setDiario({ error: err.message }));
+    cargar();
+    window.addEventListener(DIARIO_GUARDADO, cargar);
+    return () => window.removeEventListener(DIARIO_GUARDADO, cargar);
+  }, [pestana]);
+
   const publico = perfil.visibilidad === "publico";
+  const diarioSoloTu = !(publico && perfil.diario_publico);
+  const cinesSoloTu = !(publico && perfil.cines_publicos);
+  const cines = cargados && todos ? [...favoritos].map((slug) => todos.find((c) => c.slug === slug) ?? { slug, nombre: slug }) : null;
   const quienVe = !publico
-    ? "Quien abra tu enlace verá «Este perfil no existe o es privado»."
-    : perfil.diario_publico
-      ? "Cualquiera con tu enlace ve tu nombre de usuario, tu bio y tu diario, con tus notas."
-      : "Cualquiera con tu enlace ve tu nombre de usuario y tu bio. Tu diario no se muestra.";
+    ? "Quien abra tu enlace verá «Este perfil no existe o es privado». Hazlo público en «Editar mi perfil» para compartirlo."
+    : `Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd. ${
+      perfil.diario_publico ? "También tu diario, con tus notas." : "Tu diario no se muestra."} ${
+      perfil.cines_publicos ? "También tus cines favoritos." : "Tus cines favoritos no se muestran."}`;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-6 py-8">
-      <CabeceraPerfil usuario={perfil.usuario} bio={perfil.bio} />
-      <div className={`mt-6 flex flex-wrap items-center justify-between gap-3 border p-4 ${publico ? "border-primary bg-primary-soft" : "border-line bg-surface"}`}>
-        <div className="min-w-0">
-          <p className="font-bold text-foreground">{publico ? "Tu perfil es público" : "Solo tú ves este perfil"}</p>
+    <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
+      <CabeceraPerfil
+        perfil={perfil} esDueno
+        cifras={{ entradas: diario?.total, este_anio: diario?.este_anio, cines: cines?.length }}
+      />
+      {(!publico || pestana === "perfil") && (
+        <div role={publico ? undefined : "note"} className={`mt-6 border p-4 ${publico ? "border-line bg-surface" : "border-primary bg-primary-soft"}`}>
+          <p className="font-bold text-foreground">{publico ? "Tu perfil es público" : "Tu perfil es privado: solo tú lo ves"}</p>
           <p className="text-sm text-muted">{quienVe}</p>
         </div>
-        <Link href="/perfil/editar" className={BOTON_PRIMARIO}>Editar mi perfil</Link>
-      </div>
-      <MisCines />
-      <h3 className={`mt-8 ${TITULO_SECCION}`}>Mi diario</h3>
-      <MiDiario />
+      )}
+      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines"]} />
+
+      {pestana === "perfil" && (
+        diario?.error ? <p role="alert" className="py-8 text-red-600">{diario.error}</p>
+          : !diario || !cines ? <Esqueleto />
+            : <PestanaPerfil usuario={perfil.usuario} entradas={diario.entradas} total={diario.total} cines={cines} esDueno
+                             diarioSoloTu={diarioSoloTu} cinesSoloTu={cinesSoloTu} />
+      )}
+      {pestana === "diario" && (
+        <section aria-labelledby="mi-diario" className="mt-8">
+          <h3 id="mi-diario" className={TITULO_SECCION}>Mi diario</h3>
+          {diarioSoloTu && <SoloTu que="tu diario" />}
+          <MiDiario />
+        </section>
+      )}
+      {pestana === "cines" && (
+        <section aria-labelledby="mis-cines" className="mt-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 id="mis-cines" className={TITULO_SECCION}>Mis cines</h3>
+            <Link href="/cines" className="text-sm font-bold text-primary hover:underline">Añadir más cines →</Link>
+          </div>
+          {cinesSoloTu && <SoloTu que="tus cines" />}
+          {!cines ? <div aria-busy="true" aria-label="Cargando tus cines" className="mt-6 h-20 bg-surface animate-pulse" />
+            : cines.length ? <TarjetasCines cines={cines} onQuitar={(c) => alternar(c.slug, c.nombre)} />
+              : <Ayuda>Aún no tienes cines favoritos. Pulsa la ★ en un cine de <Link href="/cines" className="font-bold text-primary hover:underline">Cines</Link> y sus sesiones saldrán primero en toda la web.</Ayuda>}
+        </section>
+      )}
     </div>
   );
 }
 
 const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
+const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines" })[ruta.split("/")[3]] ?? "perfil";
 
 // En /u/[usuario]: si el visitante es el dueño, su vista; si no, children (la pública o el "no existe o es privado").
 // esperar: mientras no se sabe, esqueleto en vez de children (en el 404, para no enseñarle al dueño "no existe").
 export function SiSoyYo({ esperar = false, children }) {
   const { cargando, miPerfil } = useAuth();
-  const usuario = usuarioDeRuta(usePathname());
-  if (miPerfil?.usuario && miPerfil.usuario === usuario) return <MiPerfil perfil={miPerfil} />;
+  const ruta = usePathname();
+  if (miPerfil?.usuario && miPerfil.usuario === usuarioDeRuta(ruta)) return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
   if (esperar && (cargando || miPerfil === undefined)) {
     return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
   }

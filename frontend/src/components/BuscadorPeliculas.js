@@ -5,9 +5,9 @@ import { buscarPeliculas } from "@/lib/diario";
 
 const ESPERA = 250; // ms sin teclear antes de buscar
 
-// Busca en el catálogo (GET /peliculas/buscar) para apuntar una película en el diario.
+// Busca en el catálogo (GET /peliculas/buscar) para apuntar una película en el diario (o elegir el póster del avatar).
 // Combobox de WAI-ARIA: el foco se queda en el campo y aria-activedescendant marca la opción.
-export default function BuscadorPeliculas({ onElegir }) {
+export default function BuscadorPeliculas({ onElegir, etiqueta = "Busca una película para añadir a tu diario" }) {
   const id = useId();
   const [texto, setTexto] = useState("");
   const [resultados, setResultados] = useState([]);
@@ -87,10 +87,10 @@ export default function BuscadorPeliculas({ onElegir }) {
 
   return (
     <div className="relative">
-      <label htmlFor={`${id}-campo`} className="sr-only">Busca una película para añadir a tu diario</label>
+      <label htmlFor={`${id}-campo`} className="sr-only">{etiqueta}</label>
       <input
         id={`${id}-campo`} type="search" role="combobox" autoComplete="off" spellCheck={false}
-        placeholder="Busca una película para añadir a tu diario…"
+        placeholder={`${etiqueta}…`}
         value={texto} onChange={(e) => cambiar(e.target.value)} onKeyDown={tecla}
         onFocus={() => setAbierto(true)} onBlur={() => setAbierto(false)}
         aria-expanded={hayLista} aria-controls={`${id}-lista`} aria-autocomplete="list"

@@ -98,6 +98,7 @@ class EntradaSalida(SQLModel):
 
 class ListaDiario(SQLModel):
     total: int
+    este_anio: int = 0  # entradas con fecha_vista en el año en curso (Madrid), para las cifras de mi perfil
     entradas: List[EntradaSalida]
 
 
@@ -132,6 +133,14 @@ def _cine_id(session: Session, slug: Optional[str]) -> Optional[int]:
     return cine.id
 
 
+def cifras(session: Session, uid: uuid.UUID) -> tuple:
+    """(total de entradas, entradas de este año en Madrid) de un usuario, en una sola consulta."""
+    enero = date(hoy_madrid().year, 1, 1)
+    return tuple(session.exec(
+        select(func.count(), func.count().filter(DiarioEntrada.fecha_vista >= enero)).where(DiarioEntrada.user_id == uid)
+    ).one())
+
+
 def _guardar(session: Session, entrada: DiarioEntrada) -> EntradaSalida:
     session.add(entrada)
     try:
@@ -152,14 +161,14 @@ def _guardar(session: Session, entrada: DiarioEntrada) -> EntradaSalida:
 def leer_diario(limite: int = Query(50, ge=1, le=200), desplazamiento: int = Query(0, ge=0),
                 usuario: Usuario = Depends(usuario_actual), session: Session = Depends(get_session)):
     mias = DiarioEntrada.user_id == _uid(usuario)
-    total = session.exec(select(func.count()).select_from(DiarioEntrada).where(mias)).one()
+    total, este_anio = cifras(session, _uid(usuario))
     entradas = session.exec(
         select(DiarioEntrada).options(selectinload(DiarioEntrada.pelicula), selectinload(DiarioEntrada.cine))
         .where(mias)
         .order_by(DiarioEntrada.fecha_vista.desc(), DiarioEntrada.creado_en.desc(), DiarioEntrada.id.desc())
         .offset(desplazamiento).limit(limite)
     ).all()
-    return ListaDiario(total=total, entradas=[EntradaSalida.model_validate(e) for e in entradas])
+    return ListaDiario(total=total, este_anio=este_anio, entradas=[EntradaSalida.model_validate(e) for e in entradas])
 
 
 @router.get("/diario/pelicula/{pelicula_id}", response_model=List[EntradaSalida])

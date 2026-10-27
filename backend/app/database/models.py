@@ -131,12 +131,21 @@ class Perfil(SQLModel, table=True):
         Index("uq_perfil_usuario", text("lower(usuario)"), unique=True),
         CheckConstraint("char_length(bio) <= 160", name="ck_perfil_bio"),
         CheckConstraint("visibilidad IN ('privado', 'publico')", name="ck_perfil_visibilidad"),
+        # Migración 0018
+        CheckConstraint("avatar_tipo IN ('iniciales', 'pelicula')", name="ck_perfil_avatar_tipo"),
+        CheckConstraint("letterboxd_usuario ~ '^[A-Za-z0-9_]{2,20}$'", name="ck_perfil_letterboxd"),
     )
     user_id: uuid.UUID = Field(sa_column=Column(UUID(as_uuid=True), primary_key=True))  # sub del JWT, sin FK
     usuario: str = Field(sa_column=Column(Text, nullable=False))
     bio: Optional[str] = Field(default=None, sa_column=Column(Text))
     visibilidad: str = Field(default="privado", sa_column=Column(Text, nullable=False, server_default="privado"))
     diario_publico: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    # Migración 0018. avatar_color: id de PALETA_AVATAR (app/perfil.py); None = color sacado del nombre
+    avatar_tipo: str = Field(default="iniciales", sa_column=Column(Text, nullable=False, server_default="iniciales"))
+    avatar_color: Optional[str] = Field(default=None, sa_column=Column(Text))
+    avatar_pelicula_id: Optional[int] = Field(default=None, foreign_key="pelicula.id", ondelete="SET NULL")
+    letterboxd_usuario: Optional[str] = Field(default=None, sa_column=Column(Text))
+    cines_publicos: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
     creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 

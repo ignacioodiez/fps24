@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import Avatar, { AtribucionPoster } from "@/components/Avatar";
+import BuscadorPeliculas from "@/components/BuscadorPeliculas";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, CAMPO, ETIQUETA } from "@/components/DialogoDiario";
+import { leerLetterboxd } from "@/lib/letterboxd";
 import { BIO_MAX, comprobarUsuario, guardarPerfil, leerPerfil } from "@/lib/perfil";
 
 const ESPERA_MS = 400; // debounce de la comprobación de disponibilidad
@@ -26,7 +29,21 @@ function Interruptor({ id, activo, onCambiar, disabled = false, titulo, children
   );
 }
 
-// Nombre de usuario, bio, visibilidad (privado por defecto) y diario en el perfil (apagado por defecto).
+// Muestra circular de un color del avatar: el radio nativo, oculto, da el teclado y el lector de pantalla
+function Muestra({ nombre, valor, elegido, onElegir, etiqueta, children, style }) {
+  return (
+    <label className="cursor-pointer">
+      <input type="radio" name={nombre} checked={elegido} onChange={() => onElegir(valor)} className="peer sr-only" />
+      <span aria-hidden="true" style={style}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-[10px] font-bold uppercase text-muted ring-offset-2 ring-offset-surface peer-checked:ring-2 peer-checked:ring-foreground peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-primary">
+        {children}
+      </span>
+      <span className="sr-only">{etiqueta}</span>
+    </label>
+  );
+}
+
+// Nombre de usuario, bio, avatar, Letterboxd, visibilidad (privado por defecto) y diario y cines en el perfil (apagados).
 // Se guarda todo junto con "Guardar perfil".
 export default function TarjetaPerfilPublico() {
   const { setMiPerfil } = useAuth();
@@ -35,6 +52,12 @@ export default function TarjetaPerfilPublico() {
   const [bio, setBio] = useState("");
   const [publico, setPublico] = useState(false);
   const [diario, setDiario] = useState(false);
+  const [cines, setCines] = useState(false);
+  const [avatarTipo, setAvatarTipo] = useState("iniciales");
+  const [avatarColor, setAvatarColor] = useState(null); // null: el que sale del nombre
+  const [peliAvatar, setPeliAvatar] = useState(null); // { id, poster_url, titulo? }
+  const [errorPeli, setErrorPeli] = useState("");
+  const [letterboxd, setLetterboxd] = useState("");
   const [comprobacion, setComprobacion] = useState({ estado: "nada", motivo: "" }); // nada | comprobando | libre | no | error
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -42,15 +65,23 @@ export default function TarjetaPerfilPublico() {
   const id = useId();
   const campoUsuario = useRef(null);
 
+  // El formulario con lo guardado (al cargar y tras guardar)
+  const rellenar = (p) => {
+    setGuardado(p);
+    setUsuario(p.usuario ?? "");
+    setBio(p.bio ?? "");
+    setPublico(p.visibilidad === "publico");
+    setDiario(p.diario_publico);
+    setCines(p.cines_publicos);
+    setAvatarTipo(p.avatar_tipo ?? "iniciales");
+    setAvatarColor(p.avatar_color ?? null);
+    setPeliAvatar(p.avatar?.tipo === "pelicula" ? { id: p.avatar_pelicula_id, poster_url: p.avatar.poster_url } : null);
+    setLetterboxd(p.letterboxd_usuario ?? "");
+  };
+
   useEffect(() => {
     leerPerfil()
-      .then((p) => {
-        setGuardado(p);
-        setUsuario(p.usuario ?? "");
-        setBio(p.bio ?? "");
-        setPublico(p.visibilidad === "publico");
-        setDiario(p.diario_publico);
-      })
+      .then(rellenar)
       .catch((err) => {
         setGuardado({ usuario: null });
         setError(err.message);
@@ -88,13 +119,14 @@ export default function TarjetaPerfilPublico() {
     setError("");
     setAviso("");
     try {
-      // Con el perfil privado se guarda apagado: al volver a hacerlo público, el diario no reaparece sin pedirlo
-      const p = await guardarPerfil({ usuario, bio, visibilidad: publico ? "publico" : "privado", diario_publico: publico && diario });
-      setGuardado(p);
+      // Con el perfil privado se guardan apagados: al volver a hacerlo público, el diario y los cines no reaparecen sin pedirlo
+      const p = await guardarPerfil({
+        usuario, bio, visibilidad: publico ? "publico" : "privado", diario_publico: publico && diario, cines_publicos: publico && cines,
+        avatar_tipo: avatarTipo, avatar_color: avatarColor, avatar_pelicula_id: avatarTipo === "pelicula" ? peliAvatar?.id ?? null : null,
+        letterboxd_usuario: letterboxd,
+      });
+      rellenar(p);
       setMiPerfil(p);
-      setDiario(p.diario_publico);
-      setUsuario(p.usuario);
-      setBio(p.bio ?? "");
       setAviso("Perfil guardado");
     } catch (err) {
       setError(err.message);
@@ -115,6 +147,18 @@ export default function TarjetaPerfilPublico() {
   if (!guardado) {
     return <div aria-busy="true" aria-label="Cargando tu perfil público" className="h-48 mb-6 bg-surface animate-pulse" />;
   }
+
+  const paleta = guardado.paleta_avatar ?? {};
+  const vistaPrevia = avatarTipo === "pelicula" && peliAvatar
+    ? { tipo: "pelicula", poster_url: peliAvatar.poster_url }
+    : { tipo: "iniciales", fondo: paleta[avatarColor] ?? guardado.avatar?.fondo };
+  const lbx = leerLetterboxd(letterboxd);
+  const elegirPeli = (p) => {
+    if (p.poster_url) {
+      setPeliAvatar(p);
+      setErrorPeli("");
+    } else setErrorPeli(`«${p.titulo}» no tiene póster: elige otra película.`);
+  };
 
   const colorComprobacion = { libre: "text-green-700", no: "text-red-600", error: "text-red-600" }[comprobacion.estado] ?? "text-muted";
 
@@ -150,8 +194,60 @@ export default function TarjetaPerfilPublico() {
           <p id={`${id}-contador`} className="mt-1 text-xs text-muted text-right">{bio.length}/{BIO_MAX}</p>
         </div>
 
+        <fieldset>
+          <legend className={ETIQUETA}>Avatar</legend>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex flex-col items-center gap-1 shrink-0">
+              <Avatar usuario={usuario || "?"} avatar={vistaPrevia} className="w-20 h-20 text-3xl" etiqueta="Vista previa de tu avatar" />
+              {vistaPrevia.tipo === "pelicula" && <AtribucionPoster />}
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex flex-wrap gap-x-5 text-sm text-foreground">
+                {[["iniciales", "Iniciales"], ["pelicula", "Póster de una película"]].map(([valor, texto]) => (
+                  <label key={valor} className="flex items-center gap-2 min-h-11 cursor-pointer">
+                    <input type="radio" name={`${id}-avatar-tipo`} checked={avatarTipo === valor} onChange={() => setAvatarTipo(valor)} className="h-4 w-4 accent-[var(--primary)]" />
+                    {texto}
+                  </label>
+                ))}
+              </div>
+              {avatarTipo === "iniciales" ? (
+                <fieldset>
+                  <legend className="mb-2 text-sm text-muted">Color de fondo</legend>
+                  <div className="flex flex-wrap gap-3">
+                    <Muestra nombre={`${id}-color`} valor={null} elegido={avatarColor === null} onElegir={setAvatarColor} etiqueta="Automático">auto</Muestra>
+                    {Object.entries(paleta).map(([nombre, fondo]) => (
+                      <Muestra key={nombre} nombre={`${id}-color`} valor={nombre} elegido={avatarColor === nombre} onElegir={setAvatarColor}
+                               etiqueta={nombre} style={{ backgroundColor: fondo, borderColor: fondo }} />
+                    ))}
+                  </div>
+                </fieldset>
+              ) : (
+                // Enter en el buscador nunca envía el formulario del perfil
+                <div onKeyDown={(e) => e.key === "Enter" && e.target.type === "search" && e.preventDefault()}>
+                  <BuscadorPeliculas etiqueta="Busca la película de tu avatar" onElegir={elegirPeli} />
+                  <p aria-live="polite" className={`mt-1 text-sm min-h-5 ${errorPeli ? "font-semibold text-red-600" : "text-muted"}`}>
+                    {errorPeli || (peliAvatar ? (peliAvatar.titulo ? `Póster de «${peliAvatar.titulo}»` : "Póster elegido") : "Elige una película con póster.")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </fieldset>
+
+        <div>
+          <label htmlFor={`${id}-letterboxd`} className={ETIQUETA}>Letterboxd (opcional)</label>
+          <input
+            id={`${id}-letterboxd`} type="text" maxLength={200} value={letterboxd} onChange={(e) => setLetterboxd(e.target.value)}
+            placeholder="tu_usuario o letterboxd.com/tu_usuario" autoComplete="off" autoCapitalize="none" spellCheck={false}
+            aria-describedby={`${id}-letterboxd-estado`} aria-invalid={Boolean(lbx.motivo)} className={CAMPO}
+          />
+          <p id={`${id}-letterboxd-estado`} aria-live="polite" className={`mt-1 text-sm min-h-5 ${lbx.motivo ? "font-semibold text-red-600" : "text-muted"}`}>
+            {lbx.motivo ?? (lbx.usuario ? `En tu perfil público: «Letterboxd: @${lbx.usuario}»` : "Tu usuario o el enlace a tu perfil de Letterboxd.")}
+          </p>
+        </div>
+
         <Interruptor id={`${id}-visibilidad`} activo={publico} onCambiar={() => setPublico((v) => !v)} titulo={`Perfil ${publico ? "público" : "privado"}`}>
-          Privado: solo tú lo ves. Público: cualquiera con tu enlace puede ver tu nombre de usuario y tu bio.
+          Privado: solo tú lo ves. Público: cualquiera con tu enlace puede ver tu nombre de usuario, tu avatar, tu bio y tu Letterboxd.
         </Interruptor>
 
         <div className="border border-line bg-background p-3">
@@ -163,6 +259,16 @@ export default function TarjetaPerfilPublico() {
               Si lo activas, cualquiera con tu enlace podrá ver todas tus entradas, incluidas tus notas. Solo se muestra
               si tu perfil también es público.
             </p>
+            {!publico && <p className="mt-1 font-semibold text-foreground">Tu perfil es privado: hazlo público para poder activarlo.</p>}
+          </Interruptor>
+        </div>
+
+        <div className="border border-line bg-background p-3">
+          <Interruptor
+            id={`${id}-cines`} activo={publico && cines} onCambiar={() => setCines((v) => !v)} disabled={!publico}
+            titulo="Mostrar mis cines favoritos en mi perfil público"
+          >
+            <p>Si lo activas, cualquiera con tu enlace verá la lista de los cines que has marcado con la ★.</p>
             {!publico && <p className="mt-1 font-semibold text-foreground">Tu perfil es privado: hazlo público para poder activarlo.</p>}
           </Interruptor>
         </div>
@@ -180,7 +286,7 @@ export default function TarjetaPerfilPublico() {
 
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={guardando || comprobacion.estado === "no"} className={BOTON_PRIMARIO}>
+          <button type="submit" disabled={guardando || comprobacion.estado === "no" || Boolean(lbx.motivo)} className={BOTON_PRIMARIO}>
             {guardando ? "Guardando…" : "Guardar perfil"}
           </button>
           <p role="status" aria-live="polite" className="text-sm font-semibold text-primary">{aviso}</p>
