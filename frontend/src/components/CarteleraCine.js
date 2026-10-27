@@ -60,8 +60,8 @@ function SelectorDia({ dias, elegido, onElegir }) {
   );
 }
 
-// Película del día: la tarjeta abre la vista rápida en ese día (ruta interceptada de @modal); las horas, la compra
-function PeliculaDia({ pelicula, fecha, cine }) {
+// Película del día: la tarjeta abre la vista rápida en ese día (ruta interceptada de @modal); las horas, su sesión
+function PeliculaDia({ pelicula, fecha, cine, cineSlug }) {
   const href = `/pelicula/${pelicula.id}?dia=${fecha}`;
   return (
     <li className="relative flex gap-3 md:gap-4 p-3 rounded-2xl border border-line bg-background hover:border-muted transition-colors min-w-0">
@@ -77,7 +77,7 @@ function PeliculaDia({ pelicula, fecha, cine }) {
         {pelicula.director && <p className="text-xs text-muted truncate">de {pelicula.director}</p>}
         <div className="empty:hidden"><NotaPelicula nota={pelicula.nota_tmdb} votos={pelicula.votos} /></div>
         <div className="relative z-[2] mt-auto pt-1 flex flex-wrap gap-2">
-          {pelicula.sesiones.map((s) => <ChipHora key={s.id} pase={s} cine={cine} conSala />)}
+          {pelicula.sesiones.map((s) => <ChipHora key={s.id} pase={s} cine={cine} cineSlug={cineSlug} pelicula={pelicula} conSala />)}
         </div>
       </div>
       <Link href={href} scroll={false} aria-label={`Vista rápida: ${pelicula.titulo}`}
@@ -123,7 +123,7 @@ export default function CarteleraCine({ cine }) {
               <span className="text-muted font-semibold normal-case tracking-normal"> · {plural(dia.peliculas.length, "película", "películas")} · {plural(sesiones, "sesión", "sesiones")}</span>
             </p>
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-              {dia.peliculas.map((p) => <PeliculaDia key={p.id} pelicula={p} fecha={dia.fecha} cine={cine.nombre} />)}
+              {dia.peliculas.map((p) => <PeliculaDia key={p.id} pelicula={p} fecha={dia.fecha} cine={cine.nombre} cineSlug={cine.slug} />)}
             </ul>
           </>
         )}

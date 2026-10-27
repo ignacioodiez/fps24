@@ -132,7 +132,7 @@ export default function MovieDetail({ params, searchParams }) {
                 </div>
 
                 {/* Primer día con sesiones abierto y "Otros días" plegados, con los límites de la página completa */}
-                <SesionesPorDias pases={movie.pases} modo={modo} contexto="pagina" diaElegido={diaConSesiones(dia, movie.pases)} />
+                <SesionesPorDias pases={movie.pases} pelicula={movie} modo={modo} contexto="pagina" diaElegido={diaConSesiones(dia, movie.pases)} />
             </div>
         </div>
 

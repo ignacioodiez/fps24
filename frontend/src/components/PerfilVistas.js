@@ -30,6 +30,7 @@ export const PESTANAS = [
   { clave: "perfil", etiqueta: "Perfil", ruta: "" },
   { clave: "diario", etiqueta: "Diario", ruta: "/diario" },
   { clave: "cines", etiqueta: "Cines", ruta: "/cines" },
+  { clave: "sesiones", etiqueta: "Sesiones", ruta: "/sesiones" }, // solo el dueño: su agenda privada
 ];
 
 // Texto de ayuda del dueño, con enlace a la edición o a donde se añade el contenido

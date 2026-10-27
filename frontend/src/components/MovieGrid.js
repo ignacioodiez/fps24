@@ -18,11 +18,11 @@ export default function MovieGrid({
   const { favoritos } = useFavoritos();
 
   // Clic en la tarjeta: vista rápida (ruta interceptada, sin mover el scroll); Ctrl/Cmd o botón central: página
-  // completa en pestaña nueva. Los enlaces de dentro (título, horas, póster) gestionan su propio clic.
+  // completa en pestaña nueva. Los enlaces y botones de dentro (título, póster, horas) gestionan su propio clic.
   // Es un onClick en la tarjeta y no una capa absolute encima: la capa tapaba la lista de pases y la rueda del
   // ratón desplazaba la página en vez de la lista.
   const abrirPelicula = (e, id) => {
-    if (e.target.closest("a")) return;
+    if (e.target.closest("a, button")) return;
     const url = `/pelicula/${id}`;
     if (e.ctrlKey || e.metaKey || e.button === 1) {
       window.open(url, "_blank", "noopener");

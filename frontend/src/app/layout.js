@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import AuthProvider from "@/components/AuthProvider";
 import PanelLogin from "@/components/PanelLogin";
 import FavoritosProvider from "@/components/FavoritosProvider";
+import SesionesGuardadasProvider from "@/components/SesionesGuardadasProvider";
 
 
 // Si la nueva fuente no es variable, añade weight: ["400", "700", "900"]
@@ -30,12 +31,14 @@ export default function RootLayout({ children, modal }) {
       >
         <AuthProvider>
         <FavoritosProvider>
+        <SesionesGuardadasProvider>
         {/* MAIN: El contenido principal crece para empujar el footer */}
         <main className="flex-grow">
             {children}
         </main>
         {modal}
         <PanelLogin />
+        </SesionesGuardadasProvider>
         </FavoritosProvider>
         </AuthProvider>
 

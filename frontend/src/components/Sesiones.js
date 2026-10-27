@@ -5,6 +5,7 @@ import Link from "next/link";
 import { cleanCinemaName, extractTime, isDiaEspectador, textoSala } from "@/utils/helpers";
 import BotonFavorito, { MarcaFavorito } from "@/components/BotonFavorito";
 import { useFavoritos } from "@/components/FavoritosProvider";
+import { useSesionesGuardadas } from "@/components/SesionesGuardadasProvider";
 import { favoritosPrimero } from "@/lib/favoritos";
 
 // Piezas de sesiones con el estilo de la cartelera de la portada. Las usan la portada (MovieGrid),
@@ -126,40 +127,37 @@ export function CabeceraCine({ nombre, fecha, slug, conFavorito = false, precio 
   );
 }
 
-// Chip de hora. Con link_compra es el botón de compra (pestaña nueva); sin él, apagado y no clicable.
-// conPrecio: el precio salvo "Consultar"; conSala: la sala ("Sala 9") si no repite el cine. La portada no usa ninguno.
-// pasada: ya ha empezado (apagada).
-export function ChipHora({ pase, cine, conPrecio = false, conSala = false, pasada = false }) {
+// Chip de hora: abre el modal de la sesión (ModalSesion: comprar o guardarla). Sin link_compra, apagado, pero también
+// se abre (se puede guardar). Con un punto si está en "Mis sesiones". pelicula y cineSlug: para los pases que no
+// los traen (ficha de cine). conPrecio: el precio salvo "Consultar"; conSala: la sala ("Sala 9") si no repite el cine.
+// La portada no usa ninguno. pasada: ya ha empezado (apagada).
+export function ChipHora({ pase, cine, pelicula, cineSlug, conPrecio = false, conSala = false, pasada = false }) {
+  const { guardadas, abrir } = useSesionesGuardadas();
+  const guardada = guardadas.has(pase.id);
   const hora = pase.hora ?? extractTime(pase.fecha_hora); // hora: "HH:MM" ya formateada (/cines/{slug}, sin depender del locale)
   const precio = conPrecio ? precioDe(pase) : null;
   const sala = conSala ? textoSala(pase.sala, cine) : null;
-  const contenido = (
-    <>
+  const base = `px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-2 border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${pasada ? "opacity-50" : ""}`;
+  const estilo = !pase.link_compra
+    ? "bg-surface text-muted border-line hover:border-muted"
+    : pase.es_evento_especial
+      ? "bg-primary-soft text-primary border-primary hover:bg-primary hover:text-white"
+      : "bg-background text-foreground border-line hover:border-primary hover:text-primary";
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      onClick={(e) => abrir({ ...pase, cine, cine_slug: pase.cine_slug ?? cineSlug, pelicula: pase.pelicula ?? pelicula }, e.currentTarget)}
+      title={sala || undefined}
+      aria-label={`${hora} en ${cleanCinemaName(cine)}${sala ? `, ${sala}` : ""}${pase.idioma === "VOSE" ? ", VOSE" : ""}${pasada ? ", ya ha empezado" : ""}${guardada ? ", guardada" : ""}: ver sesión`}
+      className={`${base} ${estilo}`}
+    >
       <span className="text-sm">{hora}</span>
       <ChipIdioma idioma={pase.idioma} />
       {sala && <span className="text-[10px] font-medium opacity-70">{sala}</span>}
       {precio && <span className="text-[10px] font-medium opacity-80">{precio}</span>}
-    </>
-  );
-  const base = `px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-2 border ${pasada ? "opacity-50" : ""}`;
-
-  if (!pase.link_compra) {
-    return <span title={sala || undefined} className={`${base} bg-surface text-muted border-line opacity-60 cursor-default`}>{contenido}</span>;
-  }
-  return (
-    <a
-      href={pase.link_compra}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={sala || undefined}
-      aria-label={`Comprar entrada para las ${hora} en ${cleanCinemaName(cine)}${sala ? `, ${sala}` : ""}${pase.idioma === "VOSE" ? ", VOSE" : ""}${pasada ? ", ya ha empezado" : ""}`}
-      className={`${base} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-        pase.es_evento_especial
-          ? "bg-primary-soft text-primary border-primary hover:bg-primary hover:text-white"
-          : "bg-background text-foreground border-line hover:border-primary hover:text-primary"}`}
-    >
-      {contenido}
-    </a>
+      {guardada && <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-current" />}
+    </button>
   );
 }
 
@@ -327,9 +325,9 @@ function DiaPlegable({ clave, pases, modo, contexto }) {
   );
 }
 
-// Sesiones de la ficha desde hoy a las 00:00: el día destacado abierto (el elegido en la portada o, si no hay,
+// Sesiones de la ficha (de pelicula) desde hoy a las 00:00: el día destacado abierto (el elegido en la portada o, si no hay,
 // el primero con sesiones) y debajo "Otros días" plegados, con "Ver más días".
-export function SesionesPorDias({ pases, modo, contexto = "modal", diaElegido = null }) {
+export function SesionesPorDias({ pases, pelicula, modo, contexto = "modal", diaElegido = null }) {
   const limite = LIMITES[contexto];
   const [todosDias, setTodosDias] = useState(false);
   const id = useId();
@@ -337,6 +335,7 @@ export function SesionesPorDias({ pases, modo, contexto = "modal", diaElegido = 
   hoy.setHours(0, 0, 0, 0);
   const porDia = [...pases]
     .filter((p) => new Date(p.fecha_hora) >= hoy)
+    .map((p) => ({ ...p, pelicula })) // para el modal de la sesión (los pases de /pelicula/{id} no la traen)
     .sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora))
     .reduce((acc, p) => {
       (acc[claveDia(p.fecha_hora)] ||= []).push(p);
