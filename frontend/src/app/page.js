@@ -145,6 +145,12 @@ export default function Home() {
     }
   };
 
+  // Desde el calendario: el mismo efecto que pulsar en la tira, pasando a la página de 7 días que lo contiene
+  const elegirDia = (dateStr) => {
+    setWeekOffset(Math.floor(allDays.indexOf(dateStr) / DAYS_PER_PAGE));
+    setSelectedDate(new Date(dateStr));
+  };
+
   const resetFilters = () => {
     setSelectedCinema("Todos");
     setTimeRange([6, 24]);
@@ -167,11 +173,14 @@ export default function Home() {
       <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mt-8 md:mt-10 max-w-9xl mx-auto w-full sticky top-0 z-40 py-4 bg-background border-b border-line">
         
         {/* SELECTOR DE FECHA (IZQUIERDA) */}
-        <div className="w-full xl:w-auto overflow-x-auto no-scrollbar">
+        {/* Sin overflow aquí: recortaría el calendario; la tira ya se desplaza dentro de DateSelector */}
+        <div className="w-full xl:w-auto min-w-0">
             <DateSelector 
                 visibleDays={visibleDays}
+                allDays={allDays}
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
+                elegirDia={elegirDia}
                 weekOffset={weekOffset}
                 changeWeek={changeWeek}
                 hasMoreDays={hasMoreDays}
