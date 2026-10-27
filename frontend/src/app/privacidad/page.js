@@ -2,7 +2,7 @@ import TodayHeader from "@/components/TodayHeader";
 
 // Email al que escribir para ejercer los derechos: cámbialo solo aquí
 const EMAIL_CONTACTO = "ignacio.diez.vergara@gmail.com";
-const ACTUALIZADA = "24 de octubre de 2026";
+const ACTUALIZADA = "27 de octubre de 2026";
 
 export const metadata = {
   title: "Privacidad - FPS24",
@@ -65,8 +65,15 @@ export default function PrivacidadPage() {
                 cuando quieras y deja de verse al momento.
               </li>
               <li>
-                Tus <strong className="text-foreground">cines favoritos</strong>, si marcas alguno con la ★: son privados y
-                solo los ves tú. Se usan para enseñarte primero sus sesiones; no aparecen en tu perfil público.
+                Opcionalmente, un <strong className="text-foreground">avatar</strong> (tus iniciales sobre un color, o el
+                póster de una película de nuestro catálogo, que viene de TMDB) y tu{" "}
+                <strong className="text-foreground">usuario de Letterboxd</strong>. Solo se ven en tu perfil público, es
+                decir, si tú lo haces público; con el perfil privado no los ve nadie más que tú.
+              </li>
+              <li>
+                Tus <strong className="text-foreground">cines favoritos</strong>, si marcas alguno con la ★: son privados
+                por defecto y se usan para enseñarte primero sus sesiones. Solo aparecen en tu perfil público si lo haces
+                público y activas «Mostrar mis cines favoritos en mi perfil público» (está apagado por defecto).
               </li>
               <li>
                 Si te suscribes a la <strong className="text-foreground">newsletter</strong> «Esta semana en Madrid» (no

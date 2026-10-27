@@ -9,7 +9,7 @@ import subprocess
 import sys
 import threading
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -23,7 +23,8 @@ from sqlmodel import Session, delete, select
 from app import perfil as modulo
 from app.auth import Usuario, usuario_actual
 from app.database.engine import engine
-from app.database.models import Cine, DiarioEntrada, Pelicula, Perfil
+from app.services.tiempo import hoy_madrid
+from app.database.models import Cine, CineFavorito, DiarioEntrada, Pelicula, Perfil
 from main import app
 
 if engine.url.host not in ("db", "localhost", "127.0.0.1"):
@@ -64,6 +65,7 @@ def ok(esperado, resultado, que):
 
 A, B, C, D = (uuid.uuid4() for _ in range(4))
 PRUEBA = [A, B, C, D]
+PELIS = []  # ids de las películas de prueba, para borrarlas al final
 sufijo = uuid.uuid4().hex[:6]
 NOMBRE_A, NOMBRE_B = f"chk.ana_{sufijo}", f"chk_bea{sufijo}"
 actual = {"id": A}
@@ -125,8 +127,11 @@ try:
     print("OK: privado e inexistente, mismo 404")
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "Cine de barrio", "visibilidad": "publico"}), "hacerlo público")
     publico = ok(200, llamar("GET", f"/u/{NOMBRE_A.upper()}"), "público, sin mayúsculas")
-    # ni user_id, ni email, ni fechas; sin diario mientras no se active
-    assert publico == {"usuario": NOMBRE_A, "bio": "Cine de barrio", "diario_publico": False, "diario": None}, publico
+    # ni user_id, ni email, ni fechas; sin diario ni cines mientras no se activen
+    color = modulo.color_avatar(Perfil(usuario=NOMBRE_A))
+    assert publico == {"usuario": NOMBRE_A, "bio": "Cine de barrio", "diario_publico": False, "diario": None, "cines": None, "cifras": None,
+                       "letterboxd_usuario": None, "avatar": {"tipo": "iniciales", "color": color,
+                                                              "fondo": modulo.PALETA_AVATAR[color], "poster_url": None}}, publico
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "Cine de barrio"}), "PUT sin visibilidad")
     assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # PUT sin visibilidad vuelve a privado
     app.dependency_overrides.clear()  # sin sesión: el público sigue respondiendo; los demás no
@@ -180,6 +185,23 @@ try:
     assert ok(200, llamar("GET", f"/u/{NOMBRE_A}?pagina=3"), "página 3")["diario"]["entradas"] == []
     # pagina no válida: 422 igual para cualquier nombre, antes de buscar el perfil (no distingue privado de inexistente)
     assert llamar("GET", f"/u/{NOMBRE_A}?pagina=0")[0] == llamar("GET", f"/u/nadie_{sufijo}?pagina=0")[0] == 422
+    # Póster e id de la película en cada entrada (para enlazar a /pelicula/<id>), sin nada más de la película interna
+    assert {"id", "titulo", "poster_url"} <= set(primera["pelicula"]), primera["pelicula"]
+    # Cifras: total y este año (Madrid), en /u y en mi /diario; una entrada de hoy cuenta, una del 31-dic anterior no
+    enero = date(hoy_madrid().year, 1, 1)
+    with Session(engine) as session:
+        session.add_all([DiarioEntrada(user_id=A, pelicula_id=peli_id, fecha_vista=hoy_madrid()),
+                         DiarioEntrada(user_id=A, pelicula_id=peli_id, fecha_vista=enero - timedelta(days=1))])
+        session.commit()
+    fechas_a = [hoy - timedelta(days=i) for i in range(31)] + [hoy_madrid(), enero - timedelta(days=1)]
+    esperadas = {"entradas": len(fechas_a), "este_anio": sum(f >= enero for f in fechas_a)}
+    assert ok(200, llamar("GET", f"/u/{NOMBRE_A}"), "cifras")["cifras"] == esperadas, esperadas
+    mi_diario = ok(200, llamar("GET", "/diario?limite=1"), "mi diario con cifras")
+    assert (mi_diario["total"], mi_diario["este_anio"]) == (esperadas["entradas"], esperadas["este_anio"]), mi_diario
+    with Session(engine) as session:
+        session.exec(delete(DiarioEntrada).where(DiarioEntrada.user_id == A, DiarioEntrada.fecha_vista.in_([hoy_madrid(), enero - timedelta(days=1)])))
+        session.commit()
+    print("OK: cifras (total y este año en Madrid) y póster/id en las entradas")
     # Al momento: apagarlo, o pasar a privado, lo oculta en la siguiente petición
     poner("publico", False)
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["diario"] is None
@@ -190,6 +212,96 @@ try:
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": "publico"}), "PUT sin diario_publico")
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["diario"] is None  # sin el campo, se apaga
     print("OK: diario en el perfil público (oculto si privado o apagado, paginado, sin campos internos, al momento)")
+
+    # --- Avatar, Letterboxd y cines favoritos en el perfil público ---
+    with Session(engine) as session:
+        con_poster = Pelicula(titulo=f"chk_con_poster_{sufijo}", poster_url="https://image.tmdb.org/t/p/w500/chk.jpg")
+        sin_poster = Pelicula(titulo=f"chk_sin_poster_{sufijo}")
+        borrable = Pelicula(titulo=f"chk_borrable_{sufijo}", poster_url="https://image.tmdb.org/t/p/w500/chk2.jpg")
+        session.add_all([con_poster, sin_poster, borrable])
+        session.commit()
+        PELIS.extend([con_poster.id, sin_poster.id, borrable.id])
+        con_poster_id, sin_poster_id, borrable_id = con_poster.id, sin_poster.id, borrable.id
+        cines = session.exec(select(Cine).order_by(Cine.id).limit(3)).all()
+        assert len(cines) == 3, "hacen falta 3 cines en la BD local"
+        for i, (uid, c) in enumerate([(A, cines[1]), (A, cines[0]), (B, cines[2])]):  # A: primero el 1, luego el 0
+            session.add(CineFavorito(user_id=uid, cine_id=c.id, creado_en=datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=i)))
+        session.commit()
+        cines_a = [{"slug": c.slug, "nombre": c.nombre, "zona": c.zona} for c in (cines[1], cines[0])]
+        slug_de_b = cines[2].slug
+
+    def guardar_a(codigo=200, visibilidad="publico", **extra):
+        return ok(codigo, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": visibilidad, **extra}), f"PUT {extra}")
+
+    # Letterboxd: el usuario tal cual (con sus mayúsculas), o sacado de la URL de su perfil
+    lb = modulo.validar_letterboxd
+    for entrada, esperado in [("Ana_Diez", "Ana_Diez"), ("  @cine_fan ", "cine_fan"), ("https://letterboxd.com/Ana_Diez/", "Ana_Diez"),
+                              ("letterboxd.com/ana", "ana"), ("http://www.letterboxd.com/ana/films/diary/", "ana"),
+                              ("HTTPS://LETTERBOXD.COM/ana?x=1", "ana"), ("ab", "ab"), ("x" * 20, "x" * 20),
+                              ("", None), ("   ", None), (None, None)]:
+        assert lb(entrada) == (esperado, None), (entrada, lb(entrada))
+    for malo in ("a", "x" * 21, "ana diez", "ana.diez", "añil", "ana-diez", "<script>", "https://letterboxd.com/film/dune/",
+                 "https://letterboxd.com/", "https://boxd.it/abc", "https://otra.com/ana", "letterboxd.com.mal.es/ana"):
+        assert lb(malo) == (None, modulo.ERROR_LETTERBOXD), (malo, lb(malo))
+    assert "Letterboxd" in guardar_a(422, letterboxd_usuario="ana diez")["detail"]
+    assert guardar_a(letterboxd_usuario="https://letterboxd.com/Ana_Diez/")["letterboxd_usuario"] == "Ana_Diez"
+    print("OK: Letterboxd (usuario o URL, se guarda tal cual)")
+
+    # Paleta: 6-8 colores, todos legibles con texto blanco (contraste WCAG >= 4.5)
+    def luminancia(hexa):
+        c = [int(hexa[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    assert 6 <= len(modulo.PALETA_AVATAR) <= 8
+    for nombre, hexa in modulo.PALETA_AVATAR.items():
+        assert 1.05 / (luminancia(hexa) + 0.05) >= 4.5, (nombre, hexa)
+    assert modulo.color_avatar(Perfil(usuario="Ana")) == modulo.color_avatar(Perfil(usuario="ana"))  # determinista
+    assert "paleta" in guardar_a(422, avatar_color="#ff0000")["detail"]
+    assert "paleta" in guardar_a(422, avatar_color="dorado")["detail"]
+    mio = guardar_a(avatar_color="azul")
+    assert mio["avatar"] == {"tipo": "iniciales", "color": "azul", "fondo": modulo.PALETA_AVATAR["azul"], "poster_url": None}
+    assert ok(200, llamar("GET", "/me/perfil"), "GET /me/perfil")["paleta_avatar"] == modulo.PALETA_AVATAR
+    print("OK: paleta (contraste, determinista y solo sus colores)")
+
+    # Avatar de película: solo de nuestra BD y con póster
+    for extra in (dict(), dict(avatar_pelicula_id=sin_poster_id), dict(avatar_pelicula_id=2_000_000_000)):
+        assert "póster" in guardar_a(422, avatar_tipo="pelicula", **extra)["detail"], extra
+    ok(422, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "avatar_tipo": "foto"}), "avatar_tipo desconocido")
+    mio = guardar_a(avatar_tipo="pelicula", avatar_pelicula_id=con_poster_id, avatar_color="verde")
+    assert mio["avatar_pelicula_id"] == con_poster_id and mio["avatar"]["tipo"] == "pelicula"
+    assert llamar("GET", f"/u/{NOMBRE_A}")[1]["avatar"] == {"tipo": "pelicula", "color": "verde", "fondo": modulo.PALETA_AVATAR["verde"],
+                                                           "poster_url": "https://image.tmdb.org/t/p/w500/chk.jpg"}
+    # con iniciales no se guarda la película
+    assert guardar_a(avatar_tipo="iniciales", avatar_pelicula_id=con_poster_id)["avatar_pelicula_id"] is None
+    # si la película se borra (ON DELETE SET NULL), vuelve a las iniciales
+    guardar_a(avatar_tipo="pelicula", avatar_pelicula_id=borrable_id)
+    with Session(engine) as session:
+        session.exec(delete(Pelicula).where(Pelicula.id == borrable_id))
+        session.commit()
+    mio = ok(200, llamar("GET", "/me/perfil"), "tras borrar la película")
+    assert mio["avatar_pelicula_id"] is None and mio["avatar"]["tipo"] == "iniciales", mio
+    print("OK: avatar de película (válida, sin póster, inexistente, borrada)")
+
+    # Cines: solo con el interruptor Y el perfil público; los de A, en su orden, sin los de B
+    guardar_a(cines_publicos=False)
+    assert llamar("GET", f"/u/{NOMBRE_A}")[1]["cines"] is None
+    guardar_a(cines_publicos=True, letterboxd_usuario="Ana_Diez", avatar_tipo="pelicula", avatar_pelicula_id=con_poster_id)
+    completo = ok(200, llamar("GET", f"/u/{NOMBRE_A}"), "público con cines")
+    assert completo["cines"] == cines_a, completo["cines"]
+    assert guardar_a(visibilidad="privado", cines_publicos=True)["cines_publicos"] is True
+    assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # privado: 404 aunque cines_publicos
+    guardar_a(visibilidad="publico")
+    assert llamar("GET", f"/u/{NOMBRE_A}")[1]["cines"] is None  # PUT sin el campo: se apaga
+    # Nada interno en el público
+    assert set(completo) == {"usuario", "bio", "avatar", "letterboxd_usuario", "diario_publico", "diario", "cines", "cifras"}, completo
+    assert completo["cifras"] is None and set(completo["cines"][0]) == {"slug", "nombre", "zona"}  # diario apagado: sin cifras
+    assert set(completo["avatar"]) == {"tipo", "color", "fondo", "poster_url"}
+    texto = json.dumps(completo)
+    for prohibido in (str(A), str(B), "a@ejemplo.es", "user_id", "email", "creado_en", "cines_publicos", "avatar_pelicula_id",
+                      "paleta", "visibilidad", f'"id": {con_poster_id}', f'"{slug_de_b}"'):
+        assert prohibido not in texto, prohibido
+    print("OK: cines en el perfil público (solo con interruptor y perfil público) y sin campos internos")
+    guardar_a(visibilidad="privado")
 
     # --- Cambiar de nombre libera el anterior ---
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A + "x"}), "cambiar de nombre")
@@ -238,7 +350,9 @@ try:
     # --- La tabla: UNIQUE en minúsculas, CHECK y RLS/REVOKE ---
     for valores, restriccion in [(dict(usuario=NOMBRE_A.upper()), "uq_perfil_usuario"),
                                  (dict(usuario=f"chk_bio{sufijo}", bio="x" * 161), "ck_perfil_bio"),
-                                 (dict(usuario=f"chk_vis{sufijo}", visibilidad="amigos"), "ck_perfil_visibilidad")]:
+                                 (dict(usuario=f"chk_vis{sufijo}", visibilidad="amigos"), "ck_perfil_visibilidad"),
+                                 (dict(usuario=f"chk_ava{sufijo}", avatar_tipo="foto"), "ck_perfil_avatar_tipo"),
+                                 (dict(usuario=f"chk_lbx{sufijo}", letterboxd_usuario="ana diez"), "ck_perfil_letterboxd")]:
         with Session(engine) as session:
             session.add(Perfil(user_id=D, **valores))
             try:
@@ -272,6 +386,8 @@ finally:
     app.dependency_overrides.clear()
     with Session(engine) as session:
         session.exec(delete(DiarioEntrada).where(DiarioEntrada.user_id.in_(PRUEBA)))
+        session.exec(delete(CineFavorito).where(CineFavorito.user_id.in_(PRUEBA)))
+        session.exec(delete(Pelicula).where(Pelicula.id.in_(PELIS)))
         borrados = session.exec(delete(Perfil).where(Perfil.user_id.in_(PRUEBA))).rowcount
         session.commit()
         assert not session.exec(select(Perfil).where(Perfil.user_id.in_(PRUEBA))).all()
