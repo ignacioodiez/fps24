@@ -53,7 +53,7 @@ export default function AuthProvider({ children }) {
     let vigente = true;
     leerPerfil()
       .then((datos) => vigente && setPerfil({ uid, datos }))
-      .catch(() => vigente && setPerfil({ uid, datos: { usuario: null } })); // sin poder leerlo, como si no tuviera
+      .catch(() => vigente && setPerfil({ uid, datos: { usuario: null, error: true } })); // sin poder leerlo: como si no tuviera, pero sin pedirle nombre
     return () => { vigente = false; };
   }, [uid]);
   // undefined: aún no se sabe; null: sin sesión; si no, el perfil (usuario null = aún no lo ha creado)
@@ -81,12 +81,15 @@ export default function AuthProvider({ children }) {
     return () => delete window.comprobarMe;
   }, [usuario]);
 
-  const entrar = async (email) => {
+  // Solo "Crear cuenta" (usuario: el nombre elegido) crea cuentas; viaja en los metadatos de la cuenta nueva y se reclama
+  // en el primer inicio de sesión (ElegirUsuario). Sin usuario es "Iniciar sesión": shouldCreateUser false, y un correo
+  // sin cuenta no es un error (la respuesta no dice si existe).
+  const entrar = async (email, usuario = "") => {
     const { error } = await supabase().auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: Boolean(usuario), ...(usuario && { data: { usuario } }) },
     });
-    if (error) throw error;
+    if (error && !(!usuario && (error.code === "otp_disabled" || /signups not allowed/i.test(error.message)))) throw error;
   };
 
   // Redirige a Google; vuelve a la misma página y onAuthStateChange recoge la sesión
@@ -107,8 +110,9 @@ export default function AuthProvider({ children }) {
     if (error) throw error;
   };
 
-  // Objeto nuevo en cada llamada: dos peticiones seguidas con el mismo mensaje vuelven a abrir el panel
-  const abrirLogin = (mensaje = "") => setPeticionLogin({ mensaje });
+  // Objeto nuevo en cada llamada: dos peticiones seguidas con el mismo mensaje vuelven a abrir el panel.
+  // modo: "entrar" o "crear" (Crear cuenta: el mismo panel con el campo del nombre de usuario)
+  const abrirLogin = (mensaje = "", modo = "entrar") => setPeticionLogin({ mensaje, modo });
 
   const salir = async () => {
     await supabase()?.auth.signOut();

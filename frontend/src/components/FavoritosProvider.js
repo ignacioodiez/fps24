@@ -21,8 +21,8 @@ async function pedir(ruta, opciones) {
 }
 
 export default function FavoritosProvider({ children }) {
-  const { usuario, abrirLogin } = useAuth();
-  const uid = usuario?.id;
+  const { usuario, abrirLogin, miPerfil } = useAuth();
+  const uid = miPerfil?.usuario ? usuario?.id : undefined; // sin nombre de usuario la API los cierra (403): se espera a tenerlo
   // Guardados con el usuario al que pertenecen: los de otra cuenta nunca se usan
   const [estado, setEstado] = useState({ uid: null, slugs: null });
   const [aviso, setAviso] = useState("");

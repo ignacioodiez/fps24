@@ -4,11 +4,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import Avatar, { AtribucionPoster } from "@/components/Avatar";
 import BuscadorPeliculas from "@/components/BuscadorPeliculas";
+import CampoUsuario from "@/components/CampoUsuario";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO, CAMPO, ETIQUETA } from "@/components/DialogoDiario";
 import { leerLetterboxd } from "@/lib/letterboxd";
-import { BIO_MAX, comprobarUsuario, guardarPerfil, leerPerfil } from "@/lib/perfil";
-
-const ESPERA_MS = 400; // debounce de la comprobación de disponibilidad
+import { BIO_MAX, guardarPerfil, leerPerfil, useDisponibilidad } from "@/lib/perfil";
 
 const NIVELES = [["privado", "Privado"], ["amigos", "Solo amigos"], ["publico", "Público"]]; // de más cerrado a más abierto
 const orden = (nivel) => NIVELES.findIndex(([n]) => n === nivel);
@@ -55,8 +54,8 @@ function Muestra({ nombre, valor, elegido, onElegir, etiqueta, children, style }
   );
 }
 
-// Nombre de usuario, bio, avatar, Letterboxd y quién ve el perfil, el diario y los cines (todo privado por defecto).
-// Se guarda todo junto con "Guardar perfil".
+// Avatar, nombre de usuario, bio y Letterboxd; al pie, en "Privacidad", quién ve el perfil, el diario y los cines (todo
+// privado por defecto). Se guarda todo junto con "Guardar perfil".
 export default function TarjetaPerfilPublico() {
   const { setMiPerfil } = useAuth();
   const [guardado, setGuardado] = useState(null); // el de GET /me/perfil; null mientras carga
@@ -70,7 +69,6 @@ export default function TarjetaPerfilPublico() {
   const [peliAvatar, setPeliAvatar] = useState(null); // { id, poster_url, titulo? }
   const [errorPeli, setErrorPeli] = useState("");
   const [letterboxd, setLetterboxd] = useState("");
-  const [comprobacion, setComprobacion] = useState({ estado: "nada", motivo: "" }); // nada | comprobando | libre | no | error
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
@@ -106,24 +104,8 @@ export default function TarjetaPerfilPublico() {
     if (sinUsuario) campoUsuario.current?.focus();
   }, [sinUsuario]);
 
-  // Disponibilidad con debounce; la petición anterior se cancela al seguir escribiendo
-  useEffect(() => {
-    if (!guardado || !usuario || usuario === guardado.usuario) {
-      setComprobacion({ estado: "nada", motivo: "" });
-      return;
-    }
-    const control = new AbortController();
-    const t = setTimeout(() => {
-      setComprobacion({ estado: "comprobando", motivo: "" });
-      comprobarUsuario(usuario, control.signal)
-        .then((r) => setComprobacion(r.disponible ? { estado: "libre", motivo: "Disponible" } : { estado: "no", motivo: r.motivo }))
-        .catch((err) => err.name !== "AbortError" && setComprobacion({ estado: "error", motivo: err.message }));
-    }, ESPERA_MS);
-    return () => {
-      clearTimeout(t);
-      control.abort();
-    };
-  }, [usuario, guardado]);
+  // Disponibilidad al instante; su nombre actual no se comprueba
+  const comprobacion = useDisponibilidad(guardado ? usuario : "", guardado?.usuario);
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -175,40 +157,12 @@ export default function TarjetaPerfilPublico() {
     } else setErrorPeli(`«${p.titulo}» no tiene póster: elige otra película.`);
   };
 
-  const colorComprobacion = { libre: "text-green-700", no: "text-red-600", error: "text-red-600" }[comprobacion.estado] ?? "text-muted";
-
   return (
     <section aria-labelledby={`${id}-titulo`} className="mb-6 border border-line bg-surface p-4 md:p-5">
       <h3 id={`${id}-titulo`} className="text-xl font-display font-bold uppercase text-foreground">Tu perfil</h3>
-      <p className="mt-1 text-sm text-muted">Elige un nombre de usuario y decide quién puede verlo.</p>
+      <p className="mt-1 text-sm text-muted">Tu avatar, tu nombre de usuario y lo que cuentas de ti. Quién lo ve, al final.</p>
 
       <form onSubmit={guardar} className="mt-4 space-y-4">
-        <div>
-          <label htmlFor={`${id}-usuario`} className={ETIQUETA}>Nombre de usuario</label>
-          <input
-            ref={campoUsuario} id={`${id}-usuario`} type="text" required minLength={3} maxLength={20} value={usuario}
-            onChange={(e) => setUsuario(e.target.value.toLowerCase())}
-            autoComplete="off" autoCapitalize="none" spellCheck={false}
-            aria-describedby={`${id}-reglas ${id}-disponible`} aria-invalid={comprobacion.estado === "no"}
-            className={CAMPO}
-          />
-          <p id={`${id}-reglas`} className="mt-1 text-xs text-muted">
-            De 3 a 20 caracteres: letras sin tildes, números, punto y guion bajo.
-          </p>
-          <p id={`${id}-disponible`} aria-live="polite" className={`mt-1 text-sm font-semibold min-h-5 ${colorComprobacion}`}>
-            {comprobacion.estado === "comprobando" ? "Comprobando…" : comprobacion.motivo}
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor={`${id}-bio`} className={ETIQUETA}>Bio</label>
-          <textarea
-            id={`${id}-bio`} rows={2} maxLength={BIO_MAX} value={bio} onChange={(e) => setBio(e.target.value)}
-            aria-describedby={`${id}-contador`} className={`${CAMPO} resize-y`}
-          />
-          <p id={`${id}-contador`} className="mt-1 text-xs text-muted text-right">{bio.length}/{BIO_MAX}</p>
-        </div>
-
         <fieldset>
           <legend className={ETIQUETA}>Avatar</legend>
           <div className="flex flex-col sm:flex-row sm:items-start gap-4">
@@ -249,6 +203,17 @@ export default function TarjetaPerfilPublico() {
           </div>
         </fieldset>
 
+        <CampoUsuario id={id} valor={usuario} onCambiar={setUsuario} comprobacion={comprobacion} campoRef={campoUsuario} required />
+
+        <div>
+          <label htmlFor={`${id}-bio`} className={ETIQUETA}>Bio</label>
+          <textarea
+            id={`${id}-bio`} rows={2} maxLength={BIO_MAX} value={bio} onChange={(e) => setBio(e.target.value)}
+            aria-describedby={`${id}-contador`} className={`${CAMPO} resize-y`}
+          />
+          <p id={`${id}-contador`} className="mt-1 text-xs text-muted text-right">{bio.length}/{BIO_MAX}</p>
+        </div>
+
         <div>
           <label htmlFor={`${id}-letterboxd`} className={ETIQUETA}>Letterboxd (opcional)</label>
           <input
@@ -261,34 +226,42 @@ export default function TarjetaPerfilPublico() {
           </p>
         </div>
 
-        <SelectorNivel id={`${id}-visibilidad`} titulo="¿Quién ve tu perfil?" valor={visibilidad} onCambiar={setVisibilidad} explicaciones={{
-          privado: "Solo tú. Los demás, también tus amigos, verán «Este perfil no existe o es privado».",
-          amigos: "Tus amigos ven tu nombre de usuario, tu avatar, tu bio y tu Letterboxd; los demás, solo tu nombre y tu avatar, para poder añadirte.",
-          publico: "Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd.",
-        }} />
-
-        <SelectorNivel id={`${id}-diario`} titulo="¿Quién ve tu diario?" valor={diario} onCambiar={setDiario} tope={visibilidad} explicaciones={{
-          privado: "Solo tú.",
-          amigos: "Tus amigos ven todas tus entradas, incluidas tus notas.",
-          publico: "Cualquiera con tu enlace ve todas tus entradas, incluidas tus notas.",
-        }} />
-
-        <SelectorNivel id={`${id}-cines`} titulo="¿Quién ve tus cines favoritos?" valor={cines} onCambiar={setCines} tope={visibilidad} explicaciones={{
-          privado: "Solo tú.",
-          amigos: "Tus amigos ven la lista de los cines que has marcado con la ★.",
-          publico: "Cualquiera con tu enlace ve la lista de los cines que has marcado con la ★.",
-        }} />
-
         {guardado.usuario && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted">Tu enlace:</span>
             <a href={`/u/${guardado.usuario}`} className="font-bold text-primary hover:underline break-all">fps24.es/u/{guardado.usuario}</a>
             <button type="button" onClick={copiar} className={BOTON_SECUNDARIO}>Copiar enlace</button>
-            {guardado.visibilidad === "privado" && (
-              <p className="w-full text-xs text-muted">Mientras sea privado, quien abra el enlace verá «Este perfil no existe o es privado».</p>
-            )}
           </div>
         )}
+
+        <section aria-labelledby={`${id}-privacidad`} className="space-y-4 border-t border-line pt-4">
+          <div>
+            <h4 id={`${id}-privacidad`} className="text-lg font-display font-bold uppercase text-foreground">Privacidad</h4>
+            <p className="mt-1 text-sm text-muted">
+              Todo es privado hasta que tú lo cambies. Tu nombre de usuario no es secreto; lo que proteges aquí es lo que hay en tu perfil.
+            </p>
+            {guardado.visibilidad === "privado" && (
+              <p className="mt-1 text-xs text-muted">Mientras sea privado, quien abra tu enlace verá «Este perfil no existe o es privado».</p>
+            )}
+          </div>
+          <SelectorNivel id={`${id}-visibilidad`} titulo="¿Quién ve tu perfil?" valor={visibilidad} onCambiar={setVisibilidad} explicaciones={{
+            privado: "Solo tú. Los demás, también tus amigos, verán «Este perfil no existe o es privado».",
+            amigos: "Tus amigos ven tu nombre de usuario, tu avatar, tu bio y tu Letterboxd; los demás, solo tu nombre y tu avatar, para poder añadirte.",
+            publico: "Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd.",
+          }} />
+
+          <SelectorNivel id={`${id}-diario`} titulo="¿Quién ve tu diario?" valor={diario} onCambiar={setDiario} tope={visibilidad} explicaciones={{
+            privado: "Solo tú.",
+            amigos: "Tus amigos ven todas tus entradas, incluidas tus notas.",
+            publico: "Cualquiera con tu enlace ve todas tus entradas, incluidas tus notas.",
+          }} />
+
+          <SelectorNivel id={`${id}-cines`} titulo="¿Quién ve tus cines favoritos?" valor={cines} onCambiar={setCines} tope={visibilidad} explicaciones={{
+            privado: "Solo tú.",
+            amigos: "Tus amigos ven la lista de los cines que has marcado con la ★.",
+            publico: "Cualquiera con tu enlace ve la lista de los cines que has marcado con la ★.",
+          }} />
+        </section>
 
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <div className="flex flex-wrap items-center gap-3">

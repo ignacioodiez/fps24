@@ -1,7 +1,9 @@
 """Perfil: nombre de usuario único y visibilidad (privado por defecto). Lo edita solo su dueño (user_id del token);
 GET /u/{usuario} solo enseña usuario, bio, avatar, Letterboxd y, según lo que el dueño elija (privado, solo amigos o
 público), su diario y sus cines favoritos; con el mismo 404 para un perfil privado, uno inexistente y quien está
-bloqueado por el dueño. Nunca devuelve user_id, email ni ids de las entradas."""
+bloqueado por el dueño. Nunca devuelve user_id, email ni ids de las entradas.
+El nombre se guarda con las mayúsculas que elige su dueño, pero es único y se busca sin distinguirlas (uq_perfil_usuario
+es sobre lower(usuario))."""
 import re
 import time
 import zlib
@@ -9,7 +11,7 @@ from collections import defaultdict, deque
 from datetime import date, datetime
 from typing import Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.dialects.postgresql import insert
@@ -51,21 +53,23 @@ NIVELES = ("privado", "amigos", "publico")  # de más cerrado a más abierto
 Nivel = Literal["privado", "amigos", "publico"]
 SIN_CACHE = {"Cache-Control": "private, no-store"}  # /u depende de quién mira: nunca en una caché compartida
 PERFIL_INEXISTENTE = HTTPException(status_code=404, detail="Este perfil no existe o es privado", headers=SIN_CACHE)
+RESERVADO = "Ese nombre de usuario está reservado"
 
 
 def validar_usuario(texto: str) -> tuple:
-    """Nombre de usuario -> (en minúsculas, motivo del rechazo o None). La única fuente de las reglas."""
-    usuario = (texto or "").strip().lower()
+    """Nombre de usuario -> (sin espacios, con sus mayúsculas; motivo del rechazo o None). La única fuente de las reglas
+    (el formato está copiado en frontend/src/lib/perfil.js para avisar al momento)."""
+    usuario = (texto or "").strip()
     if not USUARIO_MIN <= len(usuario) <= USUARIO_MAX:
         return usuario, f"El nombre de usuario debe tener entre {USUARIO_MIN} y {USUARIO_MAX} caracteres"
-    if not re.fullmatch(r"[a-z0-9._]+", usuario):
-        return usuario, "Solo puede tener letras sin tildes (a-z), números, punto y guion bajo"
+    if not re.fullmatch(r"[A-Za-z0-9._]+", usuario):
+        return usuario, "Solo puede tener letras sin tildes, números, punto y guion bajo"
     if usuario[0] in "._" or usuario[-1] in "._":
         return usuario, "No puede empezar ni acabar en punto o guion bajo"
     if ".." in usuario:
         return usuario, "No puede tener dos puntos seguidos"
-    if usuario in RESERVADOS:
-        return usuario, "Ese nombre de usuario está reservado"
+    if usuario.lower() in RESERVADOS:
+        return usuario, RESERVADO
     return usuario, None
 
 
@@ -158,6 +162,7 @@ class PerfilPublico(SQLModel):
     diario: Optional[DiarioPublico] = None
     cines: Optional[List[CinePublico]] = None  # sus cines favoritos, si quien mira puede verlos
     # Perfil "amigos" visto por quien no es su amigo: solo usuario y avatar (lo demás va vacío)
+    amigos: Optional[int] = None  # nº de amistades aceptadas: solo si quien mira ve el perfil completo
     restringido: bool = False
     # Con sesión: ninguna | enviada | recibida | amigos | bloqueado (lo he bloqueado yo) | yo. Sin sesión, None.
     relacion: Optional[str] = None
@@ -165,22 +170,48 @@ class PerfilPublico(SQLModel):
 
 class Disponible(SQLModel):
     disponible: bool
-    motivo: Optional[str] = None
+    motivo: Optional[str] = None  # solo si el formato no es válido
 
 
 # shortcut: límite en memoria por proceso (se reinicia con la API y se multiplica por nº de workers); si hay
 # varias instancias, pasarlo a la BD o a Redis
 LIMITE_DISPONIBLE, VENTANA_S = 30, 60
-_consultas = defaultdict(deque)  # user_id -> instantes de sus últimas consultas
+MAX_IPS = 10_000  # tope de IPs recordadas: al pasarlo se olvidan todas (la memoria no crece sin fin)
+PROXIES_DE_CONFIANZA = 1  # el de Render, que añade al final de X-Forwarded-For la IP desde la que le llega la petición
+_consultas = defaultdict(deque)  # IP -> instantes de sus últimas consultas
 
 
-def _limitar(user_id: str):
-    ahora, consultas = time.monotonic(), _consultas[user_id]
+def ip_cliente(request: Request) -> str:
+    """La IP que vio el último proxy de confianza: la entrada que él añadió al final de X-Forwarded-For. Las de antes
+    las escribe el cliente y se pueden falsear. Sin la cabecera (local), la de la conexión."""
+    saltos = [s.strip() for s in request.headers.get("x-forwarded-for", "").split(",") if s.strip()]
+    if len(saltos) >= PROXIES_DE_CONFIANZA:
+        return saltos[-PROXIES_DE_CONFIANZA]
+    return request.client.host if request.client else ""
+
+
+def _limitar(clave: str):
+    if len(_consultas) > MAX_IPS:
+        _consultas.clear()
+    ahora, consultas = time.monotonic(), _consultas[clave]
     while consultas and ahora - consultas[0] > VENTANA_S:
         consultas.popleft()
     if len(consultas) >= LIMITE_DISPONIBLE:
-        raise HTTPException(status_code=429, detail="Demasiadas comprobaciones seguidas. Espera un minuto.")
+        raise HTTPException(status_code=429, detail="Demasiadas comprobaciones seguidas. Espera un minuto.",
+                            headers={"Retry-After": str(VENTANA_S), "Cache-Control": "no-store"})
     consultas.append(ahora)
+
+
+SIN_NOMBRE = "Elige tu nombre de usuario para seguir: sin él no puedes usar tu diario, tus cines, tus sesiones ni tus amigos"
+
+
+def usuario_con_nombre(usuario: Usuario = Depends(usuario_actual), session: Session = Depends(get_session)) -> Usuario:
+    """Puerta común de lo privado (main.py la pone en los routers de diario, favoritos, sesiones y amigos): sesión
+    válida y perfil (perfil.usuario es NOT NULL: tener perfil es tener nombre). Sin él, 403. Quedan fuera GET y PUT
+    /me/perfil (saber que falta y reclamarlo), /me y lo público."""
+    if session.get(Perfil, _uid(usuario)) is None:
+        raise HTTPException(status_code=403, detail=SIN_NOMBRE)
+    return usuario
 
 
 def _por_nombre(session: Session, usuario: str) -> Optional[Perfil]:
@@ -251,17 +282,19 @@ def guardar_mi_perfil(datos: PerfilGuardar, usuario: Usuario = Depends(usuario_a
     return _salida(session, session.get(Perfil, _uid(usuario)))
 
 
-@router.get("/usuarios/disponible", response_model=Disponible)
-def usuario_disponible(u: str = Query(""), usuario: Usuario = Depends(usuario_actual),
-                       session: Session = Depends(get_session)):
-    _limitar(usuario.id)
-    nombre, motivo = validar_usuario(u)
-    if motivo:
+# Público (para elegir nombre antes de tener cuenta). Solo {"disponible"} y, si el formato no vale, el motivo: reservado
+# y ocupado responden igual, y nada del perfil. Con sesión, el nombre propio (con cualquier capitalización) está libre.
+@router.get("/usuarios/disponible", response_model=Disponible, response_model_exclude_none=True)
+def usuario_disponible(request: Request, response: Response, nombre: str = Query("", max_length=200),
+                       visitante: Optional[Usuario] = Depends(usuario_opcional), session: Session = Depends(get_session)):
+    response.headers["Cache-Control"] = "no-store"
+    _limitar(ip_cliente(request))
+    nombre, motivo = validar_usuario(nombre)
+    if motivo and motivo != RESERVADO:
         return Disponible(disponible=False, motivo=motivo)
-    dueno = _por_nombre(session, nombre)
-    if dueno and dueno.user_id != _uid(usuario):
-        return Disponible(disponible=False, motivo="Ese nombre de usuario ya está en uso")
-    return Disponible(disponible=True)
+    dueno = None if motivo else _por_nombre(session, nombre)
+    libre = not motivo and (dueno is None or (visitante is not None and dueno.user_id == _uid(visitante)))
+    return Disponible(disponible=libre)
 
 
 def relacion(session: Session, yo, otro) -> str:
@@ -299,7 +332,9 @@ def leer_perfil_publico(usuario: str, response: Response, pagina: int = Query(1,
         return PerfilPublico(usuario=perfil.usuario, avatar=_avatar(session, perfil), restringido=True, relacion=rel)
     salida = PerfilPublico(usuario=perfil.usuario, bio=perfil.bio, avatar=_avatar(session, perfil),
                            letterboxd_usuario=perfil.letterboxd_usuario, diario_publico=ve(perfil.diario_visibilidad),
-                           relacion=rel)
+                           relacion=rel, amigos=session.exec(select(func.count()).where(
+                               Amistad.estado == "aceptada",
+                               or_(Amistad.solicitante_id == perfil.user_id, Amistad.destinatario_id == perfil.user_id))).one())
     if ve(perfil.cines_visibilidad):
         salida.cines = [CinePublico(slug=slug, nombre=nombre, zona=zona) for slug, nombre, zona in session.exec(
             select(Cine.slug, Cine.nombre, Cine.zona).join(CineFavorito, CineFavorito.cine_id == Cine.id)

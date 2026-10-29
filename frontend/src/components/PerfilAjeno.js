@@ -174,6 +174,7 @@ export default function PerfilAjeno({ inicial, pestana, pagina = 1 }) {
     entradas: perfil.cifras?.entradas,
     este_anio: perfil.cifras?.este_anio,
     cines: perfil.cines ? perfil.cines.length : undefined,
+    amigos: perfil.amigos, // null si quien mira no ve el perfil completo
   };
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">

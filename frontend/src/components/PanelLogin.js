@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
+import CampoUsuario from "@/components/CampoUsuario";
+import { guardarPerfil, useDisponibilidad } from "@/lib/perfil";
+import { motivoFormato } from "@/lib/usuario";
 
 const BOTON = "w-full px-4 py-2 rounded-full bg-primary text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60";
 
@@ -14,6 +17,23 @@ function mensajeError(error) {
     return "Ese email no parece válido. Revísalo.";
   }
   return "No hemos podido enviar el enlace. Inténtalo de nuevo.";
+}
+
+// Nombre elegido en "Crear cuenta" para entrar con Google (con el email viaja en los metadatos de la cuenta): se guarda
+// aquí hasta el primer inicio de sesión, donde lo reclama ElegirUsuario. Sin almacenamiento (modo privado), se pide luego.
+const CLAVE_ELEGIDO = "fps24:usuario-elegido";
+function leerElegido() {
+  try {
+    return localStorage.getItem(CLAVE_ELEGIDO) ?? "";
+  } catch {
+    return "";
+  }
+}
+function guardarElegido(nombre) {
+  try {
+    if (nombre) localStorage.setItem(CLAVE_ELEGIDO, nombre);
+    else localStorage.removeItem(CLAVE_ELEGIDO);
+  } catch {}
 }
 
 // Error con el que Google/Supabase devuelven al usuario (en la query o en el hash)
@@ -70,6 +90,7 @@ function iniciarGis() {
 
 // Panel de inicio de sesión (Google o magic link por email, Supabase Auth). Montado una vez en el layout; lo abre
 // abrirLogin() del contexto (p. ej. "Iniciar sesión" de la barra). Sin variables de Supabase no se pinta.
+// Con abrirLogin(mensaje, "crear") es "Crear cuenta": lo mismo y, arriba, el nombre de usuario que quiere.
 export default function PanelLogin() {
   const { usuario, cargando, entrar, entrarConGoogle, entrarConTokenGoogle, peticionLogin } = useAuth();
   const dialogo = useRef(null);
@@ -82,6 +103,14 @@ export default function PanelLogin() {
   const [errorGoogle, setErrorGoogle] = useState("");
   const [motivo, setMotivo] = useState(""); // por qué se abre el panel desde fuera ("Inicia sesión para guardar tu diario")
   const atendida = useRef(peticionLogin); // la de antes de montar (otra página) no se atiende
+  const [modo, setModo] = useState("entrar"); // entrar | crear
+  const [nombre, setNombre] = useState("");
+  const crear = modo === "crear";
+  const comprobacion = useDisponibilidad(crear ? nombre : "");
+  const id = useId();
+  // Crear cuenta: las vías (Google y correo) solo con un nombre válido y libre. El libre se reclama tras entrar.
+  const elegido = crear && comprobacion.estado === "libre" ? nombre.trim() : "";
+  const vias = !crear || Boolean(elegido);
 
   // Al volver de Google con error: se avisa en el panel y se limpia la URL sin recargar
   useEffect(() => {
@@ -98,6 +127,7 @@ export default function PanelLogin() {
     if (!peticionLogin || peticionLogin === atendida.current || usuario) return;
     atendida.current = peticionLogin;
     setMotivo(peticionLogin.mensaje); // eslint-disable-line react-hooks/set-state-in-effect -- la petición llega por el contexto
+    setModo(peticionLogin.modo ?? "entrar");
     dialogo.current?.showModal();
     setAbierto(true);
     dialogo.current?.querySelector("input")?.focus();
@@ -107,6 +137,7 @@ export default function PanelLogin() {
   // Callback de GIS (vive fuera de React): siempre apunta al render actual
   useEffect(() => {
     alCredencial = async (token, nonce) => {
+      guardarElegido(elegido);
       setErrorGoogle("");
       setGoogle("entrando");
       try {
@@ -121,7 +152,7 @@ export default function PanelLogin() {
   });
 
   useEffect(() => {
-    if (!abierto || gis === "fallo" || estado === "enviado") return;
+    if (!abierto || !vias || gis === "fallo" || estado === "enviado") return;
     let vigente = true;
     iniciarGis()
       .then(() => {
@@ -138,7 +169,7 @@ export default function PanelLogin() {
         setErrorGoogle("No se ha podido cargar el botón de Google (quizá lo impide un bloqueador). Usa este otro:");
       });
     return () => { vigente = false; };
-  }, [abierto, gis, estado]);
+  }, [abierto, vias, gis, estado]);
 
   if (!AUTH_DISPONIBLE || cargando || usuario) return null;
 
@@ -147,7 +178,7 @@ export default function PanelLogin() {
     setError("");
     setEstado("enviando");
     try {
-      await entrar(new FormData(e.currentTarget).get("email").trim());
+      await entrar(new FormData(e.currentTarget).get("email").trim(), elegido);
       setEstado("enviado");
     } catch (err) {
       setError(mensajeError(err));
@@ -158,6 +189,7 @@ export default function PanelLogin() {
   const conGoogle = async () => {
     setErrorGoogle("");
     setGoogle("redirigiendo");
+    guardarElegido(elegido);
     try {
       await entrarConGoogle();
     } catch {
@@ -174,22 +206,32 @@ export default function PanelLogin() {
       <dialog
         ref={dialogo}
         aria-labelledby="titulo-entrar"
-        onClose={() => { setAbierto(false); setEstado("inicio"); setError(""); setErrorGoogle(""); setGoogle("inicio"); setMotivo(""); }}
+        onClose={() => { setAbierto(false); setEstado("inicio"); setError(""); setErrorGoogle(""); setGoogle("inicio"); setMotivo(""); setModo("entrar"); setNombre(""); }}
         onClick={(e) => e.target === e.currentTarget && cerrar()}
         className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-line bg-background text-foreground p-0 backdrop:bg-black/40"
       >
         <div className="p-6 text-left">
           <div className="flex items-start justify-between gap-4">
-            <h2 id="titulo-entrar" className="text-xl font-display font-bold uppercase">Iniciar sesión</h2>
+            <h2 id="titulo-entrar" className="text-xl font-display font-bold uppercase">{crear ? "Crear cuenta" : "Iniciar sesión"}</h2>
             <button type="button" onClick={cerrar} aria-label="Cerrar" className="text-muted hover:text-primary text-xl leading-none">×</button>
           </div>
 
           {motivo && <p className="mt-2 text-sm font-semibold text-primary">{motivo}</p>}
 
+          {crear && estado !== "enviado" && (
+            <div className="mt-4">
+              <CampoUsuario id={id} valor={nombre} onCambiar={setNombre} comprobacion={comprobacion} />
+            </div>
+          )}
+
           {estado === "enviado" ? (
             <p role="status" className="mt-4 text-foreground leading-relaxed">
-              Te hemos enviado un enlace a tu email. Ábrelo en este mismo navegador.
+              {crear
+                ? "Te hemos enviado un enlace a tu email. Ábrelo en este mismo navegador."
+                : "Si ese correo tiene cuenta, te hemos enviado el enlace (ábrelo en este mismo navegador). Si no, usa «Crear cuenta»."}
             </p>
+          ) : !vias ? (
+            <p className="mt-2 text-sm text-muted">Elige un nombre de usuario libre para continuar con Google o con tu email.</p>
           ) : (
             <>
             <div className="mt-4 space-y-2">
@@ -213,7 +255,7 @@ export default function PanelLogin() {
               <span className="h-px flex-1 bg-line" />o<span className="h-px flex-1 bg-line" />
             </div>
             <form onSubmit={enviar} className="space-y-3">
-              <p className="text-sm text-muted">Sin contraseñas: te mandamos un enlace para iniciar sesión.</p>
+              <p className="text-sm text-muted">Sin contraseñas: te mandamos un enlace para {crear ? "crear tu cuenta" : "iniciar sesión"}.</p>
               <label htmlFor="email-entrar" className="block text-xs font-bold uppercase tracking-wider text-muted">Email</label>
               <input
                 id="email-entrar" name="email" type="email" required autoComplete="email"
@@ -224,15 +266,97 @@ export default function PanelLogin() {
               <button type="submit" disabled={estado === "enviando"} className={BOTON}>
                 {estado === "enviando" ? "Enviando…" : "Enviarme el enlace"}
               </button>
-              <p className="text-xs text-muted text-center">
-                Al continuar aceptas la{" "}
-                <Link href="/privacidad" onClick={cerrar} className="underline hover:text-primary">política de privacidad</Link>
-              </p>
             </form>
             </>
+          )}
+          {/* Abajo y pequeño, también mientras falta el nombre */}
+          {estado !== "enviado" && (
+            <p className="mt-3 text-xs text-muted text-center">
+              {crear ? "Al crear tu cuenta aceptas la" : "Al continuar aceptas la"}{" "}
+              <Link href="/privacidad" onClick={cerrar} className="underline hover:text-primary">política de privacidad</Link>
+            </p>
           )}
         </div>
       </dialog>
     </>
+  );
+}
+
+// Paso obligatorio tras el primer inicio de sesión sin nombre de usuario. Antes reclama (PUT /me/perfil) el elegido en
+// "Crear cuenta" (de este navegador o de los metadatos de la cuenta); si ya está cogido, o no eligió ninguno, pide uno.
+// La unicidad la decide el PUT (índice único de la BD), no la comprobación previa. Montado una vez en el layout.
+export function ElegirUsuario() {
+  const { usuario, miPerfil, setMiPerfil, cerrarSesion } = useAuth();
+  const dialogo = useRef(null);
+  const intentado = useRef(null); // uid cuyo nombre elegido ya se ha intentado reclamar
+  const [pedir, setPedir] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const id = useId();
+  // Sin nombre de verdad: si GET /me/perfil falló (error) no se pide, para no pisar un perfil que sí existe
+  const falta = Boolean(usuario) && miPerfil?.usuario === null && !miPerfil.error;
+  const abierto = pedir && falta;
+  const comprobacion = useDisponibilidad(abierto ? nombre : "");
+
+  useEffect(() => {
+    if (miPerfil?.usuario) guardarElegido(""); // ya tiene nombre: lo guardado en este navegador sobra
+    if (!falta || intentado.current === usuario.id) return;
+    intentado.current = usuario.id;
+    const elegido = (leerElegido() || usuario.user_metadata?.usuario || "").trim();
+    guardarElegido("");
+    const preguntar = (mensaje = "") => {
+      setNombre(elegido);
+      setError(mensaje);
+      setPedir(true);
+    };
+    if (!elegido || motivoFormato(elegido)) return preguntar();
+    guardarPerfil({ usuario: elegido })
+      .then(setMiPerfil)
+      .catch((err) => preguntar(err.status === 409 ? `«${elegido}» ya no está libre. Elige otro.` : err.message));
+  }, [falta, miPerfil, usuario, setMiPerfil]);
+
+  useEffect(() => {
+    if (abierto && !dialogo.current?.open) dialogo.current?.showModal();
+  }, [abierto]);
+
+  if (!abierto) return null;
+
+  const enviar = async (e) => {
+    e.preventDefault();
+    setGuardando(true);
+    setError("");
+    try {
+      setMiPerfil(await guardarPerfil({ usuario: nombre.trim() }));
+      setPedir(false);
+    } catch (err) {
+      setError(err.status === 409 ? "Ese nombre de usuario ya no está libre. Elige otro." : err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // Obligatorio: Esc no lo cierra (y si el navegador lo cierra igualmente, se vuelve a abrir). La salida es cerrar sesión.
+  return (
+    <dialog
+      ref={dialogo} aria-labelledby={`${id}-titulo`} aria-describedby={`${id}-texto`}
+      onCancel={(e) => e.preventDefault()} onClose={() => dialogo.current?.showModal()}
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-line bg-background text-foreground p-0 backdrop:bg-black/40"
+    >
+      <form onSubmit={enviar} className="p-6 space-y-4 text-left">
+        <h2 id={`${id}-titulo`} className="text-xl font-display font-bold uppercase">Elige tu nombre de usuario</h2>
+        <p id={`${id}-texto`} className="text-sm text-muted">
+          Es tu dirección en FPS24 (fps24.es/u/tu-nombre) y con él te encuentran tus amigos. Podrás cambiarlo en «Editar mi perfil».
+        </p>
+        <CampoUsuario id={id} valor={nombre} onCambiar={setNombre} comprobacion={comprobacion} required />
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        <button type="submit" disabled={guardando || comprobacion.estado === "no"} className={BOTON}>
+          {guardando ? "Guardando…" : "Continuar"}
+        </button>
+        <p className="text-xs text-muted text-center">
+          <button type="button" onClick={cerrarSesion} className="underline hover:text-primary">Cerrar sesión</button>
+        </p>
+      </form>
+    </dialog>
   );
 }

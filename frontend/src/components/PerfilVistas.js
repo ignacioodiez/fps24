@@ -39,22 +39,24 @@ export function Ayuda({ children }) {
   return <p className="mt-3 text-sm text-muted">{children}</p>;
 }
 
-// Solo para el dueño, bajo una sección que no ve todo el mundo. nivel: "privado" o "amigos"
+// Solo para el dueño, bajo una sección que no ve todo el mundo: una nota discreta. nivel: "privado" o "amigos"
 export function SoloTu({ que, nivel = "privado" }) {
   return (
     <p className="mt-1 text-xs text-muted">
-      {nivel === "amigos" ? `Solo tú y tus amigos veis ${que}.` : `Solo tú ves ${que}.`}{" "}
-      <Link href="/perfil/editar" className={ENLACE}>Cambiar quién lo ve</Link>
+      {nivel === "amigos" ? `Solo tú y tus amigos veis ${que}.` : `Solo tú ves ${que}.`}{" · "}
+      <Link href="/perfil/editar" className="underline hover:text-primary">Cambiar quién lo ve</Link>
     </p>
   );
 }
 
 // Avatar grande, nombre, bio, Letterboxd y (dueño) "Editar mi perfil"; a la derecha, o debajo en móvil, las cifras.
-// cifras: { entradas, este_anio, cines }; las que sean undefined no se ven (quien mira no puede ver ese dato).
+// cifras: { entradas, este_anio, cines, amigos }; las que sean undefined no se ven (quien mira no puede ver ese dato).
+// Amigos solo enlaza para el dueño: la lista de amigos de otra persona no es pública.
 // children: debajo del nombre (el botón de amistad en el perfil de otra persona).
 export function CabeceraPerfil({ perfil, cifras = {}, esDueno = false, children }) {
   const { usuario, bio, avatar, letterboxd_usuario: letterboxd } = perfil;
-  const filas = [["Entradas", cifras.entradas], ["Este año", cifras.este_anio], ["Cines favoritos", cifras.cines]]
+  const filas = [["Entradas", cifras.entradas], ["Este año", cifras.este_anio], ["Cines favoritos", cifras.cines],
+    ["Amigos", cifras.amigos, esDueno && `/u/${usuario}/amigos`]]
     .filter(([, valor]) => valor !== undefined && valor !== null);
   return (
     <div className="flex flex-col md:flex-row md:items-center gap-6">
@@ -78,11 +80,18 @@ export function CabeceraPerfil({ perfil, cifras = {}, esDueno = false, children 
         </div>
       </div>
       {filas.length > 0 && (
+        // En móvil, columnas iguales y las etiquetas largas bajan de línea: cuatro cifras caben en 390 px
         <dl className="flex shrink-0 divide-x divide-line border-t border-line pt-4 md:border-t-0 md:pt-0">
-          {filas.map(([etiqueta, valor]) => (
-            <div key={etiqueta} className="flex flex-col-reverse items-center px-4 first:pl-0 md:first:pl-4 text-center">
+          {filas.map(([etiqueta, valor, enlace]) => (
+            <div key={etiqueta} className="flex min-w-0 flex-1 md:flex-none flex-col-reverse items-center justify-end px-2 md:px-4 text-center">
               <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{etiqueta}</dt>
-              <dd className="text-2xl md:text-3xl font-black font-display text-foreground">{valor.toLocaleString("es-ES")}</dd>
+              <dd className="text-2xl md:text-3xl font-black font-display text-foreground">
+                {enlace
+                  ? <Link href={enlace} className="hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                      {valor.toLocaleString("es-ES")}<span className="sr-only"> (ver tus amigos)</span>
+                    </Link>
+                  : valor.toLocaleString("es-ES")}
+              </dd>
             </div>
           ))}
         </dl>

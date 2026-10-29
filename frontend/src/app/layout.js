@@ -4,7 +4,7 @@ import "./globals.css";
 // 👇 IMPORTANTE: Importamos el componente Footer
 import Footer from "@/components/Footer"; 
 import AuthProvider from "@/components/AuthProvider";
-import PanelLogin from "@/components/PanelLogin";
+import PanelLogin, { ElegirUsuario } from "@/components/PanelLogin";
 import FavoritosProvider from "@/components/FavoritosProvider";
 import SesionesGuardadasProvider from "@/components/SesionesGuardadasProvider";
 
@@ -38,6 +38,7 @@ export default function RootLayout({ children, modal }) {
         </main>
         {modal}
         <PanelLogin />
+        <ElegirUsuario />
         </SesionesGuardadasProvider>
         </FavoritosProvider>
         </AuthProvider>

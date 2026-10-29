@@ -5,6 +5,9 @@ import BuscadorPeliculas from "@/components/BuscadorPeliculas";
 import DialogoDiario from "@/components/DialogoDiario";
 import { DIARIO_GUARDADO, hoyMadrid } from "@/lib/diario";
 
+// Botón morado de la barra (también "Crear cuenta" en NavSecciones)
+export const BOTON_BARRA = "self-center flex items-center justify-center gap-1.5 min-h-11 min-w-11 lg:min-h-9 mx-1 px-3 bg-primary text-white text-sm font-bold hover:opacity-90 active:opacity-75 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+
 // Diálogo con el buscador; se monta abierto. Al elegir se cierra y el padre abre DialogoDiario.
 function DialogoBuscar({ onElegir, onCerrar }) {
   const dialogo = useRef(null);
@@ -53,7 +56,7 @@ export default function BotonAnadirDiario() {
       <button
         type="button" onClick={() => { setAviso(""); setPaso("buscar"); }} aria-haspopup="dialog"
         aria-label="Añadir a Mi Diario" title="Añadir a Mi Diario"
-        className="self-center flex items-center justify-center gap-1.5 min-h-11 min-w-11 lg:min-h-9 mx-1 px-3 bg-primary text-white text-sm font-bold hover:opacity-90 active:opacity-75 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className={BOTON_BARRA}
       >
         <span aria-hidden="true" className="text-xl leading-none">+</span>
         {/* Por debajo de lg no cabe junto a "Mi perfil" y "Cerrar sesión": solo el "+" (y el aria-label) */}

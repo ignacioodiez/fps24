@@ -21,7 +21,7 @@ from sqlmodel import Session, delete, select
 from app import auth
 from app.auth import Usuario, usuario_actual
 from app.database.engine import engine
-from app.database.models import DiarioEntrada, Pase, Pelicula
+from app.database.models import DiarioEntrada, Pase, Pelicula, Perfil
 from app.services.tiempo import hoy_madrid
 from main import app
 
@@ -79,6 +79,11 @@ with Session(engine) as session:
                         .order_by(Pase.activo, Pase.fecha_hora.desc())).first()  # un inactivo si lo hay
     pase = pase and dict(id=pase.id, pelicula_id=pase.pelicula_id, fecha=pase.fecha_hora.date(), slug=pase.cine_rel.slug,
                          activo=pase.activo)
+
+# Con perfil (nombre de usuario): sin él, usuario_con_nombre cierra estos endpoints
+with Session(engine) as session:
+    session.add_all(Perfil(user_id=u, usuario=f"chk_{u.hex[:12]}") for u in [A, B])
+    session.commit()
 
 try:
     # --- Crear, listar, editar, borrar (usuario A) ---
@@ -228,6 +233,7 @@ try:
 finally:
     app.dependency_overrides.clear()
     with Session(engine) as session:
+        session.exec(delete(Perfil).where(Perfil.user_id.in_([A, B])))
         borradas = session.exec(delete(DiarioEntrada).where(DiarioEntrada.user_id.in_([A, B]))).rowcount
         session.commit()
         quedan = session.exec(select(DiarioEntrada).where(DiarioEntrada.user_id.in_([A, B]))).all()

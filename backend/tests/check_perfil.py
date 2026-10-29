@@ -5,6 +5,7 @@ con usuario_actual sustituido por usuarios de prueba. Borra al final todos los p
 import asyncio
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -16,12 +17,13 @@ BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND))
 
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, delete, select
 
 from app import perfil as modulo
-from app.auth import Usuario, usuario_actual
+from app.auth import Usuario, usuario_actual, usuario_opcional
 from app.database.engine import engine
 from app.services.tiempo import hoy_madrid
 from app.database.models import Cine, CineFavorito, DiarioEntrada, Pelicula, Perfil
@@ -33,13 +35,16 @@ if engine.url.host not in ("db", "localhost", "127.0.0.1"):
 subprocess.run(["alembic", "upgrade", "head"], cwd=BACKEND, check=True)
 
 
-def llamar(metodo, ruta, cuerpo=None):
-    """Petición HTTP a la app por ASGI; devuelve (status, json o None)."""
+RESPUESTA = {}  # cabeceras de la última respuesta
+
+
+def llamar(metodo, ruta, cuerpo=None, cabeceras=()):
+    """Petición HTTP a la app por ASGI; devuelve (status, json o None). Sus cabeceras quedan en RESPUESTA."""
     ruta, _, query = ruta.partition("?")
     body = json.dumps(cuerpo).encode() if cuerpo is not None else b""
     scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": metodo, "scheme": "http",
              "path": ruta, "raw_path": ruta.encode(), "query_string": query.encode(), "root_path": "",
-             "headers": [(b"content-type", b"application/json")], "client": ("test", 1), "server": ("test", 80)}
+             "headers": [(b"content-type", b"application/json"), *cabeceras], "client": ("test", 1), "server": ("test", 80)}
     mensajes = [{"type": "http.request", "body": body, "more_body": False}]
     respuesta = {"status": None, "body": b""}
 
@@ -49,6 +54,7 @@ def llamar(metodo, ruta, cuerpo=None):
     async def send(m):
         if m["type"] == "http.response.start":
             respuesta["status"] = m["status"]
+            RESPUESTA["cabeceras"] = {k.decode().lower(): v.decode() for k, v in m.get("headers", [])}
         elif m["type"] == "http.response.body":
             respuesta["body"] += m.get("body", b"")
 
@@ -76,14 +82,26 @@ def como(usuario):
     actual["id"] = usuario
 
 
+def disponible(nombre, quien=None, cabeceras=()):
+    """GET /usuarios/disponible sin sesión, o con la de quien; comprueba que nunca va a una caché."""
+    if quien:
+        app.dependency_overrides[usuario_opcional] = lambda: Usuario(id=str(quien), email="a@ejemplo.es")
+    try:
+        r = llamar("GET", f"/usuarios/disponible?nombre={nombre}", cabeceras=cabeceras)
+    finally:
+        app.dependency_overrides.pop(usuario_opcional, None)
+    assert RESPUESTA["cabeceras"]["cache-control"] == "no-store", RESPUESTA
+    return r
+
+
 # --- Reglas del nombre (sin BD) ---
 validar = modulo.validar_usuario
-for valido in ("ana", "ana.diez", "a_b.c", "cine_fan", "x" * 20, "007"):
+for valido in ("ana", "ana.diez", "a_b.c", "cine_fan", "x" * 20, "007", "Nacho", "Ana.Diez", "CINE_fan"):
     assert validar(valido) == (valido, None), (valido, validar(valido))
-assert validar("  Ana.Diez ") == ("ana.diez", None)  # se guarda en minúsculas
+assert validar("  Ana.Diez ") == ("Ana.Diez", None)  # se guarda con sus mayúsculas
 for invalido in ("ab", "x" * 21, "ana diez", "añil", "ana-diez", "ana@x", ".ana", "ana.", "_ana", "ana_", "an..a", "", None):
     assert validar(invalido)[1], invalido
-for reservado in ("admin", "Administrador", "fps24", "api", "perfil", "cines", "pelicula", "diario", "login",
+for reservado in ("admin", "Administrador", "ADMIN", "Fps24", "fps24", "api", "perfil", "cines", "pelicula", "diario", "login",
                   "soporte", "privacidad", "null", "undefined"):
     assert validar(reservado)[1] == "Ese nombre de usuario está reservado", reservado
 assert all(validar(corto)[1] for corto in ("me", "u"))  # reservados, pero ya los rechaza la longitud
@@ -93,31 +111,98 @@ try:
     # --- Sin perfil ---
     assert ok(200, llamar("GET", "/me/perfil"), "sin perfil")["usuario"] is None
 
+    # --- Sin nombre de usuario: lo privado lo cierra una sola dependencia (usuario_con_nombre), en todas sus rutas ---
+    def llamadas(dependant):
+        for d in dependant.dependencies:
+            yield d.call
+            yield from llamadas(d)
+    rutas = [(m, r.path, set(llamadas(r.dependant))) for r in app.routes if isinstance(r, APIRoute) for m in r.methods]
+    sin_puerta = sorted(f"{m} {p}" for m, p, deps in rutas if usuario_actual in deps and modulo.usuario_con_nombre not in deps)
+    assert sin_puerta == ["GET /me", "GET /me/perfil", "PUT /me/perfil"], sin_puerta  # quién soy, saber que falta y reclamarlo
+    protegidas = [(m, p) for m, p, deps in rutas if modulo.usuario_con_nombre in deps]
+    for prefijo in ("/diario", "/me/cines-favoritos", "/me/sesiones", "/me/amigos", "/me/bloqueos"):
+        assert any(p.startswith(prefijo) for _, p in protegidas), prefijo
+    valores = {"pelicula_id": "1", "entrada_id": "1", "slug": "x", "guardada_id": "1", "solicitud_id": str(uuid.uuid4()),
+               "usuario_amigo": "x", "usuario_bloqueado": "x"}
+    for metodo, ruta in protegidas:
+        r = llamar(metodo, re.sub(r"\{(\w+)\}", lambda g: valores[g[1]], ruta), {} if metodo in ("POST", "PUT", "PATCH") else None)
+        assert r == (403, {"detail": modulo.SIN_NOMBRE}), (metodo, ruta, r)
+    print(f"OK: sin nombre de usuario, 403 claro en las {len(protegidas)} rutas privadas; sin puerta solo {sin_puerta}")
+    # Lo público y la comprobación siguen funcionando sin nombre
+    assert llamar("GET", f"/pelicula/1/cines?fecha={date.today()}")[0] in (200, 404)
+    assert disponible(f"libre_{sufijo}", quien=A)[1] == {"disponible": True}
+    assert llamar("GET", f"/u/nadie_{sufijo}")[0] == 404
+
     # --- Crear, y errores claros ---
     for nombre, codigo, detalle in [("ab", 422, "entre 3 y 20"), ("admin", 422, "reservado"), (".ana", 422, "empezar"),
                                     ("an..a", 422, "dos puntos")]:
         assert detalle in ok(codigo, llamar("PUT", "/me/perfil", {"usuario": nombre}), f"nombre {nombre!r}")["detail"]
     assert "160" in ok(422, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "x" * 161}), "bio larga")["detail"]
     ok(422, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "visibilidad": "todos"}), "visibilidad desconocida")
-    creado = ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A.upper(), "bio": "  Cine de barrio  "}), "crear")
+    creado = ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "  Cine de barrio  "}), "crear")
     assert creado["usuario"] == NOMBRE_A and creado["bio"] == "Cine de barrio" and creado["visibilidad"] == "privado"
     assert ok(200, llamar("GET", "/me/perfil"), "leer el mío")["usuario"] == NOMBRE_A
 
     # --- Unicidad sin mayúsculas, y otro usuario no puede tocar mi perfil ---
     como(B)
     assert ok(409, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A.upper()}), "nombre de A, en mayúsculas")["detail"] == "Ese nombre de usuario ya está en uso"
-    assert ok(200, llamar("GET", f"/usuarios/disponible?u={NOMBRE_A.upper()}"), "disponible (ocupado)") == {
-        "disponible": False, "motivo": "Ese nombre de usuario ya está en uso"}
-    assert ok(200, llamar("GET", "/usuarios/disponible?u=admin"), "disponible (reservado)")["disponible"] is False
-    assert ok(200, llamar("GET", f"/usuarios/disponible?u={NOMBRE_B}"), "disponible (libre)") == {"disponible": True, "motivo": None}
+    ok(409, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A.title()}), "nombre de A, capitalizado")
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_B, "visibilidad": "publico"}), "B crea el suyo")
     with Session(engine) as session:
         a = session.get(Perfil, A)
         assert (a.usuario, a.bio, a.visibilidad) == (NOMBRE_A, "Cine de barrio", "privado"), a  # A sigue igual
         assert session.get(Perfil, B).usuario == NOMBRE_B
     como(A)
-    assert ok(200, llamar("GET", f"/usuarios/disponible?u={NOMBRE_A}"), "disponible (el mío)")["disponible"] is True
     print("OK: B no puede quedarse el nombre de A ni cambiar su perfil")
+
+    # --- /usuarios/disponible: público, solo {"disponible"} (y el motivo si el formato no vale) ---
+    ocupado = ok(200, disponible(NOMBRE_A), "disponible (ocupado)")
+    assert ocupado == {"disponible": False}, ocupado  # sin motivo, ni nada del perfil
+    for variante in (NOMBRE_A.upper(), NOMBRE_A.title()):
+        assert disponible(variante)[1] == ocupado, variante  # sin distinguir mayúsculas
+    for reservado in ("admin", "ADMIN", "Soporte"):
+        assert disponible(reservado) == (200, ocupado), reservado  # reservado: igual que ocupado
+    assert ok(200, disponible(f"Libre_{sufijo}"), "disponible (libre)") == {"disponible": True}
+    for malo, motivo in [("ab", "entre 3 y 20"), ("ana%20diez", "letras sin tildes"), (".ana", "empezar"), ("an..a", "dos puntos"), ("", "entre 3 y 20")]:
+        r = ok(200, disponible(malo), f"disponible (formato {malo!r})")
+        assert r["disponible"] is False and motivo in r["motivo"] and set(r) == {"disponible", "motivo"}, r
+    assert disponible(NOMBRE_A, quien=A)[1] == {"disponible": True}  # el propio, con sesión, sale libre
+    assert disponible(NOMBRE_A.upper(), quien=A)[1] == {"disponible": True}  # también cambiándole las mayúsculas
+    assert disponible(NOMBRE_A, quien=B)[1] == ocupado
+    print("OK: /usuarios/disponible (libre, ocupado = reservado, mayúsculas, formato, el propio) sin más datos")
+
+    # --- Mayúsculas: se guardan como las elige su dueño; /u y la unicidad no las distinguen ---
+    con_mayus = NOMBRE_A.replace("ana", "Ana")
+    assert ok(200, llamar("PUT", "/me/perfil", {"usuario": con_mayus}), "renombrar con mayúsculas")["usuario"] == con_mayus
+    assert ok(200, llamar("GET", "/me/perfil"), "leerlo")["usuario"] == con_mayus
+    como(B)
+    ok(409, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A}), "B, el mismo en minúsculas")
+    como(A)
+    ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A}), "volver a minúsculas (el mismo nombre)")
+    with Session(engine) as session:  # "Nacho" y "nacho" no pueden coexistir ni metiéndolos directamente
+        session.add(Perfil(user_id=D, usuario=NOMBRE_A.upper()))
+        try:
+            session.commit()
+            raise AssertionError("la BD debería rechazar el nombre en mayúsculas")
+        except IntegrityError as e:
+            assert "uq_perfil_usuario" in str(e.orig), e
+    print("OK: mayúsculas guardadas tal cual y únicas sin distinguirlas")
+
+    # --- Reclamar el nombre en el primer login: estaba libre al comprobarlo, alguien lo coge antes ---
+    elegido = f"Chk_Elegido{sufijo}"
+    assert disponible(elegido)[1] == {"disponible": True}
+    como(D)
+    ok(200, llamar("PUT", "/me/perfil", {"usuario": elegido.lower()}), "otro lo coge antes")
+    como(C)
+    assert ok(200, llamar("GET", "/me/perfil"), "C en su primer login")["usuario"] is None
+    assert ok(409, llamar("PUT", "/me/perfil", {"usuario": elegido}), "C lo reclama: colisión")["detail"] == "Ese nombre de usuario ya está en uso"
+    assert ok(200, llamar("GET", "/me/perfil"), "C sigue sin nombre")["usuario"] is None
+    assert ok(200, llamar("PUT", "/me/perfil", {"usuario": elegido + "2"}), "C elige otro")["usuario"] == elegido + "2"
+    with Session(engine) as session:
+        session.exec(delete(Perfil).where(Perfil.user_id.in_([C, D])))
+        session.commit()
+    como(A)
+    print("OK: reclamar el nombre en el primer login, con colisión")
 
     # --- Público: privado e inexistente responden igual; público solo usuario y bio ---
     privado = llamar("GET", f"/u/{NOMBRE_A}")
@@ -130,16 +215,16 @@ try:
     # ni user_id, ni email, ni fechas; sin diario ni cines mientras no se activen
     color = modulo.color_avatar(Perfil(usuario=NOMBRE_A))
     assert publico == {"usuario": NOMBRE_A, "bio": "Cine de barrio", "diario_publico": False, "diario": None, "cines": None, "cifras": None,
-                       "restringido": False, "relacion": None, "letterboxd_usuario": None, "avatar": {"tipo": "iniciales", "color": color,
+                       "amigos": 0, "restringido": False, "relacion": None, "letterboxd_usuario": None, "avatar": {"tipo": "iniciales", "color": color,
                                                               "fondo": modulo.PALETA_AVATAR[color], "poster_url": None}}, publico
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A, "bio": "Cine de barrio"}), "PUT sin visibilidad")
     assert llamar("GET", f"/u/{NOMBRE_A}") == privado  # PUT sin visibilidad vuelve a privado
     app.dependency_overrides.clear()  # sin sesión: el público sigue respondiendo; los demás no
     assert llamar("GET", f"/u/{NOMBRE_B}")[0] == 200
-    for metodo, ruta in [("GET", "/me/perfil"), ("PUT", "/me/perfil"), ("GET", "/usuarios/disponible?u=ana")]:
+    for metodo, ruta in [("GET", "/me/perfil"), ("PUT", "/me/perfil")]:
         assert llamar(metodo, ruta, {"usuario": "ana"} if metodo == "PUT" else None)[0] in (401, 503), ruta
     app.dependency_overrides[usuario_actual] = lambda: Usuario(id=str(actual["id"]), email="a@ejemplo.es")
-    print("OK: sin sesión, solo /u/{usuario}")
+    print("OK: sin sesión, solo /u/{usuario} (y /usuarios/disponible)")
 
     # --- Diario en el perfil público (visto sin sesión): solo si el perfil y el diario son públicos ---
     with Session(engine) as session:
@@ -297,7 +382,7 @@ try:
     assert llamar("GET", f"/u/{NOMBRE_A}")[1]["cines"] is None  # PUT sin el campo: se apaga
     # Nada interno en el público
     assert set(completo) == {"usuario", "bio", "avatar", "letterboxd_usuario", "diario_publico", "diario", "cines", "cifras",
-                             "restringido", "relacion"}, completo
+                             "amigos", "restringido", "relacion"}, completo
     assert completo["cifras"] is None and set(completo["cines"][0]) == {"slug", "nombre", "zona"}  # diario apagado: sin cifras
     assert set(completo["avatar"]) == {"tipo", "color", "fondo", "poster_url"}
     texto = json.dumps(completo)
@@ -310,7 +395,7 @@ try:
     # --- Cambiar de nombre libera el anterior ---
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A + "x"}), "cambiar de nombre")
     como(B)
-    assert ok(200, llamar("GET", f"/usuarios/disponible?u={NOMBRE_A}"), "el antiguo queda libre")["disponible"] is True
+    assert ok(200, disponible(NOMBRE_A, quien=B), "el antiguo queda libre") == {"disponible": True}
     como(A)
     ok(200, llamar("PUT", "/me/perfil", {"usuario": NOMBRE_A}), "volver al nombre")
 
@@ -345,11 +430,18 @@ try:
         assert len(session.exec(select(Perfil).where(Perfil.user_id == C)).all()) == 1
     print("OK: carreras (un 200 y un 409; el mismo usuario dos veces, un solo perfil)")
 
-    # --- Límite de /usuarios/disponible ---
-    como(D)
-    codigos = [llamar("GET", "/usuarios/disponible?u=algo_libre")[0] for _ in range(modulo.LIMITE_DISPONIBLE + 1)]
-    assert codigos[:-1] == [200] * modulo.LIMITE_DISPONIBLE and codigos[-1] == 429, codigos
-    print(f"OK: /usuarios/disponible, 429 tras {modulo.LIMITE_DISPONIBLE} consultas por minuto")
+    # --- Límite de /usuarios/disponible: por IP, la que añade el proxy de Render (la última de X-Forwarded-For) ---
+    modulo._consultas.clear()
+    ip = lambda cadena: ((b"x-forwarded-for", cadena.encode()),)
+    codigos = [disponible("algo_libre", cabeceras=ip(f"1.1.1.{i}, 203.0.113.7"))[0] for i in range(modulo.LIMITE_DISPONIBLE)]
+    assert codigos == [200] * modulo.LIMITE_DISPONIBLE, codigos
+    limite = disponible("algo_libre", cabeceras=ip("2.2.2.2, 203.0.113.7"))  # cambiar las de delante no sirve
+    assert limite == (429, {"detail": "Demasiadas comprobaciones seguidas. Espera un minuto."}), limite
+    assert RESPUESTA["cabeceras"]["retry-after"] == str(modulo.VENTANA_S)
+    assert disponible("algo_libre", cabeceras=ip("203.0.113.8"))[0] == 200  # otra IP sigue pudiendo
+    assert disponible("algo_libre")[0] == 200  # sin la cabecera (local), la IP de la conexión
+    modulo._consultas.clear()
+    print(f"OK: /usuarios/disponible, 429 tras {modulo.LIMITE_DISPONIBLE} consultas por minuto y por IP")
 
     # --- La tabla: UNIQUE en minúsculas, CHECK y RLS/REVOKE ---
     for valores, restriccion in [(dict(usuario=NOMBRE_A.upper()), "uq_perfil_usuario"),
@@ -372,6 +464,9 @@ try:
         session.commit()
         assert session.get(Perfil, D).visibilidad == "privado"  # privado por defecto también en la BD
     print("OK: UNIQUE sin mayúsculas, CHECK y privado por defecto en la BD")
+    with engine.connect() as conn:  # 0021: el índice único, sobre lower(usuario)
+        definicion = conn.execute(text("SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_perfil_usuario'")).scalar()
+        assert "UNIQUE" in definicion and "lower(usuario)" in definicion, definicion
 
     spec = importlib.util.spec_from_file_location("m0011", BACKEND / "migrations/versions/0011_perfil.py")
     m0011 = importlib.util.module_from_spec(spec)

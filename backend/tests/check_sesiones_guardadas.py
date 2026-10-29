@@ -23,7 +23,7 @@ from sqlmodel import Session, delete, func, select
 from app import sesiones as modulo
 from app.auth import Usuario, usuario_actual
 from app.database.engine import engine
-from app.database.models import Cine, DiarioEntrada, Pase, Pelicula, SesionGuardada
+from app.database.models import Cine, DiarioEntrada, Pase, Pelicula, SesionGuardada, Perfil
 from app.services.tiempo import ahora_madrid
 from main import app
 
@@ -87,6 +87,11 @@ ahora = ahora_madrid().replace(second=0, microsecond=0)
 CUANDO = {"futura": ahora + timedelta(days=2, hours=1), "pronto": ahora + timedelta(minutes=30),
           "hace_media_hora": ahora - timedelta(minutes=30), "ayer": ahora - timedelta(days=1),
           "borrable": ahora + timedelta(days=3), "inactiva": ahora + timedelta(days=4)}
+
+# Con perfil (nombre de usuario): sin él, usuario_con_nombre cierra estos endpoints
+with Session(engine) as session:
+    session.add_all(Perfil(user_id=u, usuario=f"chk_{u.hex[:12]}") for u in PRUEBA)
+    session.commit()
 
 try:
     with Session(engine) as session:
@@ -269,6 +274,7 @@ try:
 finally:
     app.dependency_overrides.clear()
     with Session(engine) as session:
+        session.exec(delete(Perfil).where(Perfil.user_id.in_(PRUEBA)))
         session.exec(delete(SesionGuardada).where(SesionGuardada.user_id.in_(PRUEBA)))
         session.exec(delete(DiarioEntrada).where(DiarioEntrada.user_id.in_(PRUEBA)))
         session.exec(delete(Pase).where(Pase.cine_id.in_(select(Cine.id).where(Cine.slug == SLUG))))

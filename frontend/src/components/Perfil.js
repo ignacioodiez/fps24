@@ -303,10 +303,14 @@ function MiPerfil({ perfil, pestana }) {
   const [diario, setDiario] = useState(null); // GET /diario: { total, este_anio, entradas } o { error }
   const [proximas, setProximas] = useState(0); // sesiones guardadas próximas, para el enlace de la pestaña Perfil
   const [recibidas, setRecibidas] = useState(0); // solicitudes de amistad pendientes: contador y enlace
+  const [amigos, setAmigos] = useState(undefined); // nº de amigos, para la cabecera (undefined: no se ve)
 
   useEffect(() => {
     todosLosCines().then(setTodos).catch(() => setTodos([]));
-    listarAmigos().then((a) => setRecibidas(a.recibidas.length)).catch(() => setRecibidas(0)); // sin contador si falla
+    listarAmigos().then((a) => {
+      setRecibidas(a.recibidas.length);
+      setAmigos(a.amigos.length);
+    }).catch(() => setRecibidas(0)); // sin contadores si falla
   }, []);
 
   // Las últimas entradas para la pestaña Perfil; se recargan al añadir una desde el "+" de la barra
@@ -323,34 +327,18 @@ function MiPerfil({ perfil, pestana }) {
     listarSesiones().then((a) => setProximas(a.proximas.length)).catch(() => setProximas(0)); // sin enlace si falla
   }, [pestana]);
 
-  const { visibilidad, diario_visibilidad: nivelDiario, cines_visibilidad: nivelCines } = perfil;
-  const publico = visibilidad === "publico";
+  const { diario_visibilidad: nivelDiario, cines_visibilidad: nivelCines } = perfil;
   // Para SoloTu: el nivel si no lo ve todo el mundo; si no, nada
   const diarioSoloTu = nivelDiario !== "publico" && nivelDiario;
   const cinesSoloTu = nivelCines !== "publico" && nivelCines;
   const cines = cargados && todos ? [...favoritos].map((slug) => todos.find((c) => c.slug === slug) ?? { slug, nombre: slug }) : null;
-  const seccion = (nivel, que) => ({ publico: `${que}: todo el mundo.`, amigos: `${que}: solo tus amigos.` })[nivel] ?? `${que}: solo tú.`;
-  const quienVe = {
-    privado: "Quien abra tu enlace verá «Este perfil no existe o es privado», también tus amigos. Cámbialo en «Editar mi perfil» para compartirlo.",
-    amigos: `Tus amigos ven tu nombre de usuario, tu avatar, tu bio y tu Letterboxd; los demás, solo tu nombre y tu avatar, con el botón de añadirte. ${
-      seccion(nivelDiario, "Tu diario")} ${seccion(nivelCines, "Tus cines")}`,
-    publico: `Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd. ${
-      seccion(nivelDiario, "Tu diario, con tus notas")} ${seccion(nivelCines, "Tus cines favoritos")}`,
-  }[visibilidad];
-  const titulo = { privado: "Tu perfil es privado: solo tú lo ves", amigos: "Tu perfil es solo para amigos", publico: "Tu perfil es público" }[visibilidad];
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
       <CabeceraPerfil
         perfil={perfil} esDueno
-        cifras={{ entradas: diario?.total, este_anio: diario?.este_anio, cines: cines?.length }}
+        cifras={{ entradas: diario?.total, este_anio: diario?.este_anio, cines: cines?.length, amigos }}
       />
-      {(!publico || pestana === "perfil") && (
-        <div role={publico ? undefined : "note"} className={`mt-6 border p-4 ${publico ? "border-line bg-surface" : "border-primary bg-primary-soft"}`}>
-          <p className="font-bold text-foreground">{titulo}</p>
-          <p className="text-sm text-muted">{quienVe}</p>
-        </div>
-      )}
       <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines", "sesiones", "amigos"]}
                       contadores={{ amigos: recibidas }} />
 
@@ -412,6 +400,7 @@ function MiPerfil({ perfil, pestana }) {
   );
 }
 
+// Los nombres son únicos sin distinguir mayúsculas: /u/nacho y /u/Nacho son el mismo perfil
 const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
 const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones", amigos: "amigos" })[ruta.split("/")[3]] ?? "perfil";
 
@@ -420,7 +409,7 @@ const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "
 export function SiSoyYo({ esperar = false, children }) {
   const { cargando, miPerfil } = useAuth();
   const ruta = usePathname();
-  if (miPerfil?.usuario && miPerfil.usuario === usuarioDeRuta(ruta)) return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
+  if (miPerfil?.usuario && miPerfil.usuario.toLowerCase() === usuarioDeRuta(ruta)) return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
   if (esperar && (cargando || miPerfil === undefined)) {
     return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
   }
@@ -475,12 +464,17 @@ export default function EditarPerfil() {
 
       <TarjetaPerfilPublico />
 
-      <MisCines />
+      {/* Sin nombre de usuario la API cierra los cines y el diario (403) */}
+      {miPerfil?.usuario && (
+        <>
+          <MisCines />
 
-      <section aria-labelledby={`${id}-diario`} className="mt-8">
-        <h3 id={`${id}-diario`} className={TITULO_SECCION}>Mi diario</h3>
-        <MiDiario />
-      </section>
+          <section aria-labelledby={`${id}-diario`} className="mt-8">
+            <h3 id={`${id}-diario`} className={TITULO_SECCION}>Mi diario</h3>
+            <MiDiario />
+          </section>
+        </>
+      )}
     </div>
   );
 }

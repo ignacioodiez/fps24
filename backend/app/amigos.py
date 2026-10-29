@@ -47,7 +47,8 @@ class MisAmigos(SQLModel):
 
 
 def normalizar(texto: str) -> str:
-    return (texto or "").strip().lower().removeprefix("@").strip()
+    """Sin @ ni espacios; las mayúsculas dan igual (_por_nombre busca sin distinguirlas)."""
+    return (texto or "").strip().removeprefix("@").strip()
 
 
 def _mio(session: Session, usuario: Usuario) -> Perfil:
@@ -115,7 +116,7 @@ def leer_amigos(usuario: Usuario = Depends(usuario_actual), session: Session = D
         else:
             lista = salida.enviadas if amistad.solicitante_id == uid else salida.recibidas
             lista.append(Solicitud(id=amistad.id, creada_en=amistad.creada_en, **persona))
-    salida.amigos.sort(key=lambda p: p.usuario)
+    salida.amigos.sort(key=lambda p: p.usuario.lower())
     return salida
 
 
@@ -162,7 +163,7 @@ def quitar_amigo(usuario_amigo: str, usuario: Usuario = Depends(usuario_actual),
 @router.get("/me/bloqueos", response_model=List[Persona])
 def leer_bloqueos(usuario: Usuario = Depends(usuario_actual), session: Session = Depends(get_session)):
     perfiles = session.exec(select(Perfil).join(Bloqueo, Bloqueo.bloqueado_id == Perfil.user_id)
-                            .where(Bloqueo.bloqueador_id == _uid(usuario)).order_by(Perfil.usuario)).all()
+                            .where(Bloqueo.bloqueador_id == _uid(usuario)).order_by(func.lower(Perfil.usuario))).all()
     return [Persona(usuario=p.usuario, avatar=_avatar(session, p)) for p in perfiles]
 
 

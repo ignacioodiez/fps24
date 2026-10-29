@@ -123,7 +123,7 @@ class DiarioEntrada(SQLModel, table=True):
     cine: Optional[Cine] = Relationship()
 
 
-# 8. PERFIL (migración 0011): nombre de usuario único (en minúsculas) y visibilidad. Privado por defecto.
+# 8. PERFIL (migración 0011): nombre de usuario único sin distinguir mayúsculas (0021) y visibilidad. Privado por defecto.
 # Migración 0020: privado/amigos/publico para el perfil, el diario y los cines; una sección nunca más abierta que el perfil.
 class Perfil(SQLModel, table=True):
     __tablename__ = "perfil"

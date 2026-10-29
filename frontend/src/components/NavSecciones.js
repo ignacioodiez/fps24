@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import Avatar from "@/components/Avatar";
-import BotonAnadirDiario from "@/components/BotonAnadirDiario";
+import BotonAnadirDiario, { BOTON_BARRA } from "@/components/BotonAnadirDiario";
 
 // Secciones de la barra: añadir una es añadir una línea. "tambien" = otras rutas en las que la pestaña cuenta como activa.
 const SECCIONES = [
@@ -32,7 +32,7 @@ function ZonaCuenta({ ruta }) {
 
   // Con usuario conocido, directo a /u/<usuario> (sin pasar por la redirección de /perfil)
   const miRuta = miPerfil?.usuario ? `/u/${miPerfil.usuario}` : "/perfil";
-  const perfilActivo = dentro(ruta, "/perfil") || dentro(ruta.toLowerCase(), miRuta);
+  const perfilActivo = dentro(ruta, "/perfil") || dentro(ruta.toLowerCase(), miRuta.toLowerCase()); // /u/ sin distinguir mayúsculas
   return (
     <div className="flex items-stretch justify-end w-full sm:w-auto ml-auto border-t border-line sm:border-t-0 min-h-11">
       {cargando ? null : usuario ? (
@@ -56,9 +56,14 @@ function ZonaCuenta({ ruta }) {
           <button type="button" onClick={cerrarSesion} className={`${ENLACE} ${INACTIVA}`}>Cerrar sesión</button>
         </>
       ) : (
-        <button type="button" onClick={() => abrirLogin()} aria-haspopup="dialog" className={`${ENLACE} text-primary hover:opacity-75`}>
-          Iniciar sesión
-        </button>
+        <>
+          <button type="button" onClick={() => abrirLogin()} aria-haspopup="dialog" className={`${ENLACE} text-primary hover:opacity-75`}>
+            Iniciar sesión
+          </button>
+          <button type="button" onClick={() => abrirLogin("", "crear")} aria-haspopup="dialog" className={BOTON_BARRA}>
+            Crear cuenta
+          </button>
+        </>
       )}
     </div>
   );

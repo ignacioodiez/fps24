@@ -22,7 +22,7 @@ from sqlmodel import Session, delete, select
 from app import favoritos as modulo
 from app.auth import Usuario, usuario_actual
 from app.database.engine import engine
-from app.database.models import Cine, CineFavorito
+from app.database.models import Cine, CineFavorito, Perfil
 from main import app
 
 if engine.url.host not in ("db", "localhost", "127.0.0.1"):
@@ -88,6 +88,11 @@ with Session(engine) as session:
     session.commit()
     ids = {c.slug: c.id for c in session.exec(select(Cine).where(Cine.slug.in_(SLUGS))).all()}
 uno, dos, tres = SLUGS
+
+# Con perfil (nombre de usuario): sin él, usuario_con_nombre cierra estos endpoints
+with Session(engine) as session:
+    session.add_all(Perfil(user_id=u, usuario=f"chk_{u.hex[:12]}") for u in PRUEBA)
+    session.commit()
 
 try:
     # --- Sin sesión: los tres responden 401 (o 503 si falta SUPABASE_URL) y no tocan nada ---
@@ -209,6 +214,7 @@ try:
 finally:
     app.dependency_overrides.clear()
     with Session(engine) as session:
+        session.exec(delete(Perfil).where(Perfil.user_id.in_(PRUEBA)))
         session.exec(delete(CineFavorito).where(CineFavorito.user_id.in_(PRUEBA)))
         session.exec(delete(Cine).where(Cine.slug.in_(SLUGS)))
         session.commit()

@@ -57,13 +57,16 @@ export default function PrivacidadPage() {
                 solo lo ves tú, salvo que elijas «Solo amigos» o «Público» en «¿Quién ve tu diario?».
               </li>
               <li>
-                Tu <strong className="text-foreground">perfil</strong>, si decides crearlo (es opcional): un nombre de
-                usuario y una bio corta. Para el perfil, el diario y los cines eliges entre tres niveles:{" "}
+                Tu <strong className="text-foreground">perfil</strong>: un nombre de usuario (lo eliges al crear tu cuenta)
+                y, si quieres, una bio corta. Para el perfil, el diario y los cines eliges entre tres niveles:{" "}
                 <strong className="text-foreground">Privado</strong> (por defecto: solo tú),{" "}
                 <strong className="text-foreground">Solo amigos</strong> y <strong className="text-foreground">Público</strong>{" "}
                 (cualquiera con tu enlace, fps24.es/u/tu-usuario). Nunca se ve tu email. El diario y los cines nunca pueden
                 ser más abiertos que el perfil: si lo cierras, se cierran con él. Si muestras tu diario, se ven todas sus
                 entradas, incluidas tus notas y comentarios. Puedes cambiarlo cuando quieras y deja de verse al momento.
+                Tu <strong className="text-foreground">nombre de usuario no es secreto</strong>, aunque tu perfil sea
+                privado: cualquiera puede comprobar si un nombre está cogido al elegir el suyo. Lo que protege tu privacidad
+                es el contenido (tu perfil, tu diario, tus cines y tus sesiones), que solo ve quien tú decidas.
               </li>
               <li>
                 Opcionalmente, un <strong className="text-foreground">avatar</strong> (tus iniciales sobre un color, o el
@@ -120,7 +123,7 @@ export default function PrivacidadPage() {
           <Seccion titulo="Amigos y bloqueo">
             <p>
               Una <strong className="text-foreground">amistad</strong> en FPS24 es mutua: una persona envía la solicitud
-              (escribiendo tu nombre de usuario exacto) y la otra la acepta. Si las dos se la envían, queda aceptada sola.
+              (escribiendo tu nombre de usuario; da igual mayúsculas o minúsculas) y la otra la acepta. Si las dos se la envían, queda aceptada sola.
               Puedes rechazar una solicitud, cancelar una que hayas enviado o quitar a un amigo cuando quieras; nadie
               recibe un aviso por ello. Al enviar una solicitud siempre ves el mismo mensaje, exista o no ese usuario.
             </p>

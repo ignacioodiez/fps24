@@ -26,14 +26,14 @@ function Fila({ persona, children }) {
 
 function Seccion({ id, titulo, vacio, children }) {
   return (
-    <section aria-labelledby={id} className="mt-8">
+    <section aria-labelledby={id} className="mt-8 min-w-0">
       <h4 id={id} className={SUBTITULO}>{titulo}</h4>
       {children.length ? <ul className="mt-2">{children}</ul> : <p className="mt-2 text-sm text-muted">{vacio}</p>}
     </section>
   );
 }
 
-// Pestaña Amigos de mi perfil: añadir por nombre exacto, solicitudes, amigos y bloqueados.
+// Pestaña Amigos de mi perfil: añadir por nombre de usuario (sin distinguir mayúsculas), solicitudes, amigos y bloqueados.
 // onRecibidas(n): para el contador de la pestaña.
 export default function MisAmigos({ onRecibidas }) {
   const [datos, setDatos] = useState(null); // { amigos, recibidas, enviadas, bloqueos } o { error }
@@ -84,44 +84,47 @@ export default function MisAmigos({ onRecibidas }) {
   return (
     <div>
       <form onSubmit={enviar} className="mt-4 border border-line bg-surface p-4">
-        <label htmlFor={`${id}-usuario`} className={ETIQUETA}>Añadir amigo</label>
+        <label htmlFor={`${id}-usuario`} className={ETIQUETA}>Nombre de usuario</label>
         <div className="flex flex-wrap gap-2">
           <input
             id={`${id}-usuario`} type="text" required maxLength={21} value={nombre} onChange={(e) => setNombre(e.target.value)}
-            placeholder="nombre de usuario exacto" autoComplete="off" autoCapitalize="none" spellCheck={false}
+            placeholder="Nombre de usuario" autoComplete="off" autoCapitalize="none" spellCheck={false}
             aria-describedby={`${id}-ayuda`} className={`${CAMPO} min-w-0 flex-1 basis-48`}
           />
           <button type="submit" disabled={ocupado || !nombre.trim()} className={BOTON_PRIMARIO}>Enviar solicitud</button>
         </div>
         <p id={`${id}-ayuda`} className="mt-1 text-xs text-muted">
-          Escribe su nombre de usuario tal cual. Si te ha enviado una solicitud, se acepta al momento.
+          Da igual mayúsculas o minúsculas. Si te ha enviado una solicitud, se acepta al momento.
         </p>
       </form>
       <p role="status" aria-live="polite" className="mt-2 text-sm font-semibold text-primary min-h-5">{aviso}</p>
 
-      <Seccion id={`${id}-recibidas`} titulo={`Solicitudes recibidas (${datos.recibidas.length})`} vacio="No tienes solicitudes pendientes.">
-        {datos.recibidas.map((s) => (
-          <Fila key={s.id} persona={s}>
-            <button type="button" disabled={ocupado} onClick={() => hacer(() => aceptarSolicitud(s.id), `Ahora @${s.usuario} y tú sois amigos`)} className={BOTON_PRIMARIO}>
-              Aceptar<span className="sr-only"> a @{s.usuario}</span>
-            </button>
-            <button type="button" disabled={ocupado} onClick={() => hacer(() => rechazarSolicitud(s.id), `Solicitud de @${s.usuario} rechazada`)} className={`${ACCION} text-muted hover:text-red-600`}>
-              Rechazar<span className="sr-only"> a @{s.usuario}</span>
-            </button>
-          </Fila>
-        ))}
-      </Seccion>
+      {/* Recibidas y enviadas, lado a lado desde md; en móvil, una encima de otra */}
+      <div className="grid gap-x-8 md:grid-cols-2">
+        <Seccion id={`${id}-recibidas`} titulo={`Solicitudes recibidas (${datos.recibidas.length})`} vacio="No tienes solicitudes pendientes.">
+          {datos.recibidas.map((s) => (
+            <Fila key={s.id} persona={s}>
+              <button type="button" disabled={ocupado} onClick={() => hacer(() => aceptarSolicitud(s.id), `Ahora @${s.usuario} y tú sois amigos`)} className={BOTON_PRIMARIO}>
+                Aceptar<span className="sr-only"> a @{s.usuario}</span>
+              </button>
+              <button type="button" disabled={ocupado} onClick={() => hacer(() => rechazarSolicitud(s.id), `Solicitud de @${s.usuario} rechazada`)} className={`${ACCION} text-muted hover:text-red-600`}>
+                Rechazar<span className="sr-only"> a @{s.usuario}</span>
+              </button>
+            </Fila>
+          ))}
+        </Seccion>
 
-      <Seccion id={`${id}-enviadas`} titulo={`Enviadas (${datos.enviadas.length})`} vacio="No tienes solicitudes enviadas sin respuesta.">
-        {datos.enviadas.map((s) => (
-          <Fila key={s.id} persona={s}>
-            <span className="text-xs text-muted">Pendiente</span>
-            <button type="button" disabled={ocupado} onClick={() => hacer(() => cancelarSolicitud(s.id), `Solicitud a @${s.usuario} cancelada`)} className={`${ACCION} text-muted hover:text-red-600`}>
-              Cancelar<span className="sr-only"> la solicitud a @{s.usuario}</span>
-            </button>
-          </Fila>
-        ))}
-      </Seccion>
+        <Seccion id={`${id}-enviadas`} titulo={`Solicitudes enviadas (${datos.enviadas.length})`} vacio="No tienes solicitudes enviadas sin respuesta.">
+          {datos.enviadas.map((s) => (
+            <Fila key={s.id} persona={s}>
+              <span className="text-xs text-muted">Pendiente</span>
+              <button type="button" disabled={ocupado} onClick={() => hacer(() => cancelarSolicitud(s.id), `Solicitud a @${s.usuario} cancelada`)} className={`${ACCION} text-muted hover:text-red-600`}>
+                Cancelar<span className="sr-only"> la solicitud a @{s.usuario}</span>
+              </button>
+            </Fila>
+          ))}
+        </Seccion>
+      </div>
 
       <Seccion id={`${id}-amigos`} titulo={`Amigos (${datos.amigos.length})`} vacio="Aún no tienes amigos en fps24. Añade a alguien por su nombre de usuario.">
         {datos.amigos.map((a) => (

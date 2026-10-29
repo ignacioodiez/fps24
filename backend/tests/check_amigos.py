@@ -25,7 +25,7 @@ from app import amigos as modulo
 from app.auth import Usuario, usuario_actual, usuario_opcional
 from app.database.engine import engine
 from app.database.models import Amistad, Bloqueo, Cine, CineFavorito, DiarioEntrada, Pelicula, Perfil
-from app.perfil import NIVELES
+from app.perfil import NIVELES, SIN_NOMBRE
 from app.services.tiempo import hoy_madrid
 from main import app
 
@@ -67,8 +67,9 @@ def ok(esperado, resultado, que):
 
 
 sufijo = uuid.uuid4().hex[:6]
-NOMBRES = dict(dueno=f"chk_dueno{sufijo}", amigo=f"chk_amigo{sufijo}", otro=f"chk_otro{sufijo}",
-               bloq=f"chk_bloq{sufijo}", lim=f"chk_lim{sufijo}")
+# Con mayúsculas: se guardan así y se buscan sin distinguirlas
+NOMBRES = dict(dueno=f"chk_dueno{sufijo}", amigo=f"Chk_Amigo{sufijo}", otro=f"chk_otro{sufijo}",
+               bloq=f"Chk.Bloq{sufijo}", lim=f"chk_lim{sufijo}")
 IDS = {k: uuid.uuid4() for k in NOMBRES}
 SIN_PERFIL = uuid.uuid4()
 RELLENO = [uuid.uuid4() for _ in range(modulo.MAX_PENDIENTES)]  # destinatarios para llenar el tope de pendientes
@@ -124,8 +125,9 @@ try:
 
     # --- Sin perfil propio: error claro, sin mirar a quién ---
     como(SIN_PERFIL)
-    assert "nombre de usuario" in ok(422, llamar("POST", "/me/amigos/solicitudes", {"usuario": NOMBRES["dueno"]}), "sin perfil")["detail"]
-    assert mis_amigos(SIN_PERFIL) == {"amigos": [], "recibidas": [], "enviadas": []}
+    sin_nombre = (403, {"detail": SIN_NOMBRE})  # la puerta común de usuario_con_nombre
+    assert llamar("POST", "/me/amigos/solicitudes", {"usuario": NOMBRES["dueno"]})[:2] == sin_nombre
+    assert llamar("GET", "/me/amigos")[:2] == sin_nombre
 
     # --- Solicitud, aceptar; la respuesta es siempre la misma ---
     igual = (200, modulo.ENVIADA)
@@ -153,11 +155,11 @@ try:
     pedir("bloq", NOMBRES["dueno"])
     como("dueno")
     ok(204, llamar("POST", f"/me/amigos/solicitudes/{mis_amigos('dueno')['recibidas'][0]['id']}/aceptar"), "dueno acepta a bloq")
-    ok(204, llamar("POST", "/me/bloqueos", {"usuario": f"@{NOMBRES['bloq']}"}), "bloquear")
-    ok(204, llamar("POST", "/me/bloqueos", {"usuario": NOMBRES["bloq"]}), "bloquear dos veces")
+    ok(204, llamar("POST", "/me/bloqueos", {"usuario": f"@{NOMBRES['bloq'].lower()}"}), "bloquear (sin mayúsculas)")
+    ok(204, llamar("POST", "/me/bloqueos", {"usuario": NOMBRES["bloq"].upper()}), "bloquear dos veces")
     for quien in (f"nadie_{sufijo}", NOMBRES["dueno"], "x" * 300):
         ok(204, llamar("POST", "/me/bloqueos", {"usuario": quien}), f"bloquear {quien[:20]} (siempre 204)")
-    assert nombres(ok(200, llamar("GET", "/me/bloqueos"), "mis bloqueos")) == [NOMBRES["bloq"]]
+    assert nombres(ok(200, llamar("GET", "/me/bloqueos"), "mis bloqueos")) == [NOMBRES["bloq"]]  # con sus mayúsculas
     assert all(B not in (s, d) for s, d, _ in pares()), "bloquear borra la amistad"
     print("OK: bloquear borra la amistad y es idempotente")
 
@@ -170,7 +172,7 @@ try:
              ("bloq", NOMBRES["dueno"]), ("dueno", NOMBRES["bloq"]), ("lim", NOMBRES["otro"]), ("amigo", "x" * 300), ("amigo", "")]
     assert all(pedir(q, a) == igual for q, a in casos), [pedir(q, a) for q, a in casos]
     assert pares() == antes, "ninguna de esas crea nada"
-    assert pedir("otro", NOMBRES["dueno"]) == igual and (O, D, "pendiente") in pares()  # existente
+    assert pedir("otro", NOMBRES["dueno"].title()) == igual and (O, D, "pendiente") in pares()  # existente, otras mayúsculas
     print("OK: misma respuesta para existente, inexistente, uno mismo, bloqueado (en los dos sentidos) y ya amigo")
 
     # --- Rechazar y cancelar ---
@@ -224,6 +226,10 @@ try:
     inexistente = llamar("GET", f"/u/nadie_{sufijo}")
     assert inexistente[:2] == (404, {"detail": "Este perfil no existe o es privado"}) and inexistente[2]["cache-control"] == "private, no-store"
     rel_esperada = {"dueno": "yo", "amigo": "amigos", "otro": "ninguna", None: None}
+    with Session(engine) as session:  # amistades aceptadas del dueño (solo amigo: bloq y otro ya no)
+        n_amigos = session.exec(select(Amistad).where(Amistad.estado == "aceptada",
+                                                      (Amistad.solicitante_id == IDS["dueno"]) | (Amistad.destinatario_id == IDS["dueno"]))).all()
+    assert len(n_amigos) == 1, n_amigos
     combinaciones = 0
     for perfil, diario, cines in itertools.product(NIVELES, repeat=3):
         como("dueno")
@@ -236,7 +242,7 @@ try:
         diario, cines = tope(diario), tope(cines)
         for quien in ("dueno", "amigo", "otro", None, "bloq"):
             como(quien)
-            codigo, cuerpo, cabeceras = r = llamar("GET", f"/u/{NOMBRES['dueno']}")
+            codigo, cuerpo, cabeceras = r = llamar("GET", f"/u/{NOMBRES['dueno'].upper()}")  # sin distinguir mayúsculas
             VISTO.append(cuerpo)
             assert cabeceras["cache-control"] == "private, no-store", cabeceras
             ve = lambda n: quien == "dueno" or n == "publico" or (n == "amigos" and quien == "amigo")
@@ -247,15 +253,16 @@ try:
             assert codigo == 200 and cuerpo["relacion"] == rel_esperada[quien], (que, cuerpo)
             if not ve(perfil):  # "amigos" visto por quien no lo es: tarjeta mínima
                 assert cuerpo["restringido"] is True and cuerpo["usuario"] == NOMBRES["dueno"] and cuerpo["avatar"], (que, cuerpo)
-                assert all(cuerpo[k] in (None, False) for k in ("bio", "letterboxd_usuario", "diario", "cines", "cifras", "diario_publico")), (que, cuerpo)
+                assert all(cuerpo[k] in (None, False) for k in ("bio", "letterboxd_usuario", "diario", "cines", "cifras", "diario_publico", "amigos")), (que, cuerpo)
                 continue
             assert cuerpo["restringido"] is False and cuerpo["bio"] == "bio de prueba" and cuerpo["letterboxd_usuario"] == "chk_lbx", (que, cuerpo)
+            assert cuerpo["amigos"] == 1, (que, cuerpo)  # el contador: con el perfil completo, y solo el número
             assert (cuerpo["diario"] is not None, cuerpo["cifras"] is not None, cuerpo["diario_publico"]) == (ve(diario),) * 3, (que, cuerpo)
             assert (cuerpo["cines"] is not None) == ve(cines), (que, cuerpo)
             assert not ve(diario) or cuerpo["diario"]["total"] == 1
             assert not ve(cines) or len(cuerpo["cines"]) == 1
         combinaciones += 1
-    print(f"OK: matriz de visibilidad ({combinaciones} combinaciones × dueño, amigo, no amigo, anónimo y bloqueado)")
+    print(f"OK: matriz de visibilidad y contador de amigos ({combinaciones} combinaciones × dueño, amigo, no amigo, anónimo y bloqueado)")
 
     # Relación vista desde el otro lado, y la de quien ha bloqueado
     como("dueno")
@@ -274,7 +281,7 @@ try:
     assert llamar("GET", f"/u/{NOMBRES['dueno']}")[:2] == inexistente[:2]  # el bloqueado, el 404 neutro
     assert all(O not in (s, d) for s, d, _ in pares())  # y la solicitud ha desaparecido
     como("dueno")
-    ok(204, llamar("DELETE", f"/me/bloqueos/{NOMBRES['otro']}"), "desbloquear")
+    ok(204, llamar("DELETE", f"/me/bloqueos/{NOMBRES['otro'].upper()}"), "desbloquear (sin distinguir mayúsculas)")
     assert nombres(ok(200, llamar("GET", "/me/bloqueos"), "bloqueos")) == [NOMBRES["bloq"]]
     como("otro")
     assert llamar("GET", f"/u/{NOMBRES['dueno']}")[0] == 200
