@@ -17,6 +17,7 @@ from app.database.models import Cine, DiarioEntrada, Pase, Pelicula
 from app.services.tiempo import hoy_madrid
 
 router = APIRouter()
+publico = APIRouter()  # sin la puerta de usuario_con_nombre (ver main.py)
 
 COMENTARIO_MAX = 2000
 
@@ -226,7 +227,7 @@ def borrar_entrada(entrada_id: int, usuario: Usuario = Depends(usuario_actual),
 
 
 # Público: para elegir el cine al apuntar una película en el diario. Incluye pases inactivos y pasados.
-@router.get("/pelicula/{pelicula_id}/cines", response_model=List[CineDelDia])
+@publico.get("/pelicula/{pelicula_id}/cines", response_model=List[CineDelDia])
 def leer_cines_del_dia(pelicula_id: int, fecha: date, session: Session = Depends(get_session)):
     if session.get(Pelicula, pelicula_id) is None:
         raise HTTPException(status_code=404, detail="Película no encontrada")

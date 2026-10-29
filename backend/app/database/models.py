@@ -123,14 +123,20 @@ class DiarioEntrada(SQLModel, table=True):
     cine: Optional[Cine] = Relationship()
 
 
-# 8. PERFIL (migración 0011): nombre de usuario único (en minúsculas) y visibilidad. Privado por defecto.
-# diario_publico (0012): el diario se ve en /u/{usuario} solo si además el perfil es público.
+# 8. PERFIL (migración 0011): nombre de usuario único sin distinguir mayúsculas (0021) y visibilidad. Privado por defecto.
+# Migración 0020: privado/amigos/publico para el perfil, el diario y los cines; una sección nunca más abierta que el perfil.
 class Perfil(SQLModel, table=True):
     __tablename__ = "perfil"
     __table_args__ = (
         Index("uq_perfil_usuario", text("lower(usuario)"), unique=True),
         CheckConstraint("char_length(bio) <= 160", name="ck_perfil_bio"),
-        CheckConstraint("visibilidad IN ('privado', 'publico')", name="ck_perfil_visibilidad"),
+        CheckConstraint("visibilidad IN ('privado', 'amigos', 'publico')", name="ck_perfil_visibilidad"),
+        CheckConstraint("diario_visibilidad IN ('privado', 'amigos', 'publico')", name="ck_perfil_diario_visibilidad"),
+        CheckConstraint("cines_visibilidad IN ('privado', 'amigos', 'publico')", name="ck_perfil_cines_visibilidad"),
+        CheckConstraint("diario_visibilidad = 'privado' OR diario_visibilidad = visibilidad OR visibilidad = 'publico'",
+                        name="ck_perfil_diario_visibilidad_perfil"),
+        CheckConstraint("cines_visibilidad = 'privado' OR cines_visibilidad = visibilidad OR visibilidad = 'publico'",
+                        name="ck_perfil_cines_visibilidad_perfil"),
         # Migración 0018
         CheckConstraint("avatar_tipo IN ('iniciales', 'pelicula')", name="ck_perfil_avatar_tipo"),
         CheckConstraint("letterboxd_usuario ~ '^[A-Za-z0-9_]{2,20}$'", name="ck_perfil_letterboxd"),
@@ -139,13 +145,16 @@ class Perfil(SQLModel, table=True):
     usuario: str = Field(sa_column=Column(Text, nullable=False))
     bio: Optional[str] = Field(default=None, sa_column=Column(Text))
     visibilidad: str = Field(default="privado", sa_column=Column(Text, nullable=False, server_default="privado"))
-    diario_publico: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    diario_visibilidad: str = Field(default="privado", sa_column=Column(Text, nullable=False, server_default="privado"))
     # Migración 0018. avatar_color: id de PALETA_AVATAR (app/perfil.py); None = color sacado del nombre
     avatar_tipo: str = Field(default="iniciales", sa_column=Column(Text, nullable=False, server_default="iniciales"))
     avatar_color: Optional[str] = Field(default=None, sa_column=Column(Text))
     avatar_pelicula_id: Optional[int] = Field(default=None, foreign_key="pelicula.id", ondelete="SET NULL")
     letterboxd_usuario: Optional[str] = Field(default=None, sa_column=Column(Text))
-    cines_publicos: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    cines_visibilidad: str = Field(default="privado", sa_column=Column(Text, nullable=False, server_default="privado"))
+    # Tope de solicitudes de amistad nuevas por día de Madrid (app/amigos.py)
+    solicitudes_dia: Optional[date] = None
+    solicitudes_hoy: int = Field(default=0, sa_column=Column(SmallInteger, nullable=False, server_default="0"))
     creado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     actualizado_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
@@ -235,4 +244,29 @@ class SesionGuardada(SQLModel, table=True):
     idioma: Optional[str] = Field(default=None, sa_column=Column(Text))  # tal cual pase.idioma ("VOSE", "Español"...)
     link_compra: Optional[str] = Field(default=None, sa_column=Column(Text))
     diario_entrada_id: Optional[int] = Field(default=None, foreign_key="diario_entrada.id", ondelete="SET NULL")  # "La vi"
+    creada_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+
+
+# 14. AMIGOS (migración 0020). Un único par por usuarios (uq_amistad_par, sin importar el orden); rechazar o cancelar
+# borra la fila. FK a perfil con CASCADE: borrar la cuenta (el perfil) borra sus amistades y bloqueos.
+class Amistad(SQLModel, table=True):
+    __table_args__ = (
+        Index("uq_amistad_par", text("least(solicitante_id, destinatario_id)"), text("greatest(solicitante_id, destinatario_id)"), unique=True),
+        CheckConstraint("estado IN ('pendiente', 'aceptada')", name="ck_amistad_estado"),
+        CheckConstraint("solicitante_id <> destinatario_id", name="ck_amistad_distintos"),
+        Index("ix_amistad_destinatario", "destinatario_id"),
+    )
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, sa_column=Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")))
+    solicitante_id: uuid.UUID = Field(foreign_key="perfil.user_id", ondelete="CASCADE")
+    destinatario_id: uuid.UUID = Field(foreign_key="perfil.user_id", ondelete="CASCADE")
+    estado: str = Field(default="pendiente", sa_column=Column(Text, nullable=False, server_default="pendiente"))
+    creada_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
+    respondida_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+
+
+class Bloqueo(SQLModel, table=True):
+    __table_args__ = (CheckConstraint("bloqueador_id <> bloqueado_id", name="ck_bloqueo_distintos"),
+                      Index("ix_bloqueo_bloqueado", "bloqueado_id"))
+    bloqueador_id: uuid.UUID = Field(foreign_key="perfil.user_id", ondelete="CASCADE", primary_key=True)
+    bloqueado_id: uuid.UUID = Field(foreign_key="perfil.user_id", ondelete="CASCADE", primary_key=True)
     creada_en: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

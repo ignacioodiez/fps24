@@ -9,7 +9,8 @@ import { comoUTC, formato } from "@/lib/fechasMadrid";
 // Última semana de cada página (la API rechaza las siguientes): /estrenos llega a la 8 con los estrenos de TMDB
 const SEMANAS_MAX = { estrenos: 8, especiales: 3 };
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Solo en el servidor: API_URL_INTERNA (Docker) si existe; si no, la pública
+const API = process.env.API_URL_INTERNA || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Mismo patrón que /cines: caché de 5 min. Next solo guarda las respuestas 200, así que un fallo no se queda
 async function leerSemana(ruta, semana) {

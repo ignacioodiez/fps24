@@ -31,6 +31,7 @@ export const PESTANAS = [
   { clave: "diario", etiqueta: "Diario", ruta: "/diario" },
   { clave: "cines", etiqueta: "Cines", ruta: "/cines" },
   { clave: "sesiones", etiqueta: "Sesiones", ruta: "/sesiones" }, // solo el dueño: su agenda privada
+  { clave: "amigos", etiqueta: "Amigos", ruta: "/amigos" }, // solo el dueño
 ];
 
 // Texto de ayuda del dueño, con enlace a la edición o a donde se añade el contenido
@@ -38,20 +39,24 @@ export function Ayuda({ children }) {
   return <p className="mt-3 text-sm text-muted">{children}</p>;
 }
 
-// Solo para el dueño, bajo una sección que los demás no ven
-export function SoloTu({ que }) {
+// Solo para el dueño, bajo una sección que no ve todo el mundo: una nota discreta. nivel: "privado" o "amigos"
+export function SoloTu({ que, nivel = "privado" }) {
   return (
     <p className="mt-1 text-xs text-muted">
-      Solo tú ves {que}. <Link href="/perfil/editar" className={ENLACE}>Mostrarlo en tu perfil público</Link>
+      {nivel === "amigos" ? `Solo tú y tus amigos veis ${que}.` : `Solo tú ves ${que}.`}{" · "}
+      <Link href="/perfil/editar" className="underline hover:text-primary">Cambiar quién lo ve</Link>
     </p>
   );
 }
 
 // Avatar grande, nombre, bio, Letterboxd y (dueño) "Editar mi perfil"; a la derecha, o debajo en móvil, las cifras.
-// cifras: { entradas, este_anio, cines }; las que sean undefined no se ven (quien mira no puede ver ese dato).
-export function CabeceraPerfil({ perfil, cifras = {}, esDueno = false }) {
+// cifras: { entradas, este_anio, cines, amigos }; las que sean undefined no se ven (quien mira no puede ver ese dato).
+// Amigos solo enlaza para el dueño: la lista de amigos de otra persona no es pública.
+// children: debajo del nombre (el botón de amistad en el perfil de otra persona).
+export function CabeceraPerfil({ perfil, cifras = {}, esDueno = false, children }) {
   const { usuario, bio, avatar, letterboxd_usuario: letterboxd } = perfil;
-  const filas = [["Entradas", cifras.entradas], ["Este año", cifras.este_anio], ["Cines favoritos", cifras.cines]]
+  const filas = [["Entradas", cifras.entradas], ["Este año", cifras.este_anio], ["Cines favoritos", cifras.cines],
+    ["Amigos", cifras.amigos, esDueno && `/u/${usuario}/amigos`]]
     .filter(([, valor]) => valor !== undefined && valor !== null);
   return (
     <div className="flex flex-col md:flex-row md:items-center gap-6">
@@ -71,14 +76,22 @@ export function CabeceraPerfil({ perfil, cifras = {}, esDueno = false }) {
             </a>
           )}
           {esDueno && <div className="mt-2"><Link href="/perfil/editar" className={`inline-block ${BOTON_PRIMARIO}`}>Editar mi perfil</Link></div>}
+          {children}
         </div>
       </div>
       {filas.length > 0 && (
+        // En móvil, columnas iguales y las etiquetas largas bajan de línea: cuatro cifras caben en 390 px
         <dl className="flex shrink-0 divide-x divide-line border-t border-line pt-4 md:border-t-0 md:pt-0">
-          {filas.map(([etiqueta, valor]) => (
-            <div key={etiqueta} className="flex flex-col-reverse items-center px-4 first:pl-0 md:first:pl-4 text-center">
+          {filas.map(([etiqueta, valor, enlace]) => (
+            <div key={etiqueta} className="flex min-w-0 flex-1 md:flex-none flex-col-reverse items-center justify-end px-2 md:px-4 text-center">
               <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{etiqueta}</dt>
-              <dd className="text-2xl md:text-3xl font-black font-display text-foreground">{valor.toLocaleString("es-ES")}</dd>
+              <dd className="text-2xl md:text-3xl font-black font-display text-foreground">
+                {enlace
+                  ? <Link href={enlace} className="hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                      {valor.toLocaleString("es-ES")}<span className="sr-only"> (ver tus amigos)</span>
+                    </Link>
+                  : valor.toLocaleString("es-ES")}
+              </dd>
             </div>
           ))}
         </dl>
@@ -87,8 +100,9 @@ export function CabeceraPerfil({ perfil, cifras = {}, esDueno = false }) {
   );
 }
 
-// Fila de pestañas con URL propia: enlaces con aria-current, no role="tab" (cada una es otra página)
-export function PestanasPerfil({ usuario, actual, visibles }) {
+// Fila de pestañas con URL propia: enlaces con aria-current, no role="tab" (cada una es otra página).
+// contadores: { clave: n } para un número discreto junto a la pestaña (solicitudes de amistad recibidas)
+export function PestanasPerfil({ usuario, actual, visibles, contadores = {} }) {
   return (
     <nav aria-label="Secciones del perfil" className="mt-6 border-b border-line">
       <ul className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -97,6 +111,11 @@ export function PestanasPerfil({ usuario, actual, visibles }) {
             <Link href={`/u/${usuario}${p.ruta}`} aria-current={p.clave === actual ? "page" : undefined}
                   className={`flex items-center min-h-11 px-4 text-xs md:text-[13px] font-semibold uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${p.clave === actual ? "text-primary shadow-[inset_0_-3px_0_var(--primary)]" : "text-muted hover:text-foreground"}`}>
               {p.etiqueta}
+              {contadores[p.clave] > 0 && (
+                <span className="ml-1.5 min-w-5 px-1 bg-primary-soft text-primary text-[11px] font-bold text-center tabular-nums">
+                  {contadores[p.clave]}<span className="sr-only"> {contadores[p.clave] === 1 ? "solicitud pendiente" : "solicitudes pendientes"}</span>
+                </span>
+              )}
             </Link>
           </li>
         ))}
@@ -133,7 +152,7 @@ export function ActividadReciente({ entradas, esDueno, soloTu }) {
   return (
     <section aria-labelledby="actividad-reciente">
       <h3 id="actividad-reciente" className={TITULO_SECCION}>Actividad reciente</h3>
-      {soloTu && <SoloTu que="tu actividad" />}
+      {soloTu && <SoloTu que="tu actividad" nivel={soloTu} />}
       {entradas.length ? (
         <>
           <ul className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -155,7 +174,7 @@ export function CinesLateral({ cines, esDueno, soloTu }) {
       <h3 id="cines-lateral" className={TITULO_LATERAL}>
         {esDueno ? "Mis cines" : "Cines favoritos"} <span className="font-normal">({cines.length})</span>
       </h3>
-      {soloTu && <SoloTu que="tus cines" />}
+      {soloTu && <SoloTu que="tus cines" nivel={soloTu} />}
       {cines.length ? (
         <ul className="mt-2">
           {cines.map((c) => (
@@ -178,7 +197,7 @@ export function DiarioLateral({ usuario, entradas, total, soloTu }) {
   return (
     <section aria-labelledby="diario-lateral">
       <h3 id="diario-lateral" className={TITULO_LATERAL}>Diario <span className="font-normal">({total.toLocaleString("es-ES")})</span></h3>
-      {soloTu && <SoloTu que="tu diario" />}
+      {soloTu && <SoloTu que="tu diario" nivel={soloTu} />}
       {entradas.length ? (
         <>
           {porMes(entradas.slice(0, 10)).map((m) => (

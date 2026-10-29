@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { fetchConAuth } from "@/lib/api";
+import { motivoFormato } from "@/lib/usuario";
 
-// Perfil del usuario (backend/app/perfil.py). Las reglas del nombre solo están en el backend:
-// aquí se enseña el motivo que devuelve /usuarios/disponible o el PUT.
+// Perfil del usuario (backend/app/perfil.py). El formato del nombre (lib/usuario.js) se comprueba aquí para avisar al
+// momento; la lista de reservados y la unicidad solo las sabe el backend (/usuarios/disponible y el PUT).
 
 export const BIO_MAX = 160; // el mismo que en el backend
 
@@ -35,4 +37,32 @@ async function pedir(ruta, opciones = {}) {
 export const leerPerfil = () => pedir("/me/perfil");
 export const guardarPerfil = (datos) =>
   pedir("/me/perfil", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos) });
-export const comprobarUsuario = (u, signal) => pedir(`/usuarios/disponible?u=${encodeURIComponent(u)}`, { signal });
+// Público; con sesión, el nombre propio sale libre. { disponible } y, si el formato no vale, { motivo }
+export const comprobarUsuario = (nombre, signal) => pedir(`/usuarios/disponible?nombre=${encodeURIComponent(nombre)}`, { signal });
+
+const ESPERA_MS = 400; // debounce de la comprobación
+
+// Comprobación al instante (con debounce) de un nombre: { estado: nada | comprobando | libre | no | error, motivo }.
+// propio: el nombre que ya tiene (no se comprueba). Hasta que pasa la espera, "comprobando" sin texto nuevo.
+export function useDisponibilidad(nombre, propio = null) {
+  const [resultado, setResultado] = useState({ nombre: null });
+  const valor = (nombre ?? "").trim();
+  const comprobar = Boolean(valor) && valor !== propio;
+  useEffect(() => {
+    if (!comprobar) return;
+    const control = new AbortController();
+    const t = setTimeout(() => {
+      const formato = motivoFormato(valor);
+      if (formato) return setResultado({ nombre: valor, estado: "no", motivo: formato });
+      comprobarUsuario(valor, control.signal)
+        .then((r) => setResultado({ nombre: valor, estado: r.disponible ? "libre" : "no", motivo: r.disponible ? "Disponible" : r.motivo ?? "No disponible" }))
+        .catch((err) => err.name !== "AbortError" && setResultado({ nombre: valor, estado: "error", motivo: err.message }));
+    }, ESPERA_MS);
+    return () => {
+      clearTimeout(t);
+      control.abort();
+    };
+  }, [valor, comprobar]);
+  if (!comprobar) return { estado: "nada", motivo: "" };
+  return resultado.nombre === valor ? resultado : { estado: "comprobando", motivo: "" };
+}

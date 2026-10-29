@@ -16,8 +16,8 @@ export function useSesionesGuardadas() {
 }
 
 export default function SesionesGuardadasProvider({ children }) {
-  const { usuario } = useAuth();
-  const uid = usuario?.id;
+  const { usuario, miPerfil } = useAuth();
+  const uid = miPerfil?.usuario ? usuario?.id : undefined; // sin nombre de usuario la API las cierra (403): se espera a tenerlo
   const [estado, setEstado] = useState({ uid: null, marcas: null });
   const [abierta, setAbierta] = useState(null); // { sesion, origen }
 

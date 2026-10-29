@@ -16,10 +16,11 @@ from app.services.destacadas import SEMANAS_MAX, SEMANAS_MAX_ESTRENOS, leer_dest
 from app.services.cines import detalle_cine, listar_cines
 from app.services.gestor_peliculas import EXCLUIDOS
 from app.auth import Usuario, usuario_actual
-from app.diario import router as diario_router
-from app.perfil import router as perfil_router
+from app.diario import publico as diario_publico, router as diario_router
+from app.perfil import router as perfil_router, usuario_con_nombre
 from app.favoritos import router as favoritos_router
 from app.sesiones import router as sesiones_router
+from app.amigos import router as amigos_router
 from app.admin import admin_actual, es_admin, router as admin_router
 from app.newsletter.rutas import router as newsletter_router
 from app.proximamente.estrenos import leer_estrenos as leer_estrenos_semana
@@ -38,14 +39,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Diario del usuario (/diario...) y GET /pelicula/{id}/cines
-app.include_router(diario_router)
+# Lo privado, solo con nombre de usuario: una sola puerta para todos sus endpoints (tests/check_perfil.py lo comprueba)
+CON_NOMBRE = [Depends(usuario_con_nombre)]
+# Diario del usuario (/diario...) y, sin puerta, GET /pelicula/{id}/cines
+app.include_router(diario_router, dependencies=CON_NOMBRE)
+app.include_router(diario_publico)
 # Perfil (/me/perfil, /usuarios/disponible) y perfil público (/u/{usuario})
 app.include_router(perfil_router)
 # Cines favoritos (/me/cines-favoritos)
-app.include_router(favoritos_router)
+app.include_router(favoritos_router, dependencies=CON_NOMBRE)
 # Sesiones guardadas, la agenda privada (/me/sesiones...)
-app.include_router(sesiones_router)
+app.include_router(sesiones_router, dependencies=CON_NOMBRE)
+# Amigos y bloqueos (/me/amigos..., /me/bloqueos...)
+app.include_router(amigos_router, dependencies=CON_NOMBRE)
 # Panel de administración (/admin/...): 404 para quien no esté en ADMIN_EMAILS
 app.include_router(admin_router)
 # Newsletter semanal: /newsletter/suscribir, /newsletter/confirmar y /newsletter/baja

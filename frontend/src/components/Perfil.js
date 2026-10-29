@@ -11,6 +11,8 @@ import {
 } from "@/components/PerfilVistas";
 import TarjetaPerfilPublico from "@/components/TarjetaPerfilPublico";
 import MisSesiones from "@/components/MisSesiones";
+import MisAmigos from "@/components/MisAmigos";
+import { listarAmigos } from "@/lib/amigos";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
 import { listarSesiones } from "@/lib/sesiones";
@@ -248,7 +250,7 @@ export function Esqueleto() {
 function MisCines() {
   const { favoritos, cargados, alternar } = useFavoritos();
   const { miPerfil } = useAuth();
-  const visibles = miPerfil?.visibilidad === "publico" && miPerfil?.cines_publicos;
+  const quien = { publico: "También se ven en tu perfil público.", amigos: "También los ven tus amigos en tu perfil." }[miPerfil?.cines_visibilidad] ?? "Solo tú ves esta lista.";
   const [cines, setCines] = useState(null);
   const id = useId();
 
@@ -273,7 +275,7 @@ function MisCines() {
         </p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. {visibles ? "También se ven en tu perfil público." : "Solo tú ves esta lista."}</p>
+          <p className="mt-1 text-sm text-muted">Sus sesiones salen primero en toda la web. {quien}</p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {[...favoritos].map((slug) => (
               <li key={slug} className="flex items-center border border-line bg-surface">
@@ -300,9 +302,15 @@ function MiPerfil({ perfil, pestana }) {
   const [todos, setTodos] = useState(null); // GET /cines, para nombre y zona de mis favoritos
   const [diario, setDiario] = useState(null); // GET /diario: { total, este_anio, entradas } o { error }
   const [proximas, setProximas] = useState(0); // sesiones guardadas próximas, para el enlace de la pestaña Perfil
+  const [recibidas, setRecibidas] = useState(0); // solicitudes de amistad pendientes: contador y enlace
+  const [amigos, setAmigos] = useState(undefined); // nº de amigos, para la cabecera (undefined: no se ve)
 
   useEffect(() => {
     todosLosCines().then(setTodos).catch(() => setTodos([]));
+    listarAmigos().then((a) => {
+      setRecibidas(a.recibidas.length);
+      setAmigos(a.amigos.length);
+    }).catch(() => setRecibidas(0)); // sin contadores si falla
   }, []);
 
   // Las últimas entradas para la pestaña Perfil; se recargan al añadir una desde el "+" de la barra
@@ -319,29 +327,28 @@ function MiPerfil({ perfil, pestana }) {
     listarSesiones().then((a) => setProximas(a.proximas.length)).catch(() => setProximas(0)); // sin enlace si falla
   }, [pestana]);
 
-  const publico = perfil.visibilidad === "publico";
-  const diarioSoloTu = !(publico && perfil.diario_publico);
-  const cinesSoloTu = !(publico && perfil.cines_publicos);
+  const { diario_visibilidad: nivelDiario, cines_visibilidad: nivelCines } = perfil;
+  // Para SoloTu: el nivel si no lo ve todo el mundo; si no, nada
+  const diarioSoloTu = nivelDiario !== "publico" && nivelDiario;
+  const cinesSoloTu = nivelCines !== "publico" && nivelCines;
   const cines = cargados && todos ? [...favoritos].map((slug) => todos.find((c) => c.slug === slug) ?? { slug, nombre: slug }) : null;
-  const quienVe = !publico
-    ? "Quien abra tu enlace verá «Este perfil no existe o es privado». Hazlo público en «Editar mi perfil» para compartirlo."
-    : `Cualquiera con tu enlace ve tu nombre de usuario, tu avatar, tu bio y tu Letterboxd. ${
-      perfil.diario_publico ? "También tu diario, con tus notas." : "Tu diario no se muestra."} ${
-      perfil.cines_publicos ? "También tus cines favoritos." : "Tus cines favoritos no se muestran."}`;
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
       <CabeceraPerfil
         perfil={perfil} esDueno
-        cifras={{ entradas: diario?.total, este_anio: diario?.este_anio, cines: cines?.length }}
+        cifras={{ entradas: diario?.total, este_anio: diario?.este_anio, cines: cines?.length, amigos }}
       />
-      {(!publico || pestana === "perfil") && (
-        <div role={publico ? undefined : "note"} className={`mt-6 border p-4 ${publico ? "border-line bg-surface" : "border-primary bg-primary-soft"}`}>
-          <p className="font-bold text-foreground">{publico ? "Tu perfil es público" : "Tu perfil es privado: solo tú lo ves"}</p>
-          <p className="text-sm text-muted">{quienVe}</p>
-        </div>
+      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines", "sesiones", "amigos"]}
+                      contadores={{ amigos: recibidas }} />
+
+      {pestana === "perfil" && recibidas > 0 && (
+        <p className="mt-4 text-sm">
+          <Link href={`/u/${perfil.usuario}/amigos`} className="font-bold text-primary hover:underline">
+            {recibidas === 1 ? "1 solicitud de amistad pendiente" : `${recibidas} solicitudes de amistad pendientes`} →
+          </Link>
+        </p>
       )}
-      <PestanasPerfil usuario={perfil.usuario} actual={pestana} visibles={["perfil", "diario", "cines", "sesiones"]} />
 
       {pestana === "perfil" && proximas > 0 && (
         <p className="mt-4 text-sm">
@@ -359,7 +366,7 @@ function MiPerfil({ perfil, pestana }) {
       {pestana === "diario" && (
         <section aria-labelledby="mi-diario" className="mt-8">
           <h3 id="mi-diario" className={TITULO_SECCION}>Mi diario</h3>
-          {diarioSoloTu && <SoloTu que="tu diario" />}
+          {diarioSoloTu && <SoloTu que="tu diario" nivel={diarioSoloTu} />}
           <MiDiario />
         </section>
       )}
@@ -369,7 +376,7 @@ function MiPerfil({ perfil, pestana }) {
             <h3 id="mis-cines" className={TITULO_SECCION}>Mis cines</h3>
             <Link href="/cines" className="text-sm font-bold text-primary hover:underline">Añadir más cines →</Link>
           </div>
-          {cinesSoloTu && <SoloTu que="tus cines" />}
+          {cinesSoloTu && <SoloTu que="tus cines" nivel={cinesSoloTu} />}
           {!cines ? <div aria-busy="true" aria-label="Cargando tus cines" className="mt-6 h-20 bg-surface animate-pulse" />
             : cines.length ? <TarjetasCines cines={cines} onQuitar={(c) => alternar(c.slug, c.nombre)} />
               : <Ayuda>Aún no tienes cines favoritos. Pulsa la ★ en un cine de <Link href="/cines" className="font-bold text-primary hover:underline">Cines</Link> y sus sesiones saldrán primero en toda la web.</Ayuda>}
@@ -382,19 +389,27 @@ function MiPerfil({ perfil, pestana }) {
           <MisSesiones usuario={perfil.usuario} />
         </section>
       )}
+      {pestana === "amigos" && (
+        <section aria-labelledby="mis-amigos" className="mt-8">
+          <h3 id="mis-amigos" className={TITULO_SECCION}>Amigos</h3>
+          <p className="mt-1 text-xs text-muted">Solo tú ves esta pestaña. Tus amigos ven lo que tengas en «Solo amigos».</p>
+          <MisAmigos onRecibidas={setRecibidas} />
+        </section>
+      )}
     </div>
   );
 }
 
+// Los nombres son únicos sin distinguir mayúsculas: /u/nacho y /u/Nacho son el mismo perfil
 const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
-const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones" })[ruta.split("/")[3]] ?? "perfil";
+const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones", amigos: "amigos" })[ruta.split("/")[3]] ?? "perfil";
 
 // En /u/[usuario]: si el visitante es el dueño, su vista; si no, children (la pública o el "no existe o es privado").
 // esperar: mientras no se sabe, esqueleto en vez de children (en el 404, para no enseñarle al dueño "no existe").
 export function SiSoyYo({ esperar = false, children }) {
   const { cargando, miPerfil } = useAuth();
   const ruta = usePathname();
-  if (miPerfil?.usuario && miPerfil.usuario === usuarioDeRuta(ruta)) return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
+  if (miPerfil?.usuario && miPerfil.usuario.toLowerCase() === usuarioDeRuta(ruta)) return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
   if (esperar && (cargando || miPerfil === undefined)) {
     return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
   }
@@ -449,12 +464,17 @@ export default function EditarPerfil() {
 
       <TarjetaPerfilPublico />
 
-      <MisCines />
+      {/* Sin nombre de usuario la API cierra los cines y el diario (403) */}
+      {miPerfil?.usuario && (
+        <>
+          <MisCines />
 
-      <section aria-labelledby={`${id}-diario`} className="mt-8">
-        <h3 id={`${id}-diario`} className={TITULO_SECCION}>Mi diario</h3>
-        <MiDiario />
-      </section>
+          <section aria-labelledby={`${id}-diario`} className="mt-8">
+            <h3 id={`${id}-diario`} className={TITULO_SECCION}>Mi diario</h3>
+            <MiDiario />
+          </section>
+        </>
+      )}
     </div>
   );
 }

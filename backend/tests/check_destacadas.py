@@ -16,6 +16,9 @@ from app.services import destacadas as d
 from app.services.cines import obtener_o_crear_cine
 from main import Destacadas
 
+if engine.url.host not in ("db", "localhost", "127.0.0.1"):
+    sys.exit(f"Me niego: la BD no es local (host {engine.url.host!r})")
+
 # Semana del 19 al 25 de octubre de 2026; el domingo 25 se pasa a horario de invierno (02:00-03:00 dos veces)
 MIERCOLES = datetime(2026, 10, 21, 12, 0)
 SEMANA = (date(2026, 10, 19), date(2026, 10, 25))

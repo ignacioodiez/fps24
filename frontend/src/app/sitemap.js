@@ -1,4 +1,5 @@
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Solo en el servidor: API_URL_INTERNA (Docker) si existe; si no, la pública
+const API = process.env.API_URL_INTERNA || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const SITIO = "https://fps24.es";
 
 // Se regenera cada hora; si la API no responde, solo las páginas fijas

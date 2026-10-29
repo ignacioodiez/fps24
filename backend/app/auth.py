@@ -49,3 +49,8 @@ def usuario_actual(authorization: Optional[str] = Header(None)) -> Usuario:
     except jwt.PyJWTError:
         raise no_autorizado("Token no válido")
     return Usuario(id=datos["sub"], email=datos.get("email"))
+
+
+def usuario_opcional(authorization: Optional[str] = Header(None)) -> Optional[Usuario]:
+    """Sin cabecera, None (anónimo); con ella, como usuario_actual (un token malo o caducado es 401, no anónimo)."""
+    return usuario_actual(authorization) if authorization else None
