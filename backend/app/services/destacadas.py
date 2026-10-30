@@ -17,7 +17,6 @@ MAX_ESPECIALES = 7
 VOTOS_MIN_ESTRENO = 10
 VOTOS_MIN_ESPECIAL = 150
 CINES_MIN_RELLENO = 2        # estrenos sin nota suficiente que rellenan hasta MAX_ESTRENOS
-TIPO_CINE_ESPECIAL = "autor"  # especiales: solo pases de cines de este cine.tipo
 SEMANAS_MAX = 3               # /especiales: de la semana actual (0) a la 3
 SEMANAS_MAX_ESTRENOS = 8      # /estrenos: hasta la 8, con los próximos estrenos de TMDB (app/proximamente)
 MAX_ESPECIALES_PAGINA = 30    # tope de seguridad de /especiales
@@ -25,6 +24,22 @@ MAX_ESPECIALES_PAGINA = 30    # tope de seguridad de /especiales
 # /especiales: solo cine. Los eventos sin tmdb_id ya no entran; esto quita los que sí están en TMDB
 # (giras de conciertos, directos) y los que se colaran con un título de evento.
 _NO_CINE = re.compile(r"EN DIRECTO|DIFERIDO|WORLD TOUR|LIVE VIEWING|NATIONAL THEATRE|NT LIVE", re.IGNORECASE)
+
+# Ruido de los especiales (portada, /especiales y newsletter; de cualquier tipo de cine), además de es_cine: patrones
+# (regex de palabras completas, sin mayúsculas) contra el título de la película. Para quitar o añadir un caso, edita
+# esta lista. "Ópera", "ballet" y "concierto" sueltos no van: es_cine ya los quita en cabecera ("Carmen (Ópera…)") sin
+# tumbar "El fantasma de la ópera". Sin géneros de TMDB: "Familia" quitaría a Ghibli de los cines de autor.
+RUIDO_ESPECIALES = [
+    # conciertos y retransmisiones en directo
+    r"EN DIRECTO", r"DIFERIDO", r"RETRANSMISI[OÓ]N", r"WORLD TOUR", r"IN CONCERT", r"LIVE (VIEWING|IN)",
+    r"NATIONAL THEATRE", r"NT LIVE", r"MET OPERA", r"ROYAL (BALLET|OPERA)",
+    # deportes
+    r"F[UÚ]TBOL", r"CHAMPIONS LEAGUE", r"LA ?LIGA", r"NBA", r"UFC", r"F[OÓ]RMULA ?1", r"MOTO ?GP",
+    r"BOXEO", r"MUNDIAL",
+    # sesiones infantiles y familiares
+    r"INFANTIL(ES)?", r"EN FAMILIA", r"FAMILIAR(ES)?", r"PEQUES?", r"MATINAL",
+]
+_RUIDO = re.compile(rf"\b(?:{'|'.join(RUIDO_ESPECIALES)})\b", re.IGNORECASE)
 
 
 def semana(ahora: datetime) -> tuple:
@@ -42,6 +57,11 @@ def es_cine(pelicula: Pelicula) -> bool:
     generos = {g.strip() for g in (pelicula.generos or "").split(",")}
     return not (analizar_titulo(pelicula.titulo).evento or _NO_CINE.search(pelicula.titulo)
                 or {"Documental", "Música"} <= generos)
+
+
+def es_especial_de_cine(pelicula: Pelicula) -> bool:
+    """Cine (es_cine) y fuera de RUIDO_ESPECIALES: lo que puede salir como especial."""
+    return es_cine(pelicula) and not _RUIDO.search(pelicula.titulo or "")
 
 
 def _pases_por_pelicula(session: Session, desde: datetime, lunes: date, domingo: date) -> dict:
@@ -84,14 +104,15 @@ def _de_la_semana(pases_de: dict, lunes: date, domingo: date) -> list:
     return [ps for ps in pases_de.values() if lunes <= (ps[0].pelicula.fecha_estreno or date.min) <= domingo]
 
 
-def _elegir_especiales(pases_de: dict, vetadas: set, tope: int, filtro=lambda pelicula: True) -> list:
+def _elegir_especiales(pases_de: dict, vetadas: set, tope: int) -> list:
     """Por nota, una sesión por película: la mejor elige día primero y cada una coge el día menos repetido.
+    Cines de cualquier tipo: manda la marca es_evento_especial del scraper (resolver_pelicula), la misma en todos.
     -> [(pase elegido, pases especiales de la película)]"""
     # Los eventos (ópera, ballet, directos) no tienen tmdb_id: el gestor no los busca en TMDB
-    especiales_de = {id_: [p for p in ps if p.es_evento_especial and p.cine_rel.tipo == TIPO_CINE_ESPECIAL]
+    especiales_de = {id_: [p for p in ps if p.es_evento_especial]
                      for id_, ps in pases_de.items()
                      if id_ not in vetadas and ps[0].pelicula.tmdb_id and _con_nota(ps[0].pelicula, VOTOS_MIN_ESPECIAL)
-                     and filtro(ps[0].pelicula)}
+                     and es_especial_de_cine(ps[0].pelicula)}
     candidatas = _por_nota(ps for ps in especiales_de.values() if ps)[:tope]
     dias = Counter()
     elegidas = []
@@ -149,10 +170,10 @@ def seleccionar_estrenos(pases_de: dict, lunes: date, domingo: date) -> list:
 
 
 def seleccionar_especiales(pases_de: dict, lunes: date, domingo: date) -> list:
-    """Como en destacadas, sin el tope de 7 y solo cine. Los estrenos de la semana van a /estrenos, no aquí.
+    """Como en destacadas, sin el tope de 7. Los estrenos de la semana van a /estrenos, no aquí.
     -> [(sesión elegida, pases especiales, False)]"""
     vetadas = {ps[0].pelicula_id for ps in _de_la_semana(pases_de, lunes, domingo)}
-    return [(pase, ps, False) for pase, ps in _elegir_especiales(pases_de, vetadas, MAX_ESPECIALES_PAGINA, es_cine)]
+    return [(pase, ps, False) for pase, ps in _elegir_especiales(pases_de, vetadas, MAX_ESPECIALES_PAGINA)]
 
 
 def leer_pagina(session: Session, seleccionar, n: int = 0, ahora: datetime = None, maximo: int = SEMANAS_MAX) -> dict:

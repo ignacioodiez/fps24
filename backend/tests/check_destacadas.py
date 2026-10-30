@@ -72,9 +72,9 @@ with Session(engine) as session:
         c = peli("C estreno el lunes siguiente", 9.0, 500, date(2026, 10, 26)); pase(c, datetime(2026, 10, 22, 20))
         peli("F sin pases", 9.0, 500, date(2026, 10, 20))
 
-        # --- especiales (todos en cine de autor salvo que se diga) ---
+        # --- especiales (en cine de autor salvo que se diga; los comerciales cuentan igual) ---
         s1 = peli("S1", 9.5, 150)                             # 150 justo: entra
-        pase(s1, datetime(2026, 10, 21, 20), especial=True, cine=COMERCIAL)  # cine comercial: nunca
+        pase(s1, datetime(2026, 10, 21, 20), especial=True, cine=COMERCIAL)  # cine comercial: también
         pase(s1, datetime(2026, 10, 22, 20), especial=True)
         pase(s1, datetime(2026, 10, 23, 20), especial=True, cine=AUTOR2)
         pase(s1, datetime(2026, 10, 22, 18))                  # no especial: nunca
@@ -86,8 +86,10 @@ with Session(engine) as session:
         pase(peli("G votos 149", 9.9, 149), datetime(2026, 10, 22, 20), especial=True)
         pase(peli("H evento sin tmdb", 9.9, 999, tmdb=False), datetime(2026, 10, 22, 20), especial=True)
         pase(peli("K solo comercial", 9.9, 999), datetime(2026, 10, 22, 20), especial=True, cine=COMERCIAL)
-        pase(peli("M concierto", 9.4, 999, generos="Documental, Música"), datetime(2026, 10, 24, 12), especial=True)
-        for i in range(5):  # 9 especiales válidos en total: salen 7
+        pase(peli("N estreno comercial", 9.8, 999), datetime(2026, 10, 22, 20), cine=COMERCIAL)  # sin marca: nunca
+        pase(peli("M concierto", 9.4, 999, generos="Documental, Música"), datetime(2026, 10, 24, 12), especial=True)  # ruido
+        pase(peli("I cine infantil", 9.4, 999), datetime(2026, 10, 24, 12), especial=True)  # ruido
+        for i in range(5):  # 9 especiales válidos en total (K, S1-S3 y 5 clásicos): salen 7
             pase(peli(f"Clásico {i}", 8.0 - i / 10, 200), datetime(2026, 10, 24, 18 + i % 3), especial=True)
         session.flush()
 
@@ -103,14 +105,14 @@ with Session(engine) as session:
         print("OK: estrenos (límites, umbral de votos, relleno por cines)")
 
         titulos = [x.pelicula.titulo for x in r.especiales]
-        assert titulos == ["S1", "M concierto", "S2", "S3", "Clásico 0", "Clásico 1", "Clásico 2"], titulos
+        assert titulos == ["K solo comercial", "S1", "S2", "S3", "Clásico 0", "Clásico 1", "Clásico 2"], titulos
         assert len({x.pelicula.id for x in r.especiales}) == len(titulos)  # una sesión por película
         sesion = {x.pelicula.titulo: x.pase.fecha_hora for x in r.especiales}
-        assert sesion["S1"] == datetime(2026, 10, 22, 20)     # la más temprana especial en cine de autor
+        assert sesion["S1"] == datetime(2026, 10, 21, 20)     # el miércoles, libre (K ya tiene el jueves), en el comercial
         assert sesion["S2"] == datetime(2026, 10, 23, 18)     # el día menos repetido
         assert sesion["S3"] == datetime(2026, 10, 22, 22)
-        assert r.especiales[0].nota == 9.5 and r.especiales[0].pase.cine.startswith("Cine de Prueba")
-        print("OK: especiales (umbral, autor, sin estrenos ni eventos sin tmdb, Música sí, una sesión, días)")
+        assert r.especiales[0].nota == 9.9 and r.especiales[0].pase.cine.startswith("Cine de Prueba")
+        print("OK: especiales (umbral, también comerciales con marca, sin estrenos, eventos sin tmdb ni ruido, una sesión, días)")
 
         # Con 4 estrenos con nota no hay relleno
         for i in range(3):

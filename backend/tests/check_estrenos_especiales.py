@@ -72,7 +72,7 @@ with Session(engine) as session:
         assert [-x.pelicula.nota_tmdb for x in e.peliculas] == sorted(-x.pelicula.nota_tmdb for x in e.peliculas)
         for x in e.peliculas:
             peli = session.get(Pelicula, x.pelicula.id)
-            assert peli.tmdb_id and peli.votos >= d.VOTOS_MIN_ESPECIAL and d.es_cine(peli), peli.titulo
+            assert peli.tmdb_id and peli.votos >= d.VOTOS_MIN_ESPECIAL and d.es_especial_de_cine(peli), peli.titulo
             assert x.pelicula.id not in ids_estreno and x.sesion.es_evento_especial, peli.titulo
     print("OK: estrenos por nota (sin nota al final, por cines y sesiones; desempate por título) y especiales solo cine")
 
