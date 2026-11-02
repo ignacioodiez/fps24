@@ -68,9 +68,21 @@ body {
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
-.pin-autor { background: var(--primary); }
-.pin-comercial { background: var(--foreground); }
-.pin-apagado { opacity: 0.45; }
+/* Gris y cuadrado: nada pronto; violeta y redondo: alguna sesión en la próxima hora (forma y color, no solo color) */
+.pin-cine { position: relative; background: var(--muted); border-radius: 8px; }
+.pin-pronto { background: var(--primary); border-radius: 9999px; }
+.pin-fav {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--foreground);
+  background: var(--accent);
+  border: 1px solid #ffffff;
+  border-radius: 9999px;
+  padding: 1px 2px;
+}
 .pin-activo {
   opacity: 1;
   transform: scale(1.3);

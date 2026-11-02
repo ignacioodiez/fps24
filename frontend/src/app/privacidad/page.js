@@ -2,7 +2,7 @@ import TodayHeader from "@/components/TodayHeader";
 
 // Email al que escribir para ejercer los derechos: cámbialo solo aquí
 const EMAIL_CONTACTO = "ignacio.diez.vergara@gmail.com";
-const ACTUALIZADA = "27 de octubre de 2026";
+const ACTUALIZADA = "2 de noviembre de 2026";
 
 export const metadata = {
   title: "Privacidad - FPS24",
@@ -161,6 +161,15 @@ export default function PrivacidadPage() {
               Tu consentimiento al crear la cuenta y la necesidad de tratar esos datos para darte el servicio que pides
               (entrar y guardar tus listas). En la newsletter, tu consentimiento, que confirmas con el enlace del primer correo
               y puedes retirar en cualquier momento con la baja.
+            </p>
+          </Seccion>
+
+          <Seccion titulo="Tu ubicación">
+            <p>
+              En «Cines de Madrid», tu ubicación solo se pide si pulsas <strong className="text-foreground">«Usar mi
+              ubicación»</strong>, y se usa <strong className="text-foreground">solo en tu navegador</strong> para calcular
+              distancias: no se envía a nuestro servidor, no se guarda y no se registra. El mapa descarga sus imágenes de
+              OpenStreetMap, que, como cualquier web, ve tu dirección IP y la zona del mapa que miras.
             </p>
           </Seccion>
 
