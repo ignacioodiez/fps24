@@ -42,7 +42,7 @@ const contenedorScroll = (el) => {
   return document.scrollingElement;
 };
 
-// Botón "Ver X más / Ver menos" con el estilo de botón secundario de la portada ("Salas y precios").
+// Botón "Ver X más / Ver menos" con el estilo de botón secundario de "Cines de Madrid" (/cines).
 // Al plegar, el contenido de encima encoge: se compensa el scroll de su contenedor para que el botón no se mueva.
 function BotonVerMas({ abierto, onAlternar, texto, controla, chip = false, etiqueta }) {
   const boton = useRef(null);

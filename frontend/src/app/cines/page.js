@@ -2,9 +2,12 @@ import TodayHeader from "@/components/TodayHeader";
 import SalasYPrecios from "@/components/SalasYPrecios";
 
 export const metadata = {
-  title: "Cines y Precios - FPS24",
-  description: "Consulta los precios y el día del espectador de los cines independientes de Madrid.",
+  title: "Cines de Madrid: mapa, precios y sesiones cerca de ti | fps24",
+  description: "Mapa de los cines de Madrid con los precios de hoy, el día del espectador y las sesiones que empiezan cerca de ti. Elige sala, horario y cómo llegar.",
 };
+
+// "de las 22 salas"; sin cines (error o lista vacía), sin cifra
+const deLasSalas = (n) => (n === 1 ? " de la única sala" : n > 1 ? ` de las ${n} salas` : "");
 
 // Se regenera cada 5 minutos (ISR): HTML con los cines para buscadores, datos de hoy casi al día
 export const revalidate = 300;
@@ -35,15 +38,15 @@ export default async function CinesPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground pb-20">
-      <TodayHeader />
+      <TodayHeader showTitle={false} />
 
       <div className="max-w-6xl mx-auto px-4 md:px-6">
         <div className="text-center mb-8">
-          <h2 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground mb-4">
-            Salas y <span className="text-primary">Precios</span>
-          </h2>
+          <h1 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground mb-4">
+            Cines de <span className="text-primary">Madrid</span>
+          </h1>
           <p className="text-muted text-lg max-w-2xl mx-auto">
-            Guía rápida para saber cuánto cuesta ir al cine en Madrid y qué día es más barato en cada sala.
+            Mapa, sesiones cerca de ti y precios{deLasSalas(cines?.length)}
           </p>
         </div>
 

@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import { backdropDeHoy } from "@/lib/peliculas";
 
-// Header con el backdrop de hoy para páginas que no cargan los pases (p. ej. /cines)
-export default function TodayHeader() {
+// Header con el backdrop de hoy para páginas que no cargan los pases (p. ej. /cines). showTitle: ver Header
+export default function TodayHeader({ showTitle = true }) {
   const [backdrop, setBackdrop] = useState(null);
 
   useEffect(() => {
@@ -16,5 +16,5 @@ export default function TodayHeader() {
       .catch((err) => console.error("Error loading sessions:", err)); // sin backdrop: fondo blanco
   }, []);
 
-  return <Header backdrop={backdrop} />;
+  return <Header backdrop={backdrop} showTitle={showTitle} />;
 }

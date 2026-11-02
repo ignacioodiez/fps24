@@ -10,7 +10,7 @@ import { cleanCinemaName } from "@/utils/helpers";
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
 // Versión con el estilo neutro de ChipIdioma (Sesiones.js), pero también para el castellano: aquí es un dato más
-function Version({ idioma }) {
+export function Version({ idioma }) {
   if (idioma === "VOSE") {
     return <span className="text-[10px] leading-none px-1 py-0.5 rounded border border-muted bg-background text-foreground font-bold uppercase tracking-wide">VOSE</span>;
   }

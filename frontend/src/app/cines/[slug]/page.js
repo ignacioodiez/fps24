@@ -66,7 +66,7 @@ export default async function CinePage({ params }) {
     <main className="min-h-screen bg-background text-foreground pb-20">
       {/* "<" escapado: el JSON no puede cerrar el <script> */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(cine)).replace(/</g, "\\u003c") }} />
-      <TodayHeader />
+      <TodayHeader showTitle={false} />
 
       <div className="max-w-6xl mx-auto px-4 md:px-6 space-y-8">
         <Link href="/cines" className="inline-block text-sm font-semibold text-muted hover:text-primary transition-colors rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
