@@ -221,6 +221,7 @@ export default function Cartelera({ atajos }) {
                 onlySpecials={onlySpecials}
                 setOnlySpecials={setOnlySpecials}
                 resetFilters={resetFilters}
+                sortBy={sortBy}
                 setSortBy={setSortBy}
             />
 
