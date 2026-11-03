@@ -16,6 +16,7 @@ export default function FilterMenu({
   setSortBy
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [topPanel, setTopPanel] = useState(0);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -67,7 +68,11 @@ export default function FilterMenu({
 
       {/* --- BOTÓN PRINCIPAL --- */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          // El panel cuelga de la barra sticky: su alto debe caber en lo que queda de pantalla bajo él (top-14 = 56px)
+          setTopPanel(menuRef.current.getBoundingClientRect().top + 56);
+          setIsOpen(!isOpen);
+        }}
         className={`
           flex items-center gap-2 px-5 py-3 rounded-full font-bold transition-colors border
           ${isOpen || activeFiltersCount > 0
@@ -89,12 +94,14 @@ export default function FilterMenu({
       </button>
 
       {/* --- MENÚ DESPLEGABLE (MODAL) --- */}
+      {/* En móvil, sin dvh (iOS < 15.4) la regla max-md se descarta y queda max-h-[80vh] */}
       {isOpen && (
-        <div className={`
-          absolute top-14 right-0 w-80 md:w-96 
-          bg-background border border-line rounded-2xl 
+        <div style={{ "--top-panel": `${topPanel}px` }} className={`
+          absolute top-14 right-0 w-80 md:w-96
+          bg-background border border-line rounded-2xl
           animate-in fade-in slide-in-from-top-2 z-50
-          max-h-[80vh] flex flex-col overflow-hidden /* 👈 Clave: flex-col y overflow-hidden aquí */
+          max-h-[80vh] max-md:max-h-[min(80vh,calc(100dvh-var(--top-panel)-1rem-env(safe-area-inset-bottom)))]
+          flex flex-col overflow-hidden /* 👈 Clave: flex-col y overflow-hidden aquí */
         `}>
           
           {/* 1. CABECERA FIJA (No se mueve) */}
@@ -111,7 +118,7 @@ export default function FilterMenu({
           </div>
 
           {/* 2. CUERPO SCROLLABLE (Solo se mueve esto) */}
-          <div className="overflow-y-auto custom-scrollbar p-6 pt-4 space-y-8">
+          <div className="min-h-0 overflow-y-auto overscroll-contain custom-scrollbar p-6 pt-4 space-y-8">
 
             {/* ORDEN */}
 <div>
