@@ -63,3 +63,14 @@ export const precioSesion = ({ precio, tarifas, fechaHora }) => {
     : `Entrada: ${euros(dia.precio)}${dia.tipo === "entrada" ? "" : ` · ${ETIQUETA_TIPO[dia.tipo]}`}`;
   return { texto, orientativo: true, nota };
 };
+
+// "4,90 €–8,50 €" con los precios numéricos de la tabla de tarifas (las notas, texto libre, no cuentan); null sin ellos
+export const rangoPrecios = (tarifas) => {
+  const t = tarifas ?? {};
+  const precios = [t.entrada, t.entrada_laboral, t.entrada_finde, ...[t.dia_espectador ?? []].flat().map((r) => r.precio)]
+    .filter((p) => typeof p === "number" && p >= 0);
+  if (!precios.length) return null;
+  const eur = (p) => `${p.toFixed(2).replace(".", ",")} €`;
+  const [min, max] = [Math.min(...precios), Math.max(...precios)];
+  return min === max ? eur(min) : `${eur(min)}–${eur(max)}`;
+};

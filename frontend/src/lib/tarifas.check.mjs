@@ -2,7 +2,7 @@
 // Uso: docker compose exec web node src/lib/tarifas.check.mjs
 import assert from "node:assert/strict";
 import { hoyMadrid } from "./fechasMadrid.js";
-import { FESTIVOS, esDiaEspectador, precioDia, precioHoy, precioSesion } from "./tarifas.js";
+import { FESTIVOS, esDiaEspectador, precioDia, precioHoy, precioSesion, rangoPrecios } from "./tarifas.js";
 
 // Copias de backend/app/services/cines.py (TARIFAS)
 const RENOIR = { entrada_laboral: 8.5, entrada_finde: 9.8, finde_dias: ["Viernes", "Sábado", "Domingo"],
@@ -101,4 +101,11 @@ assert.ok([...FESTIVOS].every((f) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.is
 assert.equal([...FESTIVOS].filter((f) => f.startsWith("2026")).length, 14);
 assert.equal([...FESTIVOS].filter((f) => f.startsWith("2027")).length, 14);
 
+
+// Rango para el JSON-LD (priceRange): solo números; las notas no cuentan
+assert.equal(rangoPrecios(RIO), "5,90 €–9,50 €");
+assert.equal(rangoPrecios(RENOIR), "5,50 €–9,80 €");
+assert.equal(rangoPrecios({ entrada: 4.1 }), "4,10 €");
+assert.equal(rangoPrecios(METROPOL), null);
+assert.equal(rangoPrecios(null), null);
 console.log("OK: tarifas (finde por cine, festivos, días del espectador, hora de Madrid)");

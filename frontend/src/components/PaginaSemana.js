@@ -54,13 +54,13 @@ export default async function PaginaSemana({ tipo, titulo, acento, intro, vacio,
 
   return (
     <main className="min-h-screen bg-background text-foreground pb-20">
-      <TodayHeader />
+      <TodayHeader showTitle={false} />
 
       <div className="max-w-9xl mx-auto px-4 md:px-8">
         <div className="mb-6">
-          <h2 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground">
+          <h1 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground">
             {titulo} <span className={acento}>de la semana</span>
-          </h2>
+          </h1>
           <p className="mt-2 text-muted md:text-lg max-w-2xl">{intro}</p>
         </div>
 

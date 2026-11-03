@@ -5,6 +5,7 @@ import CarteleraCine from "@/components/CarteleraCine";
 import { Boton } from "@/components/SalasYPrecios";
 import { ChipDato } from "@/components/FichaPelicula";
 import BotonFavorito from "@/components/BotonFavorito";
+import { rangoPrecios } from "@/lib/tarifas";
 
 // Como /cines: ISR de 5 minutos
 export const revalidate = 300;
@@ -38,11 +39,10 @@ export async function generateMetadata({ params }) {
   const { slug } = await params;
   const cine = await leerCine(slug);
   const lugar = [cine.direccion, cine.zona].filter(Boolean).join(", ");
-  return {
-    title: `${cine.nombre} (Madrid): cartelera, horarios y precios | fps24`,
-    description: `Horarios de hoy y de los próximos días en ${cine.nombre}${lugar ? ` (${lugar})` : ""}, con precios, día del espectador y enlaces para comprar entradas.`,
-    alternates: { canonical: `${SITIO}/cines/${cine.slug}` },
-  };
+  const title = `${cine.nombre} · cartelera, horarios y precios en Madrid | fps24`;
+  const description = `Horarios de hoy y de los próximos días en ${cine.nombre}${lugar ? ` (${lugar})` : ""}, con precios, día del espectador y enlaces para comprar entradas.`;
+  const url = `${SITIO}/cines/${cine.slug}`;
+  return { title, description, alternates: { canonical: url }, openGraph: { title, description, url } };
 }
 
 // MovieTheater de schema.org solo con los datos que tenemos
@@ -55,6 +55,7 @@ const jsonLd = (cine) => ({
   ...(cine.telefono && { telephone: `+34 ${cine.telefono}` }),
   ...(cine.lat != null && cine.lng != null && { geo: { "@type": "GeoCoordinates", latitude: cine.lat, longitude: cine.lng } }),
   ...(cine.web && { sameAs: cine.web }),
+  ...(rangoPrecios(cine.tarifas) && { priceRange: rangoPrecios(cine.tarifas) }),
 });
 
 export default async function CinePage({ params }) {

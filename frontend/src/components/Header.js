@@ -16,7 +16,7 @@ export default function Header({ backdrop, showTitle = true }) {
 
         {/* --- IZQUIERDA: LOGO --- */}
         <div className="bg-background rounded-xl px-2 py-1">
-          {showTitle && <h1 className="sr-only">MadridFPS24</h1>}
+          {showTitle && <h1 className="sr-only">fps24: cartelera de cine en Madrid</h1>}
           <Logo className="h-12 md:h-32" />
         </div>
 

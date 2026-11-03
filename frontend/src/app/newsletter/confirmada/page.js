@@ -8,11 +8,11 @@ export default async function ConfirmadaPage({ searchParams }) {
   const { error } = await searchParams;
   return (
     <main className="min-h-screen bg-background text-foreground pb-20">
-      <TodayHeader />
+      <TodayHeader showTitle={false} />
       <div className="max-w-xl mx-auto px-4 md:px-6 text-center space-y-6">
-        <h2 className="text-4xl md:text-5xl font-black font-display uppercase text-primary">
+        <h1 className="text-4xl md:text-5xl font-black font-display uppercase text-primary">
           {error ? "Enlace no válido" : "¡Suscripción confirmada!"}
-        </h2>
+        </h1>
         <p className="text-muted text-lg">
           {error
             ? "Este enlace ya se ha usado o no es correcto. Si ya confirmaste, no tienes que hacer nada; si no, vuelve a suscribirte."

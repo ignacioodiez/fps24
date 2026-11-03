@@ -1,7 +1,8 @@
 import PaginaSemana from "@/components/PaginaSemana";
 
 export const metadata = {
-  title: "Pases especiales de la semana - FPS24",
+  title: "Pases especiales y ciclos de la semana en Madrid | fps24",
+  alternates: { canonical: "/especiales" }, // ?semana=N es la misma página en otra semana
   description: "Clásicos, ciclos y sesiones especiales de los cines independientes de Madrid, con la mejor sesión de cada película.",
 };
 
