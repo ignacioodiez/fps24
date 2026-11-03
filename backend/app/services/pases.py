@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, update
+from sqlalchemy import func, null, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -24,6 +24,8 @@ IDIOMAS_CANONICOS = {"espanol": "Español", "vose": "VOSE"}
 
 def normalizar_idioma(idioma):
     """Devuelve el valor canónico; si no lo conoce, avisa y lo deja tal cual."""
+    if not idioma:
+        return None  # sin versión: la web no la da (cines culturales); la UI la trata como desconocida
     clave = normalizar(idioma or "").replace(".", "").replace(" ", "")
     if clave in IDIOMAS_CANONICOS:
         return IDIOMAS_CANONICOS[clave]
@@ -57,6 +59,8 @@ def registrar_pase(session: Session, *, cine, pelicula_id, fecha_hora, sala, idi
             with session.begin_nested():  # otra ejecución puede crear el mismo pase a la vez
                 pase = Pase(cine_id=cine_id, pelicula_id=pelicula_id,
                             fecha_hora=fecha_hora, sala=sala, idioma=idioma, creado_en=ahora)
+                if idioma is None:
+                    pase.idioma = null()  # con None el ORM pondría el default de la columna ("Español")
                 session.add(pase)
             resultado = "creado"
         except IntegrityError:

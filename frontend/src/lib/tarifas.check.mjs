@@ -78,6 +78,10 @@ assert.equal(sesion(RIO, "2026-11-12T20:00:00").texto, "Día del espectador: 7,5
 assert.equal(sesion(RIO, "2026-11-13T20:00:00").texto, "Entrada: 9,50 €");
 assert.deepEqual(sesion(METROPOL, "2026-11-13T20:00:00"), { texto: "Según la película", orientativo: true, nota: METROPOL.notas });
 assert.equal(sesion({ entrada: 9, notas: "Cine de culto." }, "2026-11-13T20:00:00").nota, null); // nota sin precios: fuera
+// Centros culturales (sin tarifas): el texto del pase tal cual; "Consultar" remite a su web
+assert.deepEqual(sesion(null, "2026-11-13T20:00:00", "Gratis"), { texto: "Gratis", orientativo: false, nota: null });
+assert.equal(sesion(null, "2026-11-13T20:00:00", "Entrada libre hasta completar aforo").texto, "Entrada libre hasta completar aforo");
+assert.equal(sesion(null, "2026-11-13T20:00:00").texto, "Consulta el precio en la web del cine");
 // Cine sin tarifas, tarifas aún sin llegar (o fallidas) y pase con precio real
 assert.deepEqual(sesion(null, "2026-11-13T20:00:00"), { texto: "Consulta el precio en la web del cine", orientativo: false, nota: null });
 assert.equal(sesion(undefined, "2026-11-13T20:00:00"), null);

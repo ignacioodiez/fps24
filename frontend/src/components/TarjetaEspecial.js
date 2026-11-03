@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MarcaFavorito } from "@/components/BotonFavorito";
 import { EnlaceCine } from "@/components/Sesiones";
+import { useSinVenta } from "@/lib/useTarifas";
 
 // "SÁB 24 · 22:00"
 const fechaDestacada = (fechaHora) => {
@@ -13,11 +14,12 @@ const fechaDestacada = (fechaHora) => {
 export const imagenDe = (pelicula) =>
   pelicula.backdrop_url?.replace("/t/p/original/", "/t/p/w780/") || pelicula.poster_url || null;
 
-function Entradas({ href, className }) {
+function Entradas({ href, slug, className }) {
+  const sinVenta = useSinVenta(slug);
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
        className={`relative z-10 shrink-0 rounded-full bg-primary text-white font-semibold hover:opacity-90 transition-opacity ${className}`}>
-      Entradas
+      {sinVenta ? "Más info" : "Entradas"}
     </a>
   );
 }
@@ -64,7 +66,7 @@ export default function TarjetaEspecial({ especial, grande = false, amplia = fal
             {idioma && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20">{idioma}</span>}
             {nota != null && <span className="font-semibold">★ {nota.toFixed(1)}</span>}
             {precio && <span>{precio}</span>}
-            {pase.link_compra && <Entradas href={pase.link_compra} className="ml-auto px-3 py-1 text-xs" />}
+            {pase.link_compra && <Entradas href={pase.link_compra} slug={pase.cine_slug} className="ml-auto px-3 py-1 text-xs" />}
           </div>
         </div>
       </li>
@@ -85,7 +87,7 @@ export default function TarjetaEspecial({ especial, grande = false, amplia = fal
       <div className="flex-1 min-w-0 px-2 py-1.5 flex flex-col justify-center gap-0.5">
         <div className="flex flex-wrap items-center justify-between gap-1">
           <p className="text-xs font-bold uppercase tracking-wide text-primary">{fechaDestacada(pase.fecha_hora)}</p>
-          {pase.link_compra && <Entradas href={pase.link_compra} className="px-2 py-0.5 text-[10px]" />}
+          {pase.link_compra && <Entradas href={pase.link_compra} slug={pase.cine_slug} className="px-2 py-0.5 text-[10px]" />}
         </div>
         <h4 className="text-sm font-display font-bold leading-tight text-foreground line-clamp-2 md:line-clamp-1 lg:line-clamp-2 group-hover:text-primary transition-colors" title={pelicula.titulo}>
           {enlace}

@@ -6,8 +6,12 @@ from contextlib import contextmanager
 
 import requests
 from playwright.sync_api import sync_playwright
+from sqlmodel import Session
 
+from app.database.engine import engine
 from app.services.cines import normalizar
+from app.services.gestor_peliculas import resolver_pelicula
+from app.services.pases import registrar_pase
 from app.services.tiempo import ahora_madrid, hoy_madrid, resolver_anio  # noqa: F401 (se reexportan)
 
 # Claves sin tildes y en minúsculas: búscalas con numero_mes(), no directamente.
@@ -101,3 +105,26 @@ def _pedir(url, cabeceras, leer, timeout, pausa_reintento):
         if intento == 1:
             time.sleep(pausa_reintento)
     raise FuenteNoDisponible(f"{url}: {motivo}")
+
+
+def guardar_sesiones(cine, sesiones, sala, contadores):
+    """Pases de `cine` desde [sesión con titulo, fecha_hora, precio, link], sin versión (idioma None: la web no
+    la da). Salta las de días ya pasados. Una sesión de BD y commit al final. Cuenta en `contadores`."""
+    hoy = hoy_madrid()
+    peliculas = {}  # título de la web -> (pelicula_id, es_especial)
+    with Session(engine) as session:
+        for s in sesiones:
+            if s.fecha_hora.date() < hoy:
+                continue
+            if s.titulo not in peliculas:
+                peliculas[s.titulo] = resolver_pelicula(session, s.titulo, cine)
+            pelicula_id, es_especial = peliculas[s.titulo]
+            if pelicula_id is None:
+                contadores["descartado"] += 1
+                continue
+            contadores[registrar_pase(session, cine=cine, pelicula_id=pelicula_id, fecha_hora=s.fecha_hora, sala=sala,
+                                      idioma=None, precio=s.precio, link_compra=s.link,
+                                      es_evento_especial=es_especial)] += 1
+        session.commit()
+    obtener_logger(__name__).info("%s: %s", cine, contadores)
+    return contadores

@@ -110,6 +110,7 @@ function TarjetaCine({ cine, hoy, activo, distancia, pronto, onActivar, onCentra
             <span className="text-xs px-2 py-0.5 rounded-md border bg-primary-soft text-primary border-primary">Autor</span>
           )}
           {cine.tipo === "comercial" && <ChipDato>Comercial</ChipDato>}
+          {cine.tipo === "cultural" && <ChipDato>Centro cultural</ChipDato>}
         </div>
         {cine.direccion && <p className="mt-2 text-xs text-muted">{cine.direccion}</p>}
       </div>
@@ -355,6 +356,7 @@ export default function SalasYPrecios({ cines, fechaHoy }) {
             <ChipFiltro activo={tipo === "todos"} onClick={() => setTipo("todos")}>Todos</ChipFiltro>
             <ChipFiltro activo={tipo === "autor"} onClick={() => setTipo("autor")}>Autor</ChipFiltro>
             <ChipFiltro activo={tipo === "comercial"} onClick={() => setTipo("comercial")}>Comercial</ChipFiltro>
+            <ChipFiltro activo={tipo === "cultural"} onClick={() => setTipo("cultural")}>Cultural</ChipFiltro>
           </div>
           <ChipFiltro verde activo={soloEspectador} onClick={() => setSoloEspectador((v) => !v)}>Día del espectador hoy</ChipFiltro>
         </div>
