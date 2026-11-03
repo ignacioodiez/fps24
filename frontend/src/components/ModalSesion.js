@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import { diaCompleto } from "@/lib/fechasMadrid";
+import { precioSesion } from "@/lib/tarifas";
+import { useTarifas } from "@/lib/useTarifas";
 import { cleanCinemaName } from "@/utils/helpers";
 
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
@@ -15,6 +17,30 @@ export function Version({ idioma }) {
     return <span className="text-[10px] leading-none px-1 py-0.5 rounded border border-muted bg-background text-foreground font-bold uppercase tracking-wide">VOSE</span>;
   }
   return <span className="text-[11px] bg-surface px-1.5 py-0.5 rounded font-medium text-muted border border-line">{!idioma || idioma === "Español" ? "Castellano" : idioma}</span>;
+}
+
+// Precio de una sesión: el del pase si es real; si no, el de la tarifa del cine ese día (orientativo).
+// pequeno: una línea para las tarjetas; si no, el dt/dd del modal. Nada mientras llegan las tarifas o si fallan.
+export function PrecioSesion({ precio, slug, fechaHora, pequeno = false }) {
+  const tarifas = useTarifas();
+  const info = precioSesion({ precio, tarifas: slug in tarifas ? tarifas[slug] : undefined, fechaHora });
+  if (!info) return null;
+  if (pequeno) {
+    return (
+      <p className="text-xs text-muted break-words">
+        <span className="sr-only">Precio: </span>{info.texto}{info.orientativo && " (orientativo)"}
+      </p>
+    );
+  }
+  return (
+    <>
+      <dt className="text-muted">Precio</dt>
+      <dd className="min-w-0 break-words">
+        <span className="text-foreground font-semibold">{info.texto}</span>
+        {info.orientativo && <span className="block text-xs text-muted">Precio orientativo{info.nota && `. ${info.nota}`}</span>}
+      </dd>
+    </>
+  );
 }
 
 // Detalle de una sesión al pulsar su hora: comprar (el enlace de siempre) o guardarla en "Mis sesiones".
@@ -29,7 +55,6 @@ export default function ModalSesion({ sesion, origen, guardada, onAlternar, onCe
   const { pelicula = {}, cine_slug: slug } = sesion;
   const dia = capitalizar(diaCompleto(sesion.fecha_hora.slice(0, 10)));
   const hora = sesion.fecha_hora.slice(11, 16);
-  const precio = sesion.precio && sesion.precio !== "Consultar" ? sesion.precio : null;
   const cine = cleanCinemaName(sesion.cine);
 
   // Abrir, bloquear el scroll del fondo y, al desmontar, devolver el foco a la hora que lo abrió
@@ -101,14 +126,9 @@ export default function ModalSesion({ sesion, origen, guardada, onAlternar, onCe
           <dd className="text-foreground font-semibold">{dia}</dd>
           <dt className="text-muted">Hora</dt>
           <dd className="text-foreground font-semibold"><time dateTime={sesion.fecha_hora}>{hora}</time></dd>
+          <PrecioSesion precio={sesion.precio} slug={slug} fechaHora={sesion.fecha_hora} />
           <dt className="text-muted">Versión</dt>
           <dd><Version idioma={sesion.idioma} /></dd>
-          {precio && (
-            <>
-              <dt className="text-muted">Precio</dt>
-              <dd className="text-foreground font-semibold">{precio}</dd>
-            </>
-          )}
         </dl>
 
         <div className="mt-5 flex flex-col sm:flex-row gap-2">

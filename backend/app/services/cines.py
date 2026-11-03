@@ -91,16 +91,27 @@ CINES_DATOS = {
                              telefono=None, zona="San Blas-Canillejas", tipo="comercial", lat=40.4341, lng=-3.57727),
 }
 
-# Tarifas (euros) de los 11 cines de frontend/src/data/cines.js (CINES_INFO), por slug. Solo las claves que
-# aplican: entrada (precio único), entrada_laboral, entrada_finde, dia_espectador {dias, precio} y notas.
-# Los cines que no están aquí quedan con tarifas None.
+# Tarifas (euros) por slug. Solo las claves que aplican: entrada (precio único), entrada_laboral, entrada_finde,
+# finde_dias (días con precio de finde; por defecto sábado y domingo), dia_espectador ({dias, precio} o una lista
+# de ellos; si coinciden, gana el más barato), precio_texto (lo que se muestra sin precio único) y notas.
+# Los festivos (frontend/src/lib/tarifas.js) se cobran como fin de semana. Sin tarifas aquí: None.
+# Renoir, Yelmo, Callao, Metropol, Morasol, CBA, Embajadores Río y Berlanga: precios del propietario (02/11/2026).
+_RENOIR = {"entrada_laboral": 8.5, "entrada_finde": 9.8, "finde_dias": ["Viernes", "Sábado", "Domingo"],
+           "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.5},
+           "notas": "Precios de taquilla; en Pillalas.com, 0,10 € menos. Viernes y festivos, precio de fin de semana."}
 TARIFAS = {
-    "renoir-plaza-espana": {"entrada_laboral": 8.5, "entrada_finde": 9.8,
-                            "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.5},
-                            "notas": "Precio reducido comprando online (5,40€ día espectador). Mayores de 65 años: 2€ los martes."},
-    "renoir-retiro": {"entrada_laboral": 8.5, "entrada_finde": 9.8,
-                      "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.5},
-                      "notas": "Mismas condiciones que Plaza de España. Descuento online disponible."},
+    "renoir-plaza-espana": _RENOIR,
+    "renoir-princesa": _RENOIR,
+    "renoir-retiro": _RENOIR,
+    "yelmo-ideal": {"entrada": 11.4, "dia_espectador": {"dias": ["Miércoles"], "precio": 7.4}},
+    "yelmo-plenilunio": {"entrada": 9.4, "dia_espectador": {"dias": ["Miércoles"], "precio": 6.9}},
+    "callao": {"entrada": 8.0, "dia_espectador": {"dias": ["Miércoles"], "precio": 4.5}},
+    "artistic-metropol": {"precio_texto": "Según la película", "notas": "Entre 3,50 y 7,50 € según la película"},
+    "conde-duque-morasol": {"entrada": 11.4, "notas": "Salas Luxury: 15,50 €"},
+    "cine-estudio": {"entrada": 8.0, "notas": "Algunas sesiones tienen precio reducido (5,50 €)"},
+    "embajadores-rio": {"entrada": 9.5, "dia_espectador": [{"dias": ["Martes", "Jueves"], "precio": 7.5},
+                                                           {"dias": ["Miércoles"], "precio": 5.9}]},
+    "sala-berlanga": {"entrada": 4.1},
     "golem": {"entrada_laboral": 8.0, "entrada_finde": 9.1,
               "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.7},
               "notas": "Domingos noche (a partir de las 22h): 6,70 €. Vuelve al cine: 6,70 €."},

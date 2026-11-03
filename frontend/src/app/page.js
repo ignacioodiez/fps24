@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 // Importamos Helpers
-import { isSameDay, cleanForSearch, isDiaEspectador } from "@/utils/helpers"; // 🆕 Importamos isDiaEspectador
+import { isSameDay, cleanForSearch } from "@/utils/helpers";
+import { esDiaEspectador } from "@/lib/tarifas";
+import { useTarifas } from "@/lib/useTarifas";
 // Importamos Componentes
 import Header from "@/components/Header";
 import DateSelector from "@/components/DateSelector";
@@ -26,6 +28,7 @@ export default function Home() {
   
   const [searchTerm, setSearchTerm] = useState(""); 
   const [sortBy, setSortBy] = useState("sesiones"); 
+  const tarifas = useTarifas();
 
    
 
@@ -96,7 +99,7 @@ export default function Home() {
 
     // D. 🆕 Filtro Día del Espectador
     if (spectatorOnly) {
-      data = data.filter((pase) => isDiaEspectador(pase.cine, pase.fecha_hora));
+      data = data.filter((pase) => esDiaEspectador(tarifas[pase.cine_slug], pase.fecha_hora));
     }
 
     // E. Filtro Especiales
@@ -105,7 +108,7 @@ export default function Home() {
     }
 
     return data;
-  }, [futurePases, selectedDate, cineActivo, timeRange, spectatorOnly, onlySpecials]);
+  }, [futurePases, selectedDate, cineActivo, timeRange, spectatorOnly, onlySpecials, tarifas]);
 
 
   // 4. AGRUPACIÓN (Esto sigue igual, pero usa 'filteredPases' que ya viene limpito)

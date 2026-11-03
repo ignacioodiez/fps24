@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { BloquePrecio, Boton, precioHoy } from "@/components/SalasYPrecios";
+import { BloquePrecio, Boton } from "@/components/SalasYPrecios";
+import { precioHoy } from "@/lib/tarifas";
 import { ChipHora } from "@/components/Sesiones";
 import { NotaPelicula } from "@/components/FichaPelicula";
 
@@ -92,7 +93,7 @@ export default function CarteleraCine({ cine }) {
   // Por defecto hoy; si hoy ya no tiene nada en los datos, el primer día con sesiones
   const [elegido, setElegido] = useState((dias.find((d) => d.peliculas.length) ?? dias[0]).fecha);
   const dia = dias.find((d) => d.fecha === elegido);
-  const hoy = precioHoy(cine.tarifas, capitalizar(formato(dias[0].fecha, { weekday: "long" })));
+  const hoy = precioHoy(cine.tarifas, dias[0].fecha);
   const sesiones = dia.peliculas.reduce((n, p) => n + p.sesiones.length, 0);
   const algunDia = dias.some((d) => d.peliculas.length);
 

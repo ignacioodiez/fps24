@@ -23,7 +23,7 @@ hoy = datetime.combine(ahora.date(), time())
 with Session(engine) as session:
     # /cines sigue igual: mismos campos y sin los de la ficha
     lista = [CineSalida.model_validate(c) for c in leer_cines(session)]
-    assert len(lista) == len(CINES_DATOS) == 21, len(lista)
+    assert len(lista) == len(CINES_DATOS) == 22, len(lista)
     assert all(not hasattr(c, "dias") for c in lista)
     assert list(CineSalida.model_fields) == ["id", "slug", "nombre", "zona", "tipo", "direccion", "web", "telefono",
                                              "lat", "lng", "tarifas", "sesiones_hoy", "peliculas_hoy"]
@@ -63,7 +63,7 @@ with Session(engine) as session:
             Pase.cine_id == c.id, Pase.activo, Pase.fecha_hora >= hoy + timedelta(days=1))).first()
         assert d.solo_hoy == (bool(d.dias[0].peliculas) and desde_manana is None), c.slug
         print(f"  {c.slug}: {len(vistas)} sesiones en 7 días, solo_hoy={d.solo_hoy}")
-    print("OK: 21 cines con 7 días, 404, orden y sesiones = consulta directa")
+    print("OK: 22 cines con 7 días, 404, orden y sesiones = consulta directa")
 
     # solo_hoy = True: con `ahora` en el último día con sesiones de un cine, todo lo que queda es de "hoy"
     ultimo = session.exec(select(Pase.cine_id, Pase.fecha_hora).where(Pase.activo)

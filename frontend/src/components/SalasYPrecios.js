@@ -11,6 +11,7 @@ import { useFavoritos } from "@/components/FavoritosProvider";
 import PasesCerca from "@/components/PasesCerca";
 import { ahoraMadrid, buscarCerca, centroZona, cinesConPronto, distanciaKm, textoDistancia } from "@/lib/cercaDeTi";
 import { comoUTC } from "@/lib/fechasMadrid";
+import { ETIQUETA_TIPO as ETIQUETA_HOY, euros, precioHoy, reglasEspectador } from "@/lib/tarifas";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -20,25 +21,9 @@ const MapaCines = dynamic(() => import("@/components/MapaCines"), {
   loading: () => <div className="h-full w-full bg-surface" />,
 });
 
-const FINDE = ["Sábado", "Domingo"];
 const INICIAL = { Lunes: "L", Martes: "M", Miércoles: "X", Jueves: "J", Viernes: "V", Sábado: "S", Domingo: "D" };
 
-const euros = (n) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 const plural = (n, una, varias) => `${n} ${n === 1 ? una : varias}`;
-
-// Precio de una entrada HOY según cine.tarifas: { precio, tipo } con tipo "espectador", "finde", "laboral" o
-// "entrada"; precio null si hay tarifas pero no un precio único (p. ej. según sala); null sin tarifas.
-export const precioHoy = (tarifas, dia) => {
-  if (!tarifas) return null;
-  const espectador = tarifas.dia_espectador;
-  if (espectador?.dias?.includes(dia)) return { precio: espectador.precio, tipo: "espectador" };
-  if (FINDE.includes(dia) && tarifas.entrada_finde != null) return { precio: tarifas.entrada_finde, tipo: "finde" };
-  if (!FINDE.includes(dia) && tarifas.entrada_laboral != null) return { precio: tarifas.entrada_laboral, tipo: "laboral" };
-  const precio = tarifas.entrada ?? tarifas.entrada_laboral ?? tarifas.entrada_finde ?? null;
-  return { precio, tipo: "entrada" };
-};
-
-const ETIQUETA_HOY = { finde: "fin de semana", laboral: "día laborable", entrada: "entrada" };
 
 const sinMovimiento = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -78,7 +63,7 @@ export function LineaHoy({ tarifas, hoy }) {
       <span className="text-muted"> · {ETIQUETA_HOY[hoy.tipo]}</span>
     </p>
   ) : (
-    <p className="px-3 py-2 rounded-lg bg-surface border border-line text-sm font-bold text-foreground">Precio según sala</p>
+    <p className="px-3 py-2 rounded-lg bg-surface border border-line text-sm font-bold text-foreground">{tarifas.precio_texto ?? "Precio según sala"}</p>
   );
 }
 
@@ -88,7 +73,7 @@ export function BloquePrecio({ tarifas, hoy }) {
     tarifas.entrada != null && `Entrada ${euros(tarifas.entrada)}`,
     tarifas.entrada_laboral != null && `Laborable ${euros(tarifas.entrada_laboral)}`,
     tarifas.entrada_finde != null && `Finde ${euros(tarifas.entrada_finde)}`,
-    tarifas.dia_espectador && `Espectador (${tarifas.dia_espectador.dias.map((d) => INICIAL[d] || d).join(", ")}) ${euros(tarifas.dia_espectador.precio)}`,
+    ...reglasEspectador(tarifas).map((r) => `Espectador (${r.dias.map((d) => INICIAL[d] || d).join(", ")}) ${euros(r.precio)}`),
   ].filter(Boolean);
 
   return (
@@ -166,7 +151,7 @@ const HORIZONTE_MS = 30 * 3600 * 1000;
 
 // Página "Cines de Madrid" (/cines): pases cerca de ti, mapa y lista de cines con filtros (zona, tipo, día del espectador
 // hoy) y orden (por zona, más baratos hoy o más cerca)
-export default function SalasYPrecios({ cines, diaHoy }) {
+export default function SalasYPrecios({ cines, fechaHoy }) {
   const [zona, setZona] = useState("todas");
   const [tipo, setTipo] = useState("todos");
   const [soloEspectador, setSoloEspectador] = useState(false);
@@ -275,7 +260,7 @@ export default function SalasYPrecios({ cines, diaHoy }) {
 
   const conHoy = cines.map((cine) => ({
     cine,
-    hoy: precioHoy(cine.tarifas, diaHoy),
+    hoy: precioHoy(cine.tarifas, fechaHoy),
     distancia: posicion && cine.lat != null && cine.lng != null ? distanciaKm(posicion, cine) : null,
   }));
   const zonas = [...new Set(cines.map((c) => c.zona).filter(Boolean))];  // ya vienen por zona

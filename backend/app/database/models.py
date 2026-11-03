@@ -86,7 +86,7 @@ class Cine(SQLModel, table=True):
     telefono: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
-    # Precios (migración 0008): {"entrada", "entrada_laboral", "entrada_finde", "dia_espectador": {"dias", "precio"}, "notas"}
+    # Precios (migración 0008): formato en app/services/cines.py (TARIFAS)
     tarifas: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
 
 
