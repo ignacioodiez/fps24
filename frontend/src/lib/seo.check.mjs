@@ -43,4 +43,25 @@ const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/s
 assert.equal(ld["@type"], "Movie");
 assert.ok(ld.name);
 
+// 5. Páginas con intención de búsqueda: un h1, canonical, BreadcrumbList legible; VOSE en el sitemap solo si es indexable
+const leerLd = (html) => [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map((m) => JSON.parse(m[1]));
+for (const ruta of ["/dia-del-espectador-madrid", "/cine-vose-madrid"]) {
+  const res = await pedir(ruta);
+  assert.equal(res.status, 200, ruta);
+  const html = await res.text();
+  const enSitemap = urls.includes(`${SITIO}${ruta}`);
+  if (ruta === "/dia-del-espectador-madrid") assert.ok(enSitemap, `${ruta} falta en el sitemap`);
+  assert.equal(noindex(html), !enSitemap, `${ruta}: en el sitemap si y solo si es indexable`);
+  assert.equal(html.match(/<link rel="canonical" href="([^"]+)"/)?.[1], `${SITIO}${ruta}`, `${ruta}: canonical`);
+  assert.equal(html.match(/<h1[\s>]/g)?.length, 1, `${ruta}: un solo h1`);
+  assert.match(html, /<meta property="og:title"/, `${ruta}: Open Graph`);
+  const migas = leerLd(html).find((d) => d["@type"] === "BreadcrumbList");
+  assert.ok(migas, `${ruta}: falta BreadcrumbList`);
+  assert.deepEqual(migas.itemListElement.map((i) => i.item), [SITIO, `${SITIO}${ruta}`]);
+}
+
+// 6. La portada enlaza a las dos en el HTML del servidor (sin JavaScript)
+const portada = await (await pedir("/")).text();
+for (const ruta of ["/cine-vose-madrid", "/dia-del-espectador-madrid"]) assert.ok(portada.includes(`href="${ruta}"`), `la portada no enlaza ${ruta}`);
+
 console.log(`OK: SEO (${urls.length} URLs del sitemap con 200 e indexables, 404 reales, noindex en lo privado)`);

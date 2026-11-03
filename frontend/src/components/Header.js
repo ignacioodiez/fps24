@@ -1,8 +1,8 @@
 import Logo from "@/components/Logo";
 import NavSecciones from "@/components/NavSecciones";
 
-// showTitle=false donde la página ya tiene su propio h1 (un solo h1 por página)
-export default function Header({ backdrop, showTitle = true }) {
+// showTitle=false donde la página ya tiene su propio h1 (un solo h1 por página). children: fila opcional bajo el subtítulo (atajos de la portada)
+export default function Header({ backdrop, showTitle = true, children }) {
   return (
     <header className="w-full flex flex-col mb-8 text-center xl:text-left">
 
@@ -29,6 +29,7 @@ export default function Header({ backdrop, showTitle = true }) {
       <p className="max-w-9xl mx-auto w-full px-4 md:px-8 text-muted text-sm md:text-base mt-4 font-medium tracking-wide">
         Cartelera Madrid <span className="text-primary mx-1">•</span> Cartelera Actualizada <span className="text-primary mx-1">•</span> Sesiones Especiales
       </p>
+      {children && <div className="max-w-9xl mx-auto w-full px-4 md:px-8 mt-3">{children}</div>}
 
     </header>
   );

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import TodayHeader from "@/components/TodayHeader";
 import SalasYPrecios from "@/components/SalasYPrecios";
 import { hoyMadrid } from "@/lib/fechasMadrid";
@@ -42,6 +43,11 @@ export default async function CinesPage() {
           </h1>
           <p className="text-muted text-lg max-w-2xl mx-auto">
             Mapa, sesiones cerca de ti y precios{deLasSalas(cines?.length)}
+          </p>
+          <p className="text-muted text-sm mt-2">
+            <Link href="/dia-del-espectador-madrid" className="font-semibold text-foreground hover:text-primary underline underline-offset-2">Día del espectador y cines más baratos</Link>
+            <span className="mx-2 text-primary" aria-hidden="true">•</span>
+            <Link href="/cine-vose-madrid" className="font-semibold text-foreground hover:text-primary underline underline-offset-2">Sesiones en VOSE</Link>
           </p>
         </div>
 

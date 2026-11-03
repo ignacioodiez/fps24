@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 // Importamos Helpers
 import { isSameDay, cleanForSearch } from "@/utils/helpers";
 import { esDiaEspectador } from "@/lib/tarifas";
@@ -15,7 +16,8 @@ import { groupMovies, backdropDeHoy } from "@/lib/peliculas";
 import { guardarDia } from "@/lib/diaSeleccionado";
 
 
-export default function Cartelera() {
+// atajos: enlaces pintados en el servidor (app/page.js), bajo la cabecera
+export default function Cartelera({ atajos }) {
   const [pases, setPases] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekOffset, setWeekOffset] = useState(0);
@@ -165,7 +167,7 @@ export default function Cartelera() {
     <main className="min-h-screen bg-background text-foreground pb-24">
       
       {/* Header a ancho completo, fuera del contenedor con padding */}
-      <Header backdrop={headerBackdrop} />
+      <Header backdrop={headerBackdrop}>{atajos}</Header>
 
       <div className="px-4 md:px-8">
 
@@ -233,7 +235,7 @@ export default function Cartelera() {
   {/* Leyenda Día Espectador */}
   <div className="flex items-center gap-2">
     <span className="w-3 h-3 rounded-full bg-accent"></span>
-    <span>Día del Espectador</span>
+    <Link href="/dia-del-espectador-madrid" className="hover:text-primary transition-colors">Día del Espectador</Link>
   </div>
 
   {/* Separador sutil */}
