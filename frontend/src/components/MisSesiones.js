@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
+import { PrecioSesion } from "@/components/ModalSesion";
 import { useSesionesGuardadas } from "@/components/SesionesGuardadasProvider";
 import { diaCompleto, etiquetaRelativa, hoyMadrid } from "@/lib/fechasMadrid";
 import { listarSesiones, marcarVista, quitarSesion } from "@/lib/sesiones";
@@ -49,6 +50,7 @@ function Tarjeta({ sesion, futura, hoy, usuario, onQuitar, onVista }) {
           <time dateTime={`${sesion.fecha}T${sesion.hora}`} className="font-semibold text-foreground">{hora}</time>
           {sesion.idioma && sesion.idioma !== "Español" && <> · {sesion.idioma}</>}
         </p>
+        {futura && <PrecioSesion pequeno slug={sesion.cine_slug} fechaHora={`${sesion.fecha}T${sesion.hora}`} />}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {futura && sesion.link_compra && (
             <a href={sesion.link_compra} target="_blank" rel="noopener noreferrer" className={`${BOTON_PRIMARIO} rounded-lg`}>

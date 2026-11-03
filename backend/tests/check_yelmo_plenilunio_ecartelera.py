@@ -47,6 +47,6 @@ print("OK: todos los días")
 
 # --- alta del cine ---
 slug = CINES_CONOCIDOS[yp.CINES[0]]
-assert slug == "yelmo-plenilunio" and CINES_DATOS[slug]["tarifas"] is None
+assert slug == "yelmo-plenilunio" and CINES_DATOS[slug]["tarifas"]["entrada"] == 9.4
 assert CINES_DATOS[slug]["web"] == yp.LINK_COMPRA and yp.LINK_COMPRA.startswith("https://yelmocines.es/")
 print("OK: alta")

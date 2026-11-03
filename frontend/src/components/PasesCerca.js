@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { LocateFixed, MapPin, X } from "lucide-react";
 import { Boton, ChipFiltro } from "@/components/SalasYPrecios";
-import { Version } from "@/components/ModalSesion";
+import { PrecioSesion, Version } from "@/components/ModalSesion";
 import { useSesionesGuardadas } from "@/components/SesionesGuardadasProvider";
 import { minutosAndando, textoDistancia } from "@/lib/cercaDeTi";
 import { cleanCinemaName } from "@/utils/helpers";
@@ -47,6 +47,7 @@ function TarjetaPase({ pase, cine, distancia, minutos }) {
           <span>{textoDistancia(distancia)} · ~{minutosAndando(distancia)} min andando</span>
           <Version idioma={pase.idioma} />
         </p>
+        <PrecioSesion pequeno precio={pase.precio} slug={pase.cine_slug} fechaHora={pase.fecha_hora} />
         <div className="pt-1 flex flex-wrap gap-2">
           <button type="button" aria-haspopup="dialog" onClick={(e) => abrir(pase, e.currentTarget)}
                   aria-label={`Ver sesión: ${pelicula.titulo}, ${hora} en ${nombreCine}`}

@@ -2,11 +2,13 @@
 
 import { useId, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { cleanCinemaName, extractTime, isDiaEspectador, textoSala } from "@/utils/helpers";
+import { cleanCinemaName, extractTime, textoSala } from "@/utils/helpers";
 import BotonFavorito, { MarcaFavorito } from "@/components/BotonFavorito";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { useSesionesGuardadas } from "@/components/SesionesGuardadasProvider";
 import { favoritosPrimero } from "@/lib/favoritos";
+import { esDiaEspectador, precioReal } from "@/lib/tarifas";
+import { useTarifas } from "@/lib/useTarifas";
 
 // Piezas de sesiones con el estilo de la cartelera de la portada. Las usan la portada (MovieGrid),
 // la vista rápida (ModalPelicula) y la página completa de película, para que se vean igual.
@@ -75,7 +77,7 @@ const suscribirReloj = (aviso) => {
 const useAhora = () => useSyncExternalStore(suscribirReloj, () => Math.floor(Date.now() / MINUTO) * MINUTO, () => null);
 
 // Precio de una sesión salvo "Consultar"
-const precioDe = (pase) => (pase.precio && pase.precio !== "Consultar" ? pase.precio : null);
+const precioDe = (pase) => precioReal(pase.precio);
 
 // Nombre de un cine que lleva a su página; sin slug, texto normal. reemplazar: desde el modal, sustituye su
 // entrada del historial para que "atrás" vuelva a la portada y no reabra el modal.
@@ -106,7 +108,7 @@ export const REJILLA_CINES = "grid gap-x-6 gap-y-3 @[440px]:grid-cols-2 [&>*]:bo
 // conFavorito: la estrella para marcarlo o quitarlo (modal y ficha). A la derecha, "Espectador" si ese día lo es
 // en ese cine y el precio del día.
 export function CabeceraCine({ nombre, fecha, slug, conFavorito = false, precio = null, reemplazar = false }) {
-  const espectador = isDiaEspectador(nombre, fecha);
+  const espectador = esDiaEspectador(useTarifas()[slug], fecha);
   const texto = cleanCinemaName(nombre);
   return (
     <div className="flex items-center gap-1.5 min-w-0">

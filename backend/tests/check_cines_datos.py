@@ -22,18 +22,28 @@ assert all(partes(d["direccion"])["ciudad"] == "Madrid" for d in CINES_DATOS.val
 assert all(40.3 < d["lat"] < 40.5 and -3.8 < d["lng"] < -3.5 for d in CINES_DATOS.values())  # en Madrid
 print("OK: CINES_DATOS")
 
-# --- tarifas: los 11 cines de frontend/src/data/cines.js, con la estructura acordada ---
+# --- tarifas: todos los cines menos los dos Cinesa (faltan datos), con la estructura acordada ---
 DIAS = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"}
-assert set(TARIFAS) == {"renoir-plaza-espana", "renoir-retiro", "golem", "mk2-paz", "verdi", "pequeno-cine-estudio",
-                        "embajadores", "equis", "cineteca", "dore", "mk2-palacio-hielo"}, set(TARIFAS)
-assert sum(d["tarifas"] is not None for d in CINES_DATOS.values()) == 11
+assert set(CINES_DATOS) - set(TARIFAS) == {"cinesa-proyecciones", "cinesa-principe-pio"}, set(CINES_DATOS) - set(TARIFAS)
+assert set(TARIFAS) <= set(CINES_DATOS), set(TARIFAS) - set(CINES_DATOS)
+assert sum(d["tarifas"] is not None for d in CINES_DATOS.values()) == 20
 for slug, t in TARIFAS.items():
-    assert t and set(t) <= {"entrada", "entrada_laboral", "entrada_finde", "dia_espectador", "notas"}, slug
+    assert t and set(t) <= {"entrada", "entrada_laboral", "entrada_finde", "finde_dias", "dia_espectador", "precio_texto",
+                            "notas"}, slug
     assert all(isinstance(t[k], float) and 0 < t[k] < 20 for k in ("entrada", "entrada_laboral", "entrada_finde") if k in t), slug
+    assert set(t.get("finde_dias", DIAS)) <= DIAS and t.get("finde_dias", DIAS), slug
+    assert isinstance(t.get("precio_texto", ""), str), slug
     if "dia_espectador" in t:
-        de = t["dia_espectador"]
-        assert set(de) == {"dias", "precio"} and de["dias"] and set(de["dias"]) <= DIAS and 0 < de["precio"] < 20, slug
+        reglas = t["dia_espectador"] if isinstance(t["dia_espectador"], list) else [t["dia_espectador"]]
+        for de in reglas:
+            assert set(de) == {"dias", "precio"} and de["dias"] and set(de["dias"]) <= DIAS and 0 < de["precio"] < 20, slug
 assert TARIFAS["verdi"]["dia_espectador"] == {"dias": ["Lunes"], "precio": 4.9}
+assert TARIFAS["renoir-princesa"] == TARIFAS["renoir-plaza-espana"] == TARIFAS["renoir-retiro"]
+assert TARIFAS["embajadores-rio"]["dia_espectador"] == [{"dias": ["Martes", "Jueves"], "precio": 7.5},
+                                                       {"dias": ["Miércoles"], "precio": 5.9}]
+assert "notas" not in TARIFAS["embajadores-rio"]
+assert TARIFAS["renoir-retiro"]["finde_dias"] == ["Viernes", "Sábado", "Domingo"] and "finde_dias" not in TARIFAS["golem"]
+assert TARIFAS["artistic-metropol"]["precio_texto"] == "Según la película"
 assert CINES_DATOS["renoir-retiro"]["direccion"].startswith("Calle de Narváez, 42")  # conflicto: manda el front
 print("OK: TARIFAS")
 

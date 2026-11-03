@@ -149,7 +149,7 @@ class CineSalida(SQLModel):
     telefono: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
-    # {"entrada", "entrada_laboral", "entrada_finde", "dia_espectador": {"dias", "precio"}, "notas"}: solo las que aplican
+    # formato en app/services/cines.py (TARIFAS)
     tarifas: Optional[dict] = None
     sesiones_hoy: int  # pases activos de hoy (Madrid) desde ahora
     peliculas_hoy: int

@@ -1,5 +1,6 @@
 import TodayHeader from "@/components/TodayHeader";
 import SalasYPrecios from "@/components/SalasYPrecios";
+import { hoyMadrid } from "@/lib/fechasMadrid";
 
 export const metadata = {
   title: "Cines de Madrid: mapa, precios y sesiones cerca de ti | fps24",
@@ -26,13 +27,6 @@ async function leerCines() {
   }
 }
 
-// Día de la semana de hoy en Madrid ("Jueves"), el mismo para el HTML del servidor y el cliente (sin desajustes
-// al hidratar). shortcut: con la caché de 5 min puede ir hasta 5 min tarde a medianoche, igual que sesiones_hoy.
-const diaHoyMadrid = () => {
-  const dia = new Intl.DateTimeFormat("es-ES", { weekday: "long", timeZone: "Europe/Madrid" }).format(new Date());
-  return dia.charAt(0).toUpperCase() + dia.slice(1);
-};
-
 export default async function CinesPage() {
   const cines = await leerCines();
 
@@ -50,8 +44,9 @@ export default async function CinesPage() {
           </p>
         </div>
 
+        {/* Hoy en Madrid, el mismo en servidor y cliente. shortcut: con la caché de 5 min puede ir hasta 5 min tarde a medianoche */}
         {cines ? (
-          <SalasYPrecios cines={cines} diaHoy={diaHoyMadrid()} />
+          <SalasYPrecios cines={cines} fechaHoy={hoyMadrid()} />
         ) : (
           <p className="text-center text-muted py-16">No se han podido cargar los cines. Vuelve a intentarlo en unos minutos.</p>
         )}
