@@ -14,9 +14,13 @@ import { Analytics } from "@vercel/analytics/next";
 const textFont = TextFont({ subsets: ["latin"], variable: "--font-text" });
 const displayFont = DisplayFont({ subsets: ["latin"], variable: "--font-title" });
 
+// metadataBase: canonical y Open Graph relativos salen absolutos. Sin canonical aquí: lo heredarían todas las páginas
 export const metadata = {
-  title: "MadridFPS24",
-  description: "Cartelera de cine independiente en Madrid",
+  metadataBase: new URL("https://fps24.es"),
+  title: "Cartelera de cine en Madrid: horarios, VOSE y precios | fps24",
+  description: "Todas las sesiones de los cines independientes y de autor de Madrid en una cartelera: horarios, versión original, precios y día del espectador.",
+  openGraph: { siteName: "fps24", locale: "es_ES", type: "website", images: ["/logofps24.png"] },
+  twitter: { card: "summary" },
   icons: {
     icon: "/logofps24.png", 
     apple: "/logofps24.png",

@@ -1,7 +1,8 @@
 import PaginaSemana from "@/components/PaginaSemana";
 
 export const metadata = {
-  title: "Estrenos de la semana - FPS24",
+  title: "Estrenos de la semana en los cines de Madrid | fps24",
+  alternates: { canonical: "/estrenos" }, // ?semana=N es la misma página en otra semana
   description: "Todas las películas que se estrenan esta semana en los cines de Madrid, con nota, cines y primera sesión.",
 };
 

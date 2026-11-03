@@ -5,6 +5,7 @@ const EMAIL_CONTACTO = "ignacio.diez.vergara@gmail.com";
 const ACTUALIZADA = "2 de noviembre de 2026";
 
 export const metadata = {
+  alternates: { canonical: "/privacidad" },
   title: "Privacidad - FPS24",
   description: "Qué datos guarda FPS24, para qué los usa, con quién se comparten y cómo ejercer tus derechos.",
 };
@@ -14,7 +15,7 @@ const ENLACE = "text-primary font-bold hover:underline break-words";
 function Seccion({ titulo, children }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-xl font-display font-bold uppercase text-foreground">{titulo}</h3>
+      <h2 className="text-xl font-display font-bold uppercase text-foreground">{titulo}</h2>
       <div className="space-y-3 text-muted leading-relaxed">{children}</div>
     </section>
   );
@@ -25,13 +26,13 @@ export default function PrivacidadPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground pb-20">
-      <TodayHeader />
+      <TodayHeader showTitle={false} />
 
       <div className="max-w-3xl mx-auto px-4 md:px-6">
         <div className="text-center mb-10">
-          <h2 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground mb-4">
+          <h1 className="text-4xl md:text-6xl font-black font-display uppercase text-foreground mb-4">
             <span className="text-primary">Privacidad</span>
-          </h2>
+          </h1>
           <p className="text-muted text-lg">Qué datos guardamos, para qué y cómo puedes controlarlos. Sin letra pequeña.</p>
         </div>
 

@@ -9,6 +9,7 @@ import { useSesionesGuardadas } from "@/components/SesionesGuardadasProvider";
 import { favoritosPrimero } from "@/lib/favoritos";
 import { esDiaEspectador, precioReal } from "@/lib/tarifas";
 import { useTarifas } from "@/lib/useTarifas";
+import { hoyMadrid } from "@/lib/fechasMadrid";
 
 // Piezas de sesiones con el estilo de la cartelera de la portada. Las usan la portada (MovieGrid),
 // la vista rápida (ModalPelicula) y la página completa de película, para que se vean igual.
@@ -25,7 +26,7 @@ const HORAS_POR_CINE = 8; // horas visibles por cine en la ficha; el resto, tras
 export const claveDia = (fecha) => new Date(fecha).toLocaleDateString("sv-SE");
 // ?dia=YYYY-MM-DD de una tarjeta con sesión sugerida: vale solo si ese día tiene sesiones desde hoy; si no, null
 export const diaConSesiones = (dia, pases) =>
-  dia && dia >= claveDia(new Date()) && pases.some((p) => claveDia(p.fecha_hora) === dia) ? dia : null;
+  dia && dia >= hoyMadrid() && pases.some((p) => claveDia(p.fecha_hora) === dia) ? dia : null;
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 const nombreDia = (clave) =>
   capitalizar(new Date(`${clave}T00:00`).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }));
@@ -333,10 +334,10 @@ export function SesionesPorDias({ pases, pelicula, modo, contexto = "modal", dia
   const limite = LIMITES[contexto];
   const [todosDias, setTodosDias] = useState(false);
   const id = useId();
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
+  // Desde hoy en Madrid: el mismo día en el servidor (UTC) y en el navegador, sin desajuste al hidratar
+  const hoy = hoyMadrid();
   const porDia = [...pases]
-    .filter((p) => new Date(p.fecha_hora) >= hoy)
+    .filter((p) => p.fecha_hora.slice(0, 10) >= hoy)
     .map((p) => ({ ...p, pelicula })) // para el modal de la sesión (los pases de /pelicula/{id} no la traen)
     .sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora))
     .reduce((acc, p) => {

@@ -117,22 +117,26 @@ CINES_DATOS = {
 # Sin tarifa a propósito: los dos Cinesa, Yelmo Palafox y Capitol (no hay precio verificado; los de eCartelera son antiguos)
 # y los tres culturales (el precio, si lo hay, va en cada pase: "Gratis", "3,15 €"...).
 # Renoir, Yelmo, Callao, Metropol, Morasol, CBA, Embajadores Río y Berlanga: precios del propietario (02/11/2026).
+# revisado: fecha "AAAA-MM-DD" de la última verificación; sin ella, el front la marca "pendiente de verificar".
+_REVISADO = "2026-11-02"
 _RENOIR = {"entrada_laboral": 8.5, "entrada_finde": 9.8, "finde_dias": ["Viernes", "Sábado", "Domingo"],
            "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.5},
-           "notas": "Precios de taquilla; en Pillalas.com, 0,10 € menos. Viernes y festivos, precio de fin de semana."}
+           "notas": "Precios de taquilla; en Pillalas.com, 0,10 € menos. Viernes y festivos, precio de fin de semana.",
+           "revisado": _REVISADO}
 TARIFAS = {
     "renoir-plaza-espana": _RENOIR,
     "renoir-princesa": _RENOIR,
     "renoir-retiro": _RENOIR,
-    "yelmo-ideal": {"entrada": 11.4, "dia_espectador": {"dias": ["Miércoles"], "precio": 7.4}},
-    "yelmo-plenilunio": {"entrada": 9.4, "dia_espectador": {"dias": ["Miércoles"], "precio": 6.9}},
-    "callao": {"entrada": 8.0, "dia_espectador": {"dias": ["Miércoles"], "precio": 4.5}},
-    "artistic-metropol": {"precio_texto": "Según la película", "notas": "Entre 3,50 y 7,50 € según la película"},
-    "conde-duque-morasol": {"entrada": 11.4, "notas": "Salas Luxury: 15,50 €"},
-    "cine-estudio": {"entrada": 8.0, "notas": "Algunas sesiones tienen precio reducido (5,50 €)"},
+    "yelmo-ideal": {"entrada": 11.4, "dia_espectador": {"dias": ["Miércoles"], "precio": 7.4}, "revisado": _REVISADO},
+    "yelmo-plenilunio": {"entrada": 9.4, "dia_espectador": {"dias": ["Miércoles"], "precio": 6.9}, "revisado": _REVISADO},
+    "callao": {"entrada": 8.0, "dia_espectador": {"dias": ["Miércoles"], "precio": 4.5}, "revisado": _REVISADO},
+    "artistic-metropol": {"precio_texto": "Según la película", "notas": "Entre 3,50 y 7,50 € según la película",
+                          "revisado": _REVISADO},
+    "conde-duque-morasol": {"entrada": 11.4, "notas": "Salas Luxury: 15,50 €", "revisado": _REVISADO},
+    "cine-estudio": {"entrada": 8.0, "notas": "Algunas sesiones tienen precio reducido (5,50 €)", "revisado": _REVISADO},
     "embajadores-rio": {"entrada": 9.5, "dia_espectador": [{"dias": ["Martes", "Jueves"], "precio": 7.5},
-                                                           {"dias": ["Miércoles"], "precio": 5.9}]},
-    "sala-berlanga": {"entrada": 4.1},
+                                                           {"dias": ["Miércoles"], "precio": 5.9}], "revisado": _REVISADO},
+    "sala-berlanga": {"entrada": 4.1, "revisado": _REVISADO},
     "golem": {"entrada_laboral": 8.0, "entrada_finde": 9.1,
               "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.7},
               "notas": "Domingos noche (a partir de las 22h): 6,70 €. Vuelve al cine: 6,70 €."},

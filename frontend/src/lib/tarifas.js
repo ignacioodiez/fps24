@@ -1,4 +1,4 @@
-import { comoUTC, hoyMadrid } from "./fechasMadrid.js";
+import { comoUTC, hoyMadrid, sumarDias } from "./fechasMadrid.js";
 
 // Festivos de la ciudad de Madrid (Comunidad + los dos locales), en claves "AAAA-MM-DD" de Madrid. Se cobran como
 // fin de semana. Añade aquí cada año. Fuentes (calendario laboral oficial):
@@ -63,3 +63,49 @@ export const precioSesion = ({ precio, tarifas, fechaHora }) => {
     : `Entrada: ${euros(dia.precio)}${dia.tipo === "entrada" ? "" : ` · ${ETIQUETA_TIPO[dia.tipo]}`}`;
   return { texto, orientativo: true, nota };
 };
+
+// "4,90 €–8,50 €" con los precios numéricos de la tabla de tarifas (las notas, texto libre, no cuentan); null sin ellos
+export const rangoPrecios = (tarifas) => {
+  const t = tarifas ?? {};
+  const precios = [t.entrada, t.entrada_laboral, t.entrada_finde, ...[t.dia_espectador ?? []].flat().map((r) => r.precio)]
+    .filter((p) => typeof p === "number" && p >= 0);
+  if (!precios.length) return null;
+  const eur = (p) => `${p.toFixed(2).replace(".", ",")} €`;
+  const [min, max] = [Math.min(...precios), Math.max(...precios)];
+  return min === max ? eur(min) : `${eur(min)}–${eur(max)}`;
+};
+
+// --- Página /dia-del-espectador-madrid. cines: los de GET /cines ({ slug, nombre, tarifas }) ---
+
+// Los 7 días desde hoy: [{ fecha, festivo, cines: [{ slug, nombre, precio }] }] con los cines en día del espectador
+// ese día (precioDia: un festivo lo anula), del más barato al más caro
+export const semanaEspectador = (cines, hoy) =>
+  Array.from({ length: 7 }, (_, i) => sumarDias(hoy, i)).map((fecha) => ({
+    fecha,
+    festivo: FESTIVOS.has(fecha),
+    cines: cines
+      .map((c) => ({ slug: c.slug, nombre: c.nombre, dia: precioDia(c.tarifas, fecha) }))
+      .filter(({ dia }) => dia?.tipo === "espectador")
+      .map(({ slug, nombre, dia }) => ({ slug, nombre, precio: dia.precio }))
+      .sort((a, b) => a.precio - b.precio || a.nombre.localeCompare(b.nombre, "es")),
+  }));
+
+// Precio de hoy por cine: conPrecio (del más barato al más caro, con { precio, tipo }) y sinPrecio (tarifa sin precio
+// único, p. ej. según la película, o sin tarifa verificada). Nada se calcula si no está en la tabla de tarifas.
+export const cinesPorPrecio = (cines, hoy) => {
+  const conPrecio = [];
+  const sinPrecio = [];
+  for (const c of cines) {
+    const dia = precioDia(c.tarifas, hoy);
+    (dia?.precio != null ? conPrecio : sinPrecio).push({ ...c, hoy: dia });
+  }
+  conPrecio.sort((a, b) => a.hoy.precio - b.hoy.precio || a.nombre.localeCompare(b.nombre, "es"));
+  sinPrecio.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  return { conPrecio, sinPrecio };
+};
+
+// Última revisión ("AAAA-MM-DD" o null) y los cines con tarifa pendientes de verificar (sin `revisado`)
+export const revisionTarifas = (cines) => ({
+  fecha: cines.map((c) => c.tarifas?.revisado).filter(Boolean).sort().at(-1) ?? null,
+  pendientes: cines.filter((c) => c.tarifas && !c.tarifas.revisado),
+});

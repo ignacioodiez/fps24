@@ -1,5 +1,6 @@
 import Link from "next/link";
 import FormNewsletter from "@/components/FormNewsletter";
+import { hoyMadrid } from "@/lib/fechasMadrid";
 
 export default function Footer() {
   return (
@@ -39,6 +40,16 @@ export default function Footer() {
                 <li>
                     <Link href="/especiales" className="text-muted hover:text-primary transition-colors">
                         Especiales
+                    </Link>
+                </li>
+                <li>
+                    <Link href="/cine-vose-madrid" className="text-muted hover:text-primary transition-colors">
+                        Cine en VOSE
+                    </Link>
+                </li>
+                <li>
+                    <Link href="/dia-del-espectador-madrid" className="text-muted hover:text-primary transition-colors">
+                        Día del espectador
                     </Link>
                 </li>
                 <li>
@@ -83,7 +94,7 @@ export default function Footer() {
       
       {/* COPYRIGHT */}
       <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-line flex flex-col md:flex-row md:flex-wrap justify-between items-center gap-2 text-center text-xs text-muted">
-        <p>© {new Date().getFullYear()} FPS24. Todos los derechos reservados.</p>
+        <p>© {hoyMadrid().slice(0, 4)} FPS24. Todos los derechos reservados.</p>
         <p>Los pósters e imágenes son propiedad de sus distribuidoras.</p>
         <p>Las notas de las películas son asignadas por TMDB.</p>
         <p>

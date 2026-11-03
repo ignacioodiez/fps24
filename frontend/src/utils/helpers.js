@@ -12,7 +12,8 @@ export const isSameDay = (d1, d2) => {
 
 export const extractTime = (dateString) => {
   const date = new Date(dateString);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Locale fijo: con [] el servidor (Node, en-US) y el navegador darían horas distintas al hidratar
+  return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 };
 
 export const normalizeTitle = (title) => {

@@ -2,7 +2,7 @@
 // Uso: docker compose exec web node src/lib/tarifas.check.mjs
 import assert from "node:assert/strict";
 import { hoyMadrid } from "./fechasMadrid.js";
-import { FESTIVOS, esDiaEspectador, precioDia, precioHoy, precioSesion } from "./tarifas.js";
+import { FESTIVOS, esDiaEspectador, precioDia, precioHoy, precioSesion, rangoPrecios, semanaEspectador, cinesPorPrecio, revisionTarifas } from "./tarifas.js";
 
 // Copias de backend/app/services/cines.py (TARIFAS)
 const RENOIR = { entrada_laboral: 8.5, entrada_finde: 9.8, finde_dias: ["Viernes", "Sábado", "Domingo"],
@@ -101,4 +101,38 @@ assert.ok([...FESTIVOS].every((f) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.is
 assert.equal([...FESTIVOS].filter((f) => f.startsWith("2026")).length, 14);
 assert.equal([...FESTIVOS].filter((f) => f.startsWith("2027")).length, 14);
 
+
+// Rango para el JSON-LD (priceRange): solo números; las notas no cuentan
+assert.equal(rangoPrecios(RIO), "5,90 €–9,50 €");
+assert.equal(rangoPrecios(RENOIR), "5,50 €–9,80 €");
+assert.equal(rangoPrecios({ entrada: 4.1 }), "4,10 €");
+assert.equal(rangoPrecios(METROPOL), null);
+assert.equal(rangoPrecios(null), null);
+
+// Página del día del espectador. 2026-11-09 (lunes) es festivo local: anula el día del espectador de Renoir y Verdi
+const CINES = [
+  { slug: "renoir", nombre: "Renoir", tarifas: { ...RENOIR, revisado: "2026-11-02" } },
+  { slug: "verdi", nombre: "Verdi", tarifas: VERDI },
+  { slug: "rio", nombre: "Río", tarifas: RIO },
+  { slug: "metropol", nombre: "Metropol", tarifas: METROPOL },
+  { slug: "capitol", nombre: "Capitol", tarifas: null },
+];
+const semana = semanaEspectador(CINES, "2026-11-03"); // martes
+assert.deepEqual(semana.map((d) => d.fecha), ["2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09"]);
+assert.deepEqual(semana[0].cines, [{ slug: "rio", nombre: "Río", precio: 7.5 }]); // martes: solo Río
+assert.deepEqual(semana[1].cines.map((c) => [c.slug, c.precio]), [["renoir", 5.5], ["rio", 5.9]]); // miércoles, por precio
+assert.equal(semana[6].festivo, true);
+assert.deepEqual(semana[6].cines, []); // lunes festivo: ni Renoir ni Verdi
+assert.deepEqual(semanaEspectador(CINES, "2026-11-16")[0].cines.map((c) => c.slug), ["verdi", "renoir"]); // lunes normal
+
+// Viernes 6: Renoir cobra finde (finde_dias) 9,80; Verdi y Río, entrada única; Metropol y Capitol sin precio
+const { conPrecio, sinPrecio } = cinesPorPrecio(CINES, "2026-11-06");
+assert.deepEqual(conPrecio.map((c) => [c.slug, c.hoy.precio, c.hoy.tipo]), [["verdi", 8.5, "entrada"], ["rio", 9.5, "entrada"], ["renoir", 9.8, "finde"]]);
+assert.deepEqual(sinPrecio.map((c) => c.slug), ["capitol", "metropol"]);
+
+// Revisión: la fecha más reciente y los que tienen tarifa sin verificar (sin tarifa no cuenta)
+const revision = revisionTarifas(CINES);
+assert.equal(revision.fecha, "2026-11-02");
+assert.deepEqual(revision.pendientes.map((c) => c.slug), ["verdi", "rio", "metropol"]);
+assert.equal(revisionTarifas([{ tarifas: null }]).fecha, null);
 console.log("OK: tarifas (finde por cine, festivos, días del espectador, hora de Madrid)");

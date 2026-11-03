@@ -5,7 +5,8 @@ from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, Header, Qu
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel, or_, select
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
+from fastapi import Response
 from sqlalchemy import case, func, nulls_last
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +25,7 @@ from app.amigos import router as amigos_router
 from app.admin import admin_actual, es_admin, router as admin_router
 from app.newsletter.rutas import router as newsletter_router
 from app.proximamente.estrenos import leer_estrenos as leer_estrenos_semana
+from app.services.tiempo import ahora_madrid
 
 app = FastAPI(title="fps24 API", version="1.0.0", lifespan=None) 
 
@@ -74,6 +76,31 @@ class PaseConPelicula(PaseSalida):
 
 class PaseConId(PaseSalida):
     id: int
+
+# /pases/vose: lo justo para la página "Cine en VOSE en Madrid"; cada película una vez, no en cada pase
+class PeliculaVose(SQLModel):
+    id: int
+    titulo: str
+    titulo_original: Optional[str] = None
+    anio: Optional[int] = None
+    director: Optional[str] = None
+    poster_url: Optional[str] = None
+
+class PaseVose(SQLModel):
+    id: int
+    pelicula_id: int
+    cine: str
+    cine_slug: str
+    fecha_hora: datetime  # hora de Madrid sin zona, como en /pases
+    idioma: str
+    precio: Optional[str] = None
+    link_compra: Optional[str] = None
+
+class SesionesVose(SQLModel):
+    desde: date
+    hasta: date  # incluido
+    peliculas: List[PeliculaVose]
+    pases: List[PaseVose]
 
 # 👇 AQUÍ ES DONDE AÑADIMOS LOS CAMPOS NUEVOS PARA QUE PASEN EL FILTRO
 class PeliculaDetalle(PeliculaBase):
@@ -217,6 +244,34 @@ def leer_pases(session: Session = Depends(get_session)):
         .order_by(Pase.fecha_hora, Pase.id)
     ).all()
     return pases
+
+# --- SESIONES EN VERSIÓN ORIGINAL de hoy (desde ahora) y los N-1 días siguientes, en Madrid ---
+# Público y cacheable: no depende de quién mira. Con 7 días pesa ~1/20 de /pases.
+DIAS_VOSE_MAX = 14
+CACHE_PUBLICA = "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
+
+@app.get("/pases/vose", response_model=SesionesVose)
+def leer_pases_vose(response: Response, dias: int = Query(7, ge=1, le=DIAS_VOSE_MAX),
+                    session: Session = Depends(get_session)):
+    ahora = ahora_madrid()
+    hasta = ahora.date() + timedelta(days=dias - 1)
+    pases = session.exec(
+        select(Pase)
+        .options(selectinload(Pase.pelicula), selectinload(Pase.cine_rel))
+        .where(Pase.activo == True, Pase.idioma.ilike("VO%"), Pase.pelicula_id.is_not(None),
+               Pase.fecha_hora >= ahora, Pase.fecha_hora < datetime.combine(hasta + timedelta(days=1), time()))
+        .order_by(Pase.fecha_hora, Pase.id)
+    ).all()
+    peliculas = {p.pelicula_id: p.pelicula for p in pases}
+    response.headers["Cache-Control"] = CACHE_PUBLICA
+    return {
+        "desde": ahora.date(), "hasta": hasta,
+        "peliculas": [{**p.model_dump(include=set(PeliculaVose.model_fields)),
+                       "titulo_original": p.titulo_original if p.titulo_original != p.titulo else None}
+                      for p in peliculas.values()],
+        "pases": [{**p.model_dump(include=set(PaseVose.model_fields)), "cine": p.cine, "cine_slug": p.cine_slug}
+                  for p in pases],
+    }
 
 # --- ENDPOINT DETALLE PELÍCULA 🎬 ---
 @app.get("/pelicula/{pelicula_id}", response_model=PeliculaDetalle)

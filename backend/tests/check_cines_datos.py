@@ -2,7 +2,7 @@
 Uso: docker compose exec api python tests/check_cines_datos.py
 Lo que toca la BD termina en rollback: no deja datos."""
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -32,7 +32,8 @@ assert set(TARIFAS) <= set(CINES_DATOS), set(TARIFAS) - set(CINES_DATOS)
 assert sum(d["tarifas"] is not None for d in CINES_DATOS.values()) == 20
 for slug, t in TARIFAS.items():
     assert t and set(t) <= {"entrada", "entrada_laboral", "entrada_finde", "finde_dias", "dia_espectador", "precio_texto",
-                            "notas"}, slug
+                            "notas", "revisado"}, slug
+    assert "revisado" not in t or (len(t["revisado"]) == 10 and t["revisado"] <= str(date.today())), slug
     assert all(isinstance(t[k], float) and 0 < t[k] < 20 for k in ("entrada", "entrada_laboral", "entrada_finde") if k in t), slug
     assert set(t.get("finde_dias", DIAS)) <= DIAS and t.get("finde_dias", DIAS), slug
     assert isinstance(t.get("precio_texto", ""), str), slug
