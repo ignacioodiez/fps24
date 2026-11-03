@@ -120,9 +120,9 @@ export function CabeceraCine({ nombre, fecha, slug, conFavorito = false, precio 
       </h3>
       {conFavorito && <BotonFavorito pequeno slug={slug} nombre={texto} />}
       {(espectador || precio) && (
-        <span className="ml-auto shrink-0 flex items-center gap-1.5 text-xs font-bold text-foreground">
-          {espectador && <span className="px-1.5 py-0.5 rounded bg-accent">Espectador</span>}
-          {precio}
+        <span className="ml-auto shrink-0 max-w-[60%] flex items-center gap-1.5 text-xs font-bold text-foreground">
+          {espectador && <span className="shrink-0 px-1.5 py-0.5 rounded bg-accent">Espectador</span>}
+          {precio && <span className="truncate" title={precio}>{precio}</span>}
         </span>
       )}
     </div>

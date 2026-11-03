@@ -6,17 +6,19 @@ import { useAuth } from "@/components/AuthProvider";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
 import { diaCompleto } from "@/lib/fechasMadrid";
 import { precioSesion } from "@/lib/tarifas";
-import { useTarifas } from "@/lib/useTarifas";
+import { useSinVenta, useTarifas } from "@/lib/useTarifas";
 import { cleanCinemaName } from "@/utils/helpers";
 
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
-// Versión con el estilo neutro de ChipIdioma (Sesiones.js), pero también para el castellano: aquí es un dato más
+// Versión con el estilo neutro de ChipIdioma (Sesiones.js), pero también para el castellano: aquí es un dato más.
+// Sin versión (los centros culturales no la dan): desconocida, nunca "Castellano".
 export function Version({ idioma }) {
+  if (!idioma) return <span className="text-xs text-muted">Sin especificar</span>;
   if (idioma === "VOSE") {
     return <span className="text-[10px] leading-none px-1 py-0.5 rounded border border-muted bg-background text-foreground font-bold uppercase tracking-wide">VOSE</span>;
   }
-  return <span className="text-[11px] bg-surface px-1.5 py-0.5 rounded font-medium text-muted border border-line">{!idioma || idioma === "Español" ? "Castellano" : idioma}</span>;
+  return <span className="text-[11px] bg-surface px-1.5 py-0.5 rounded font-medium text-muted border border-line">{idioma === "Español" ? "Castellano" : idioma}</span>;
 }
 
 // Precio de una sesión: el del pase si es real; si no, el de la tarifa del cine ese día (orientativo).
@@ -43,7 +45,8 @@ export function PrecioSesion({ precio, slug, fechaHora, pequeno = false }) {
   );
 }
 
-// Detalle de una sesión al pulsar su hora: comprar (el enlace de siempre) o guardarla en "Mis sesiones".
+// Detalle de una sesión al pulsar su hora: comprar (el enlace de siempre; "Más información" en los centros culturales, que
+// enlazan a la ficha de la actividad) o guardarla en "Mis sesiones".
 // <dialog> nativo en modo modal (foco dentro, Esc cierra); en móvil, hoja desde abajo. Se monta abierto.
 // fecha_hora llega en hora de Madrid sin zona: día y hora se leen del texto, sin pasar por el huso del navegador.
 export default function ModalSesion({ sesion, origen, guardada, onAlternar, onCerrar }) {
@@ -56,6 +59,7 @@ export default function ModalSesion({ sesion, origen, guardada, onAlternar, onCe
   const dia = capitalizar(diaCompleto(sesion.fecha_hora.slice(0, 10)));
   const hora = sesion.fecha_hora.slice(11, 16);
   const cine = cleanCinemaName(sesion.cine);
+  const sinVenta = useSinVenta(slug);
 
   // Abrir, bloquear el scroll del fondo y, al desmontar, devolver el foco a la hora que lo abrió
   // (en Safari un clic no enfoca el botón: no basta con lo que hace el <dialog>)
@@ -134,7 +138,7 @@ export default function ModalSesion({ sesion, origen, guardada, onAlternar, onCe
         <div className="mt-5 flex flex-col sm:flex-row gap-2">
           {sesion.link_compra && (
             <a href={sesion.link_compra} target="_blank" rel="noopener noreferrer" className={`${BOTON_PRIMARIO} rounded-lg text-center flex-1`}>
-              Comprar entradas<span className="sr-only"> (se abre en una pestaña nueva)</span>
+              {sinVenta ? "Más información" : "Comprar entradas"}<span className="sr-only"> (se abre en una pestaña nueva)</span>
             </a>
           )}
           {sesion.id != null && (

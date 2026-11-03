@@ -7,6 +7,7 @@ import { EnlaceCine } from "@/components/Sesiones";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { comoUTC, formato, sesionCorta } from "@/lib/fechasMadrid";
 import { sesionSugerida } from "@/lib/favoritos";
+import { useSinVenta } from "@/lib/useTarifas";
 
 // Tarjetas de /estrenos y /especiales (PaginaSemana). En el cliente para sugerir la sesión de un cine favorito.
 
@@ -20,11 +21,12 @@ const ESTILOS = {
 const enlaceDe = ({ pelicula, sesion }) => `/pelicula/${pelicula.id}?dia=${sesion.fecha_hora.slice(0, 10)}`; // abre en el día de la sesión
 const notaFiableDe = ({ pelicula, sin_nota }) => !sin_nota && pelicula.nota_tmdb != null && (pelicula.votos ?? 0) >= VOTOS_MIN;
 
-function Entradas({ href }) {
+function Entradas({ href, slug }) {
+  const sinVenta = useSinVenta(slug);
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
        className="relative z-[2] shrink-0 rounded-full bg-primary text-white text-xs font-semibold px-3 py-1 hover:opacity-90 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-      Entradas
+      {sinVenta ? "Más info" : "Entradas"}
     </a>
   );
 }
@@ -98,7 +100,7 @@ export function Tarjeta({ item, tipo, destacada = false }) {
             </p>
             <p className="text-xs text-muted truncate" title={sesion.cine}><EnlaceCine slug={sesion.cine_slug} className="relative z-[2] hover:text-primary hover:underline focus-visible:outline-primary"><MarcaFavorito slug={sesion.cine_slug} /> {sesion.cine}</EnlaceCine></p>
           </div>
-          {sesion.link_compra && <Entradas href={sesion.link_compra} />}
+          {sesion.link_compra && <Entradas href={sesion.link_compra} slug={sesion.cine_slug} />}
         </div>
       </div>
       <VistaRapida href={href} titulo={pelicula.titulo} />
@@ -144,7 +146,7 @@ export function CeldaMosaico({ item, grande, className }) {
           {notaFiableDe(item) && <span className="shrink-0 font-semibold">★ {pelicula.nota_tmdb.toFixed(1)}</span>}
           {/* Si no caben 6rem, el cine baja a su línea en vez de cortarse en dos letras */}
           <EnlaceCine slug={sesion.cine_slug} title={sesion.cine} className="flex-[1_1_6rem] min-w-0 truncate relative z-[2] hover:underline focus-visible:outline-white"><MarcaFavorito slug={sesion.cine_slug} /> {sesion.cine}</EnlaceCine>
-          {sesion.link_compra && <Entradas href={sesion.link_compra} />}
+          {sesion.link_compra && <Entradas href={sesion.link_compra} slug={sesion.cine_slug} />}
         </div>
         {grande && (
           <p className="si-hay-sitio text-[11px] text-white/70">

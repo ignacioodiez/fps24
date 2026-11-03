@@ -17,14 +17,17 @@ from main import CineSalida
 
 CAMPOS = {"direccion", "web", "telefono", "zona", "tipo", "lat", "lng", "tarifas"}
 assert set(CINES_DATOS) <= set(CINES_CONOCIDOS.values()), set(CINES_DATOS) - set(CINES_CONOCIDOS.values())
-assert all(set(d) == CAMPOS and d["tipo"] in ("autor", "comercial") for d in CINES_DATOS.values())
+assert all(set(d) == CAMPOS and d["tipo"] in ("autor", "comercial", "cultural") for d in CINES_DATOS.values())
 assert all(partes(d["direccion"])["ciudad"] == "Madrid" for d in CINES_DATOS.values())  # todas se pueden partir
 assert all(40.3 < d["lat"] < 40.5 and -3.8 < d["lng"] < -3.5 for d in CINES_DATOS.values())  # en Madrid
 print("OK: CINES_DATOS")
 
-# --- tarifas: todos los cines menos los dos Cinesa, Palafox y Capitol (faltan datos), con la estructura acordada ---
+# --- tarifas: todos los cines menos los dos Cinesa, Palafox y Capitol (faltan datos) y los tres culturales (precio en
+# cada pase), con la estructura acordada ---
 DIAS = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"}
-assert set(CINES_DATOS) - set(TARIFAS) == {"cinesa-proyecciones", "cinesa-principe-pio", "yelmo-palafox", "capitol"}, set(CINES_DATOS) - set(TARIFAS)
+assert set(CINES_DATOS) - set(TARIFAS) == {"cinesa-proyecciones", "cinesa-principe-pio", "yelmo-palafox", "capitol",
+                                           "academia-cine", "casa-america", "casa-mexico"}, set(CINES_DATOS) - set(TARIFAS)
+assert {s for s, d in CINES_DATOS.items() if d["tipo"] == "cultural"} == {"academia-cine", "casa-america", "casa-mexico"}
 assert set(TARIFAS) <= set(CINES_DATOS), set(TARIFAS) - set(CINES_DATOS)
 assert sum(d["tarifas"] is not None for d in CINES_DATOS.values()) == 20
 for slug, t in TARIFAS.items():

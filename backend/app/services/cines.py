@@ -39,11 +39,15 @@ CINES_CONOCIDOS = {
     "Yelmo Cines Plenilunio": "yelmo-plenilunio",
     "Yelmo Luxury Palafox": "yelmo-palafox",
     "Cine Capitol Gran Vía": "capitol",
+    "Academia de Cine": "academia-cine",
+    "Casa de América": "casa-america",
+    "Casa de México": "casa-mexico",
 }
 
 
 # Ficha de cada cine, por slug: sincronizar_cines() la copia a la tabla cine al empezar lanzar_todo.
-# tipo: "autor" o "comercial" (destacadas solo usa los especiales de cines de autor).
+# tipo: "autor", "comercial" o "cultural" (centros culturales: no venden entradas en fps24; su enlace es la ficha de la
+# actividad y el front lo rotula "Más información" en vez de "Comprar entradas").
 # direccion y web de los 11 cines de frontend/src/data/cines.js: manda la del front, curada a mano.
 CINES_DATOS = {
     "dore": dict(direccion="Calle de Santa Isabel, 3, 28012 Madrid", web="https://www.cultura.gob.es/cultura/areas/cine/mc/fe/cine-dore.html",
@@ -96,13 +100,22 @@ CINES_DATOS = {
                           telefono="902 22 09 22", zona="Chamberí", tipo="comercial", lat=40.4299632, lng=-3.7008062),
     "capitol": dict(direccion="Calle Gran Vía, 41, 28013 Madrid", web="https://www.capitolgranvia.com/es/cine/",
                     telefono="91 522 22 29", zona="Centro", tipo="comercial", lat=40.4206012, lng=-3.7065785),
+    # Culturales (03/11/2026): dirección y teléfono de su web. Coordenadas de Nominatim (Palacio de Linares y Casa de
+    # México); las de la Academia, aproximadas: Nominatim no tiene el portal 3 de Zurbano (junto al Palacio de Zurbano).
+    "academia-cine": dict(direccion="Calle de Zurbano, 3, 28010 Madrid", web="https://www.academiadecine.com/actividades/",
+                          telefono="91 593 46 48", zona="Chamberí", tipo="cultural", lat=40.4277, lng=-3.6936),
+    "casa-america": dict(direccion="Plaza de Cibeles, s/n, 28014 Madrid", web="https://www.casamerica.es/agenda",
+                         telefono="91 595 48 00", zona="Salamanca", tipo="cultural", lat=40.4199205, lng=-3.6919795),
+    "casa-mexico": dict(direccion="Calle de Alberto Aguilera, 20, 28015 Madrid", web="https://www.casademexico.es/cine-en-casa-de-mexico/",
+                        telefono="910 68 97 65", zona="Chamberí", tipo="cultural", lat=40.4301319, lng=-3.7094195),
 }
 
 # Tarifas (euros) por slug. Solo las claves que aplican: entrada (precio único), entrada_laboral, entrada_finde,
 # finde_dias (días con precio de finde; por defecto sábado y domingo), dia_espectador ({dias, precio} o una lista
 # de ellos; si coinciden, gana el más barato), precio_texto (lo que se muestra sin precio único) y notas.
 # Los festivos (frontend/src/lib/tarifas.js) se cobran como fin de semana. Sin tarifas aquí: None.
-# Sin tarifa a propósito: los dos Cinesa, Yelmo Palafox y Capitol (no hay precio verificado; los de eCartelera son antiguos).
+# Sin tarifa a propósito: los dos Cinesa, Yelmo Palafox y Capitol (no hay precio verificado; los de eCartelera son antiguos)
+# y los tres culturales (el precio, si lo hay, va en cada pase: "Gratis", "3,15 €"...).
 # Renoir, Yelmo, Callao, Metropol, Morasol, CBA, Embajadores Río y Berlanga: precios del propietario (02/11/2026).
 _RENOIR = {"entrada_laboral": 8.5, "entrada_finde": 9.8, "finde_dias": ["Viernes", "Sábado", "Domingo"],
            "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.5},

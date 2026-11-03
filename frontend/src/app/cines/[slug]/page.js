@@ -84,6 +84,7 @@ export default async function CinePage({ params }) {
               <span className="text-xs px-2 py-0.5 rounded-md border bg-primary-soft text-primary border-primary">Autor</span>
             )}
             {cine.tipo === "comercial" && <ChipDato>Comercial</ChipDato>}
+            {cine.tipo === "cultural" && <ChipDato>Centro cultural</ChipDato>}
           </div>
           {cine.direccion && <p className="text-sm text-muted">{cine.direccion}</p>}
           <div className="flex flex-wrap gap-2">

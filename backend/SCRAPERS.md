@@ -11,7 +11,7 @@ La plantilla completa está en `app/scrapers/_plantilla.py`: no se registra ni s
 4. **Persistencia solo con `registrar_pase`** (`app/services/pases.py`). No hay `select(Pase)` ni `Pase(...)` en el scraper.
 5. **Película y "especial" solo con `resolver_pelicula(session, titulo_raw, cine, anio_web=None)`** (`app/services/gestor_peliculas.py`). Pásale el título **tal como aparece en la web**: el scraper no limpia el título ni decide si el pase es especial. Si la web da el año de la película, pásalo en `anio_web`. Si devuelve `None` como id, salta la película (el aviso ya queda en el log). Si TMDB no la encuentra o no responde, la película se guarda sin TMDB y `reintentar_sin_tmdb` vuelve a buscarla al final de `lanzar_todo` (a los 7 días o en la siguiente ejecución); el scraper no hace nada especial.
 6. **`sala`**: un valor estable entre ejecuciones (`"2"`, `"Sala 2"`, `"Sala Berlanga"`) o `None`. Nunca un texto que cambie (aforo, "últimas entradas"…), porque forma parte de la identidad del pase.
-7. **`idioma`**: `"Español"` o `"VOSE"`. `registrar_pase` normaliza las variantes ("ESPAÑOL", "V.O.S.E."…) y deja un WARNING si recibe otro valor.
+7. **`idioma`**: `"Español"` o `"VOSE"`. `registrar_pase` normaliza las variantes ("ESPAÑOL", "V.O.S.E."…) y deja un WARNING si recibe otro valor. `None` si la web no da la versión (los centros culturales): no se deduce; la UI la muestra como desconocida y no entra en VOSE.
 8. **Errores**:
    - Si la fuente no carga o no devuelve nada, **se lanza una excepción** (la de Playwright o `FuenteNoDisponible`). Nada de `print` + `return`.
    - Un item malo (un pase o una película que no se puede leer) se registra con `log.warning(...)` y se sigue con el siguiente.

@@ -7,6 +7,7 @@ import { PrecioSesion } from "@/components/ModalSesion";
 import { useSesionesGuardadas } from "@/components/SesionesGuardadasProvider";
 import { diaCompleto, etiquetaRelativa, hoyMadrid } from "@/lib/fechasMadrid";
 import { listarSesiones, marcarVista, quitarSesion } from "@/lib/sesiones";
+import { useSinVenta } from "@/lib/useTarifas";
 
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 const nombreDia = (fecha, hoy) => {
@@ -28,6 +29,7 @@ function porDia(sesiones) {
 function Tarjeta({ sesion, futura, hoy, usuario, onQuitar, onVista }) {
   const [ocupado, setOcupado] = useState(false);
   const hora = sesion.hora.slice(0, 5);
+  const sinVenta = useSinVenta(sesion.cine_slug);
   const accion = async (fn) => {
     setOcupado(true);
     if (!(await fn(sesion))) setOcupado(false);
@@ -54,7 +56,7 @@ function Tarjeta({ sesion, futura, hoy, usuario, onQuitar, onVista }) {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {futura && sesion.link_compra && (
             <a href={sesion.link_compra} target="_blank" rel="noopener noreferrer" className={`${BOTON_PRIMARIO} rounded-lg`}>
-              Comprar<span className="sr-only"> entradas para {sesion.titulo} (se abre en una pestaña nueva)</span>
+              {sinVenta ? "Más información" : "Comprar"}<span className="sr-only"> {sinVenta ? "sobre" : "entradas para"} {sesion.titulo} (se abre en una pestaña nueva)</span>
             </a>
           )}
           {!futura && sesion.diario_entrada_id && (
