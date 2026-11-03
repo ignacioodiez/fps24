@@ -22,9 +22,9 @@ assert all(partes(d["direccion"])["ciudad"] == "Madrid" for d in CINES_DATOS.val
 assert all(40.3 < d["lat"] < 40.5 and -3.8 < d["lng"] < -3.5 for d in CINES_DATOS.values())  # en Madrid
 print("OK: CINES_DATOS")
 
-# --- tarifas: todos los cines menos los dos Cinesa (faltan datos), con la estructura acordada ---
+# --- tarifas: todos los cines menos los dos Cinesa, Palafox y Capitol (faltan datos), con la estructura acordada ---
 DIAS = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"}
-assert set(CINES_DATOS) - set(TARIFAS) == {"cinesa-proyecciones", "cinesa-principe-pio"}, set(CINES_DATOS) - set(TARIFAS)
+assert set(CINES_DATOS) - set(TARIFAS) == {"cinesa-proyecciones", "cinesa-principe-pio", "yelmo-palafox", "capitol"}, set(CINES_DATOS) - set(TARIFAS)
 assert set(TARIFAS) <= set(CINES_DATOS), set(TARIFAS) - set(CINES_DATOS)
 assert sum(d["tarifas"] is not None for d in CINES_DATOS.values()) == 20
 for slug, t in TARIFAS.items():

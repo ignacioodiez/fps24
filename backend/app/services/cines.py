@@ -37,6 +37,8 @@ CINES_CONOCIDOS = {
     "Sala Equis": "equis",
     "Yelmo Cines Ideal": "yelmo-ideal",
     "Yelmo Cines Plenilunio": "yelmo-plenilunio",
+    "Yelmo Luxury Palafox": "yelmo-palafox",
+    "Cine Capitol Gran Vía": "capitol",
 }
 
 
@@ -89,12 +91,18 @@ CINES_DATOS = {
     # Dirección y coordenadas de su ficha en eCartelera (cines/517)
     "yelmo-plenilunio": dict(direccion="Centro Comercial Plenilunio, Glorieta de Eisenhower, s/n, 28022 Madrid", web="https://yelmocines.es/cartelera/madrid/plenilunio",
                              telefono=None, zona="San Blas-Canillejas", tipo="comercial", lat=40.4341, lng=-3.57727),
+    # Coordenadas de sus fichas en eCartelera (cines/39 y cines/9); teléfono de Capitol, el de su web
+    "yelmo-palafox": dict(direccion="Calle de Luchana, 15, 28010 Madrid", web="https://yelmocines.es/cartelera/madrid/palafox",
+                          telefono="902 22 09 22", zona="Chamberí", tipo="comercial", lat=40.4299632, lng=-3.7008062),
+    "capitol": dict(direccion="Calle Gran Vía, 41, 28013 Madrid", web="https://www.capitolgranvia.com/es/cine/",
+                    telefono="91 522 22 29", zona="Centro", tipo="comercial", lat=40.4206012, lng=-3.7065785),
 }
 
 # Tarifas (euros) por slug. Solo las claves que aplican: entrada (precio único), entrada_laboral, entrada_finde,
 # finde_dias (días con precio de finde; por defecto sábado y domingo), dia_espectador ({dias, precio} o una lista
 # de ellos; si coinciden, gana el más barato), precio_texto (lo que se muestra sin precio único) y notas.
 # Los festivos (frontend/src/lib/tarifas.js) se cobran como fin de semana. Sin tarifas aquí: None.
+# Sin tarifa a propósito: los dos Cinesa, Yelmo Palafox y Capitol (no hay precio verificado; los de eCartelera son antiguos).
 # Renoir, Yelmo, Callao, Metropol, Morasol, CBA, Embajadores Río y Berlanga: precios del propietario (02/11/2026).
 _RENOIR = {"entrada_laboral": 8.5, "entrada_finde": 9.8, "finde_dias": ["Viernes", "Sábado", "Domingo"],
            "dia_espectador": {"dias": ["Lunes", "Miércoles"], "precio": 5.5},
