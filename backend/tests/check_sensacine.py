@@ -162,3 +162,9 @@ assert SesionFalsa.commits == 1
 assert sorted(r["cine"] for r in registrados) == sorted(c for c in sensacine.CINES if c != ROTO)
 assert all(r["sala"] == r["cine"] and r["precio"] == "Consultar" for r in registrados)
 print("OK: fallo aislado por cine")
+
+# --- Palafox: por SensaCine (versión por sesión), no por eCartelera ---
+from app.services.cines import CINES_CONOCIDOS, CINES_DATOS
+assert sensacine.IDS["Yelmo Luxury Palafox"] == "E1001" and CINES_CONOCIDOS["Yelmo Luxury Palafox"] == "yelmo-palafox"
+assert CINES_DATOS["yelmo-palafox"]["tarifas"] is None and CINES_DATOS["yelmo-palafox"]["zona"] == "Chamberí"
+print("OK: alta de Palafox")

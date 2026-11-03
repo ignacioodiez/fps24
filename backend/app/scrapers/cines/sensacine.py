@@ -16,6 +16,8 @@ IDS = {
     "Sala Berlanga": "E0736",
     "Pequeño Cine Estudio": "E0566",
     "Conde Duque Auditorio Morasol": "E0864",
+    # No en eCartelera (cines/39): no da versión y Palafox mezcla doblada y VOSE de la misma película
+    "Yelmo Luxury Palafox": "E1001",
 }
 CINES = list(IDS)
 PRECIO = "Consultar"
