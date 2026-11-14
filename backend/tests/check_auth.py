@@ -66,6 +66,19 @@ for nombre, cabecera in casos.items():
     assert codigo == 401, (nombre, codigo, detalle)
     print(f"OK: {nombre} -> 401 ({detalle})")
 
+# Margen de reloj: iat/nbf unos segundos en el futuro (Supabase por delante) -> válido; fuera del margen -> 401
+ahora = int(time.time())
+for campo in ("iat", "nbf"):
+    for adelanto in (1, 5, auth.MARGEN_RELOJ_S - 1):
+        assert estado(f"Bearer {token(**{campo: ahora + adelanto})}")[0] == 200, (campo, adelanto)
+    codigo, detalle = estado(f"Bearer {token(**{campo: ahora + auth.MARGEN_RELOJ_S + 30})}")
+    assert codigo == 401, (campo, codigo, detalle)
+print(f"OK: iat/nbf hasta {auth.MARGEN_RELOJ_S} s en el futuro -> 200; más -> 401")
+# exp sin margen: caducado hace 1 s (dentro del leeway de PyJWT) sigue siendo 401
+for atras in (1, 5, auth.MARGEN_RELOJ_S - 1):
+    assert estado(f"Bearer {token(exp=int(time.time()) - atras)}") == (401, "La sesión ha caducado"), atras
+print("OK: exp sin margen (caducado hace 1-9 s) -> 401")
+
 # HS256 (secreto compartido): solo se aceptan ES256/RS256
 hs = token(firma="secreto", alg="HS256")
 assert estado(f"Bearer {hs}")[0] == 401

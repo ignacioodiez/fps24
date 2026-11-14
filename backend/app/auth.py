@@ -1,5 +1,6 @@
 """Autenticación con Supabase Auth: valida el JWT del usuario con el JWKS público (claves asimétricas, sin secretos)."""
 import os
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,6 +9,7 @@ from fastapi import Header, HTTPException
 
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 ALGORITMOS = ["ES256", "RS256"]  # nunca "none" ni HS*: con HS* bastaría la clave pública como secreto
+MARGEN_RELOJ_S = 10  # solo para iat/nbf; exp se comprueba sin margen
 
 _jwks: Optional[jwt.PyJWKClient] = None
 
@@ -38,10 +40,14 @@ def usuario_actual(authorization: Optional[str] = Header(None)) -> Usuario:
         raise no_autorizado("Falta el token (Authorization: Bearer <token>)")
     try:
         clave = cliente_jwks().get_signing_key_from_jwt(token.strip())
+        # leeway: el reloj de Supabase puede ir unos segundos por delante (iat/nbf "en el futuro" justo tras el login).
+        # PyJWT aplica el mismo margen a exp, así que exp se vuelve a comprobar sin él.
         datos = jwt.decode(
-            token.strip(), clave.key, algorithms=ALGORITMOS, audience="authenticated",
+            token.strip(), clave.key, algorithms=ALGORITMOS, audience="authenticated", leeway=MARGEN_RELOJ_S,
             issuer=f"{SUPABASE_URL}/auth/v1", options={"require": ["exp", "sub", "aud", "iss"]},
         )
+        if int(datos["exp"]) <= time.time():
+            raise jwt.ExpiredSignatureError("Signature has expired")
     except jwt.ExpiredSignatureError:
         raise no_autorizado("La sesión ha caducado")
     except jwt.PyJWKClientConnectionError:
