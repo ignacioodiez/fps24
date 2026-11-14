@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { AUTH_DISPONIBLE, useAuth } from "@/components/AuthProvider";
 import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/DialogoDiario";
-import { Esqueleto } from "@/components/Perfil";
+import { AvisoComprobacion, Esqueleto } from "@/components/Perfil";
+import { vistaAdmin } from "@/lib/siSoyYo";
 import { buscarAdmin, claveAdmin, enviarPruebaNewsletter, leerOcultas, leerResumen, leerUsuarios, mostrar, ocultar, vistaPreviaNewsletter } from "@/lib/admin";
 
 const TITULO_SECCION = "text-xl font-display font-bold uppercase text-foreground";
@@ -248,11 +249,14 @@ function Newsletter() {
   );
 }
 
-// El enlace solo sale con es_admin, pero /admin se puede abrir a mano: sin ser admin, el 404 normal
+// El enlace solo sale con es_admin, pero /admin se puede abrir a mano: sin ser admin, el 404 normal.
+// Si GET /me falla (esAdmin null), el aviso con Reintentar: un fallo no cuenta como "no eres admin".
 export default function PanelAdmin() {
-  const { cargando, esAdmin } = useAuth();
-  if (!AUTH_DISPONIBLE || (!cargando && esAdmin === false)) notFound();
-  if (cargando || !esAdmin) return <div className="max-w-5xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
+  const { usuario, cargando, esAdmin } = useAuth();
+  const vista = vistaAdmin({ disponible: AUTH_DISPONIBLE, usuario, cargando, esAdmin });
+  if (vista === "404") notFound();
+  if (vista === "aviso") return <AvisoComprobacion />;
+  if (vista === "esperar") return <div className="max-w-5xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 space-y-12">

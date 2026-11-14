@@ -16,6 +16,7 @@ import { listarAmigos } from "@/lib/amigos";
 import { useFavoritos } from "@/components/FavoritosProvider";
 import { DIARIO_GUARDADO, borrar, listar, todosLosCines } from "@/lib/diario";
 import { listarSesiones } from "@/lib/sesiones";
+import { vistaSiSoyYo } from "@/lib/siSoyYo";
 
 const POR_PAGINA = 20;
 const COMENTARIO_CORTO = 240; // más largo (o con más de 3 líneas) se recorta con "ver más"
@@ -400,30 +401,41 @@ function MiPerfil({ perfil, pestana }) {
   );
 }
 
-// Los nombres son únicos sin distinguir mayúsculas: /u/nacho y /u/Nacho son el mismo perfil
-const usuarioDeRuta = (ruta) => decodeURIComponent(ruta.split("/")[2] ?? "").toLowerCase();
 const pestanaDeRuta = (ruta) => ({ diario: "diario", cines: "cines", sesiones: "sesiones", amigos: "amigos" })[ruta.split("/")[3]] ?? "perfil";
 
+// Con sesión, cuando GET /me/perfil (o /me) falla: no se sabe quién eres, así que ni el 404 ni ningún dato
+export function AvisoComprobacion() {
+  const { reintentar } = useAuth();
+  return (
+    <div role="alert" className="max-w-3xl mx-auto px-4 md:px-6 py-12 text-center space-y-4">
+      <p className="text-xl text-foreground">No hemos podido comprobar tu sesión.</p>
+      <button type="button" onClick={reintentar} className={BOTON_PRIMARIO}>Reintentar</button>
+    </div>
+  );
+}
+
 // En /u/[usuario]: si el visitante es el dueño, su vista; si no, children (la pública o el "no existe o es privado").
-// esperar: mientras no se sabe, esqueleto en vez de children (en el 404, para no enseñarle al dueño "no existe").
+// esperar: en el 404, esqueleto mientras no se sabe y, si la comprobación falla con sesión, el aviso (lib/siSoyYo.js).
 export function SiSoyYo({ esperar = false, children }) {
-  const { cargando, miPerfil } = useAuth();
+  const { usuario, cargando, miPerfil } = useAuth();
   const ruta = usePathname();
-  if (miPerfil?.usuario && miPerfil.usuario.toLowerCase() === usuarioDeRuta(ruta)) return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
-  if (esperar && (cargando || miPerfil === undefined)) {
-    return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
-  }
+  const vista = vistaSiSoyYo({ usuario, cargando, miPerfil, ruta, esperar });
+  if (vista === "mio") return <MiPerfil perfil={miPerfil} pestana={pestanaDeRuta(ruta)} />;
+  if (vista === "aviso") return <AvisoComprobacion />;
+  if (vista === "esperar") return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
   return children;
 }
 
-// /perfil: a /u/<mi usuario> o, sin usuario (o sin sesión), a la edición
+// /perfil: a /u/<mi usuario> o, sin usuario (o sin sesión), a la edición; si /me/perfil falló, el aviso
 export function IrAMiPerfil() {
   const { cargando, miPerfil } = useAuth();
   const router = useRouter();
   useEffect(() => {
-    if (cargando || miPerfil === undefined) return;
+    if (cargando || miPerfil === undefined || miPerfil?.error) return;
     router.replace(miPerfil?.usuario ? `/u/${miPerfil.usuario}` : "/perfil/editar");
   }, [cargando, miPerfil, router]);
+  // Si /me/perfil falló, no se sabe a dónde ir: el aviso (al reintentar con éxito, el efecto redirige)
+  if (miPerfil?.error) return <AvisoComprobacion />;
   return <div className="max-w-3xl mx-auto px-4 md:px-6"><Esqueleto /></div>;
 }
 
